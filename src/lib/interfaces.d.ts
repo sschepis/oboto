@@ -3,16 +3,26 @@
  */
 export interface AiManConfig {
   /** The working directory for the project */
-  workingDir: string;
+  workingDir?: string;
   /** Adapter for the host LLM service */
   llmAdapter?: LLMAdapter;
   /** Adapter for status reporting */
   statusAdapter?: StatusAdapter;
+  /** Maximum conversation turns per execution (defaults to AI_MAX_TURNS env or 30) */
+  maxTurns?: number;
   /** Optional overrides for internal components */
   overrides?: {
     model?: string;
     temperature?: number;
   };
+}
+
+/**
+ * Options for execute() and executeStream() calls
+ */
+export interface ExecuteOptions {
+  /** AbortSignal to cancel the execution */
+  signal?: AbortSignal;
 }
 
 /**
@@ -70,9 +80,19 @@ export interface StatusAdapter {
 }
 
 /**
+ * Error thrown when agent execution is cancelled via AbortSignal
+ */
+export declare class CancellationError extends Error {
+  constructor(message?: string);
+  name: 'CancellationError';
+}
+
+/**
  * The main interface for the library
  */
-export interface AiManInterface {
+export declare class AiMan {
+  constructor(config?: AiManConfig);
+
   /**
    * Initialize the library
    */
@@ -80,15 +100,27 @@ export interface AiManInterface {
 
   /**
    * Execute a high-level task
-   * @param taskDescription The user's request
+   * @param task The user's request
+   * @param options Execution options including optional AbortSignal
    * @returns The final result or confirmation
+   * @throws {CancellationError} If cancelled via signal
    */
-  executeTask(taskDescription: string): Promise<string>;
+  execute(task: string, options?: ExecuteOptions): Promise<string>;
+
+  /**
+   * Execute a high-level task with streaming output
+   * @param task The user's request
+   * @param onChunk Callback for each chunk of streamed content
+   * @param options Execution options including optional AbortSignal
+   * @returns The final result
+   * @throws {CancellationError} If cancelled via signal
+   */
+  executeStream(task: string, onChunk: (chunk: string) => void, options?: ExecuteOptions): Promise<string>;
 
   /**
    * Get the current status of the project/workspace
    */
-  getProjectStatus(): Promise<any>;
+  getContext(): any;
 
   /**
    * Get the tool definition for integrating this library into an agent
@@ -96,3 +128,9 @@ export interface AiManInterface {
    */
   getToolDefinition(): object;
 }
+
+export { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
+export { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
+export { MiniAIAssistant } from '../core/ai-assistant.mjs';
+export { config } from '../config.mjs';
+export { consoleStyler } from '../ui/console-styler.mjs';

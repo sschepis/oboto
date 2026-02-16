@@ -19,6 +19,7 @@ export const config = {
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
     maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096', 10),
     contextWindowSize: parseInt(process.env.AI_CONTEXT_WINDOW || '128000', 10),
+    maxTurns: parseInt(process.env.AI_MAX_TURNS || '30', 10),
   },
   
   // System Configuration

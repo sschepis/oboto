@@ -31,6 +31,9 @@ export class MiniAIAssistant {
             generateContentStream: (req) => callProviderStream(req)
         };
 
+        // Configurable max conversation turns (defaults to config, which defaults to 30)
+        this.maxTurns = options.maxTurns || config.ai.maxTurns;
+
         // Initialize all subsystems
         this.reasoningSystem = new ReasoningSystem();
         this.customToolsManager = new CustomToolsManager();
@@ -131,7 +134,20 @@ export class MiniAIAssistant {
     }
 
     // Main function to process user input and orchestrate tool use
-    async run(userInput, isRetry = false) {
+    // @param {string} userInput - The user's input
+    // @param {boolean|Object} optionsOrIsRetry - Options object { isRetry, signal } or boolean for backwards compat
+    async run(userInput, optionsOrIsRetry = {}) {
+        // Backwards compatibility: if boolean, treat as legacy isRetry parameter
+        const options = typeof optionsOrIsRetry === 'boolean'
+            ? { isRetry: optionsOrIsRetry }
+            : optionsOrIsRetry;
+        const { isRetry = false, signal } = options;
+
+        // Check for cancellation before starting
+        if (signal?.aborted) {
+            throw new DOMException('Agent execution was cancelled', 'AbortError');
+        }
+
         // Ensure custom tools are loaded
         await this.initializeCustomTools();
         
@@ -149,9 +165,14 @@ export class MiniAIAssistant {
         }
         
         let finalResponse = null;
-        const maxTurns = 30; // Maximum conversation turns (increased for complex tasks)
+        const maxTurns = this.maxTurns;
 
         for (let i = 0; i < maxTurns; i++) {
+            // Check for cancellation at the start of each turn
+            if (signal?.aborted) {
+                throw new DOMException('Agent execution was cancelled', 'AbortError');
+            }
+
             // Show conversation turn progress
             consoleStyler.log('progress', `Processing turn ${i + 1}/${maxTurns}`, { timestamp: true });
             
@@ -248,8 +269,8 @@ export class MiniAIAssistant {
                             const stats = this.historyManager.getStats();
                             consoleStyler.log('recovery', `Session memory preserved: ${stats.messageCount} messages`, { indent: true });
                             
-                            // Recursive retry with improved prompt
-                            return await this.run(improvedPrompt, true);
+                            // Recursive retry with improved prompt (pass signal through)
+                            return await this.run(improvedPrompt, { isRetry: true, signal });
                         } else {
                             consoleStyler.log('quality', `✓ Response quality approved (${rating}/10)`);
                         }
@@ -379,7 +400,17 @@ export class MiniAIAssistant {
     }
 
     // Function to call the AI provider with streaming response.
-    async runStream(userInput, onChunk) {
+    // @param {string} userInput - The user's input
+    // @param {Function} onChunk - Callback for each chunk of streamed content
+    // @param {Object} [options] - Options object { signal }
+    async runStream(userInput, onChunk, options = {}) {
+        const { signal } = options;
+
+        // Check for cancellation before starting
+        if (signal?.aborted) {
+            throw new DOMException('Agent execution was cancelled', 'AbortError');
+        }
+
         // Ensure custom tools are loaded
         await this.initializeCustomTools();
 
@@ -391,10 +422,15 @@ export class MiniAIAssistant {
         this.reasoningSystem.predictReasoningFromInput(userInput);
 
         let reasoning = this.reasoningSystem.getSimplifiedReasoning('', {});
-        const maxTurns = 30; // Maximum conversation turns (increased for complex tasks)
+        const maxTurns = this.maxTurns;
 
         try {
             for (let i = 0; i < maxTurns; i++) {
+                // Check for cancellation at the start of each turn
+                if (signal?.aborted) {
+                    throw new DOMException('Agent execution was cancelled', 'AbortError');
+                }
+
                 consoleStyler.log('progress', `Processing turn ${i + 1}/${maxTurns}`, { timestamp: true });
 
                 const enhancedHistory = enhanceMessagesWithWorkReporting([...this.historyManager.getHistory()]);
