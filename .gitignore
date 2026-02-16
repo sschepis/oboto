@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Workspace
+.ai-man/
+.ai-session.history.json
+.ai-session.workspace.json
+temp_speech.mp3
+
+# Testing
+test-library.mjs
+coverage/
+
+kanvas/
+plans/

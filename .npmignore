@@ -1,0 +1,20 @@
+# Source Control
+.git/
+.github/
+.gitignore
+
+# Config
+.env
+.env.*
+.vscode/
+
+# Local Dev
+node_modules/
+.ai-man/
+*.log
+temp_speech.mp3
+test-library.mjs
+
+# Documentation/External
+kanvas/
+plans/

@@ -1,0 +1,31 @@
+{
+  "name": "@sschepis/robodev",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Robodev: AI-powered development assistant",
+  "main": "src/lib/index.mjs",
+  "exports": {
+    ".": "./src/lib/index.mjs",
+    "./cli": "./ai.mjs",
+    "./lib": "./src/lib/index.mjs"
+  },
+  "scripts": {
+    "start": "node ai.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^1.41.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "boxen": "^8.0.1",
+    "chalk": "^5.5.0",
+    "cli-spinners": "^3.2.0",
+    "dotenv": "^17.3.1",
+    "figures": "^6.1.0",
+    "gradient-string": "^3.0.0",
+    "mathjs": "^14.6.0",
+    "ora": "^8.2.0",
+    "vm2": "^3.10.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
