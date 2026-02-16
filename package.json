@@ -3,6 +3,23 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Robodev: AI-powered development assistant",
+  "author": "sschepis",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sschepis/robodev.git"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "agent",
+    "automation",
+    "llm",
+    "dev-tool"
+  ],
+  "bin": {
+    "robodev": "./ai.mjs"
+  },
   "main": "src/lib/index.mjs",
   "exports": {
     ".": "./src/lib/index.mjs",
