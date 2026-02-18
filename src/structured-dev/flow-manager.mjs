@@ -12,8 +12,9 @@ import util from 'util';
 const execPromise = util.promisify(exec);
 
 export class FlowManager {
-    constructor(manifestManager) {
+    constructor(manifestManager, aiAssistantClass = null) {
         this.manifestManager = manifestManager;
+        this.aiAssistantClass = aiAssistantClass;
     }
 
     // Phases definition
@@ -90,6 +91,8 @@ export class FlowManager {
         // Log snapshot
         await this.manifestManager.updateSection('4. State Snapshots', `- [${new Date().toISOString()}] Design submitted for ${featureId}. Entering Design Review.`);
 
+        await this.generateStatusUpdate("Technical Design Submitted", `Feature: ${featureId}`);
+
         return `Technical design for ${featureId} submitted. Phase moved to ${FlowManager.PHASES.DESIGN_REVIEW}. Waiting for approval.`;
     }
 
@@ -112,6 +115,8 @@ export class FlowManager {
         await this.manifestManager.addFeature(featureId, "Unknown Feature", "Active", FlowManager.PHASES.INTERFACE, "None");
         await this.manifestManager.updateSection('4. State Snapshots', `- [${new Date().toISOString()}] Design approved for ${featureId}. Feedback: ${feedback}`);
         
+        await this.generateStatusUpdate("Design Approved", `Feature: ${featureId}. Feedback: ${feedback}`);
+
         return `Design for ${featureId} APPROVED. Phase moved to ${FlowManager.PHASES.INTERFACE}.`;
     }
 
@@ -159,6 +164,8 @@ export class FlowManager {
         
         // Trigger hooks
         await this.executeHooks('on_lock', { featureId });
+
+        await this.generateStatusUpdate("Interfaces Locked", `Feature: ${featureId}`);
 
         return `Interfaces for ${featureId} LOCKED. Phase moved to ${FlowManager.PHASES.IMPLEMENTATION}.`;
     }
@@ -285,6 +292,45 @@ export class FlowManager {
         }
         
         return mermaid;
+    }
+
+    // Generate AI Status Update
+    async generateStatusUpdate(action, details) {
+        if (!this.aiAssistantClass) return;
+
+        try {
+            // Create a lightweight assistant instance for status generation
+            // We assume basic config is handled by the class/environment
+            const assistant = new this.aiAssistantClass(this.manifestManager.workingDir);
+            
+            // Allow the assistant to initialize (e.g. load keys/config)
+            // Note: If initialization is heavy, this might add latency.
+            // In a persistent server process, we'd reuse an instance.
+            
+            let manifest = "";
+            try {
+                manifest = await this.manifestManager.readManifest();
+            } catch (e) {
+                manifest = "Manifest not available.";
+            }
+
+            const prompt = `You are a project manager for a software project.
+Context: A developer just performed the action: "${action}".
+Details: ${details}
+
+Current Project Manifest Summary:
+${manifest.substring(0, 2000)}... (truncated)
+
+Task: Generate a concise, natural language status update (1-2 sentences) summarizing the current state of the project and the immediate next step.
+Format: Just the text, no markdown headers. Start with "Status: ".`;
+
+            const status = await assistant.run(prompt);
+            consoleStyler.log('system', status);
+            return status;
+        } catch (e) {
+            // Fail silently/warn so we don't block the main flow
+            consoleStyler.log('warning', `Failed to generate status update: ${e.message}`);
+        }
     }
 
     // Execute External Hooks

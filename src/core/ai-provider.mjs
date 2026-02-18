@@ -11,6 +11,7 @@ export const AI_PROVIDERS = {
     LOCAL: 'local',
     OPENAI: 'openai',
     GEMINI: 'gemini',
+    ANTHROPIC: 'anthropic',
 };
 
 /**
@@ -21,10 +22,13 @@ const PROVIDER_ENDPOINTS = {
     [AI_PROVIDERS.OPENAI]: 'https://api.openai.com/v1/chat/completions',
     // Gemini uses SDK, not REST endpoint — this is only a fallback
     [AI_PROVIDERS.GEMINI]: null,
+    // Anthropic via Vertex uses SDK
+    [AI_PROVIDERS.ANTHROPIC]: null,
 };
 
-// Lazy-loaded Gemini SDK instance
+// Lazy-loaded SDK instances
 let _geminiAI = null;
+let _anthropicVertex = null;
 
 /**
  * Get or create the Gemini SDK client
@@ -36,6 +40,25 @@ async function getGeminiClient() {
     const { GoogleGenAI } = await import('@google/genai');
     _geminiAI = new GoogleGenAI({ apiKey: config.keys.google });
     return _geminiAI;
+}
+
+/**
+ * Get or create the Anthropic Vertex SDK client
+ * @returns {Object} AnthropicVertex instance
+ */
+async function getAnthropicClient() {
+    if (_anthropicVertex) return _anthropicVertex;
+
+    // Use dynamic import for the SDK
+    const { AnthropicVertex } = await import('@anthropic-ai/vertex-sdk');
+    
+    _anthropicVertex = new AnthropicVertex({
+        projectId: config.vertex?.projectId,
+        region: config.vertex?.region || 'us-east5',
+        // Auth is handled automatically via Google ADC (Application Default Credentials)
+    });
+    
+    return _anthropicVertex;
 }
 
 /**
@@ -57,6 +80,11 @@ export function detectProvider(model) {
     // Google Gemini models
     if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) {
         return AI_PROVIDERS.GEMINI;
+    }
+
+    // Anthropic Claude models
+    if (m.startsWith('claude-')) {
+        return AI_PROVIDERS.ANTHROPIC;
     }
 
     // OpenAI models
@@ -270,7 +298,56 @@ function openaiMessagesToGemini(messages) {
         }
     }
 
-    return { systemInstruction, contents };
+    // ── Post-process: merge consecutive same-role turns ──
+    // Gemini strictly requires role alternation (user/model/user/model...).
+    // After summarization or message deletion, we may end up with consecutive
+    // model or user turns. Merge their parts into a single content entry.
+    const merged = [];
+    for (const entry of contents) {
+        if (merged.length > 0 && merged[merged.length - 1].role === entry.role) {
+            // Merge parts into the previous entry
+            merged[merged.length - 1].parts.push(...entry.parts);
+        } else {
+            merged.push({ ...entry, parts: [...entry.parts] });
+        }
+    }
+
+    // Gemini also requires the conversation to start with a 'user' turn.
+    // If after merging it starts with 'model', insert a synthetic user turn.
+    if (merged.length > 0 && merged[0].role === 'model') {
+        merged.unshift({ role: 'user', parts: [{ text: '(continue)' }] });
+    }
+
+    // ── Strip orphaned functionCall parts ──
+    // Gemini requires every functionCall to be immediately followed by a
+    // functionResponse turn. After summarization, older tool calls may lack
+    // their paired responses. Remove functionCall (and thought/thoughtSignature)
+    // parts from model turns that are NOT followed by a user turn containing
+    // a functionResponse part.
+    for (let i = 0; i < merged.length; i++) {
+        if (merged[i].role !== 'model') continue;
+        const hasFunctionCall = merged[i].parts.some(p => p.functionCall);
+        if (!hasFunctionCall) continue;
+
+        // Check if the next turn is a user turn with functionResponse
+        const next = merged[i + 1];
+        const hasMatchingResponse = next
+            && next.role === 'user'
+            && next.parts.some(p => p.functionResponse);
+
+        if (!hasMatchingResponse) {
+            // Strip functionCall and associated thought/thoughtSignature parts
+            merged[i].parts = merged[i].parts.filter(
+                p => !p.functionCall && !p.thoughtSignature
+            );
+            // If no parts remain, add placeholder text
+            if (merged[i].parts.length === 0) {
+                merged[i].parts = [{ text: '(processed)' }];
+            }
+        }
+    }
+
+    return { systemInstruction, contents: merged };
 }
 
 /**
@@ -390,6 +467,7 @@ export function createProviderContext(model) {
  * @param {Object} requestBody - OpenAI-compatible request body (model, messages, tools, etc.)
  * @param {Object} [options] - Optional overrides
  * @param {string} [options.model] - Model override
+ * @param {AbortSignal} [options.signal] - Abort signal for cancellation
  * @returns {Promise<Object>} OpenAI-compatible parsed JSON response
  */
 export async function callProvider(requestBody, options = {}) {
@@ -397,11 +475,18 @@ export async function callProvider(requestBody, options = {}) {
 
     // ── Gemini: use native SDK ──
     if (ctx.provider === AI_PROVIDERS.GEMINI) {
+        // TODO: Add cancellation support to Gemini SDK call if possible
         return await callGeminiSDK(ctx, requestBody);
     }
 
+    // ── Anthropic: use Vertex SDK ──
+    if (ctx.provider === AI_PROVIDERS.ANTHROPIC) {
+        // TODO: Add cancellation support to Anthropic SDK call if possible
+        return await callAnthropicVertexSDK(ctx, requestBody);
+    }
+
     // ── OpenAI / Local: use REST fetch ──
-    return await callOpenAIREST(ctx, requestBody);
+    return await callOpenAIREST(ctx, requestBody, options.signal);
 }
 
 /**
@@ -411,6 +496,7 @@ export async function callProvider(requestBody, options = {}) {
  *
  * @param {Object} requestBody - OpenAI-compatible request body
  * @param {Object} [options] - Optional overrides
+ * @param {AbortSignal} [options.signal] - Abort signal for cancellation
  * @returns {Promise<Response>} Raw fetch Response for streaming (or synthetic for Gemini)
  */
 export async function callProviderStream(requestBody, options = {}) {
@@ -418,6 +504,7 @@ export async function callProviderStream(requestBody, options = {}) {
 
     // ── Gemini: use SDK (non-streaming, wrapped as synthetic stream) ──
     if (ctx.provider === AI_PROVIDERS.GEMINI) {
+        // TODO: Add cancellation support to Gemini SDK call if possible
         return await callGeminiSDKStream(ctx, requestBody);
     }
 
@@ -428,6 +515,7 @@ export async function callProviderStream(requestBody, options = {}) {
         method: 'POST',
         headers: ctx.headers,
         body: JSON.stringify(body),
+        signal: options.signal,
     });
 
     if (!response.ok) {
@@ -451,6 +539,16 @@ async function callGeminiSDK(ctx, requestBody) {
     const geminiTools = openaiToolsToGemini(requestBody.tools);
 
     const generateConfig = {};
+    
+    if (requestBody.response_format) {
+        if (requestBody.response_format.type === 'json_object') {
+            generateConfig.responseMimeType = 'application/json';
+        } else if (requestBody.response_format.type === 'json_schema') {
+            generateConfig.responseMimeType = 'application/json';
+            generateConfig.responseSchema = requestBody.response_format.schema;
+        }
+    }
+
     if (requestBody.temperature !== undefined) {
         generateConfig.temperature = requestBody.temperature;
     }
@@ -542,13 +640,14 @@ async function callGeminiSDKStream(ctx, requestBody) {
 /**
  * Call OpenAI or local server using REST
  */
-async function callOpenAIREST(ctx, requestBody) {
+async function callOpenAIREST(ctx, requestBody, signal) {
     const body = transformRequestBody(ctx.provider, requestBody);
 
     const response = await fetch(ctx.endpoint, {
         method: 'POST',
         headers: ctx.headers,
         body: JSON.stringify(body),
+        signal,
     });
 
     if (!response.ok) {
@@ -559,6 +658,167 @@ async function callOpenAIREST(ctx, requestBody) {
     }
 
     return response.json();
+}
+
+// ─── Anthropic Vertex SDK Calls ──────────────────────────────────────────
+
+/**
+ * Call Anthropic using the @anthropic-ai/vertex-sdk
+ */
+async function callAnthropicVertexSDK(ctx, requestBody) {
+    const ai = await getAnthropicClient();
+    const { system, messages } = openaiMessagesToAnthropic(requestBody.messages);
+    const anthropicTools = openaiToolsToAnthropic(requestBody.tools);
+
+    const callParams = {
+        model: ctx.model,
+        messages: messages,
+        max_tokens: requestBody.max_tokens || 8192,
+        temperature: requestBody.temperature,
+    };
+
+    if (system) {
+        callParams.system = system;
+    }
+
+    if (anthropicTools && anthropicTools.length > 0) {
+        callParams.tools = anthropicTools;
+    }
+
+    const response = await ai.messages.create(callParams);
+
+    // Translate response to OpenAI format
+    return anthropicResponseToOpenai(response);
+}
+
+// ─── OpenAI ↔ Anthropic Format Translation ────────────────────────────────
+
+/**
+ * Convert OpenAI tools to Anthropic tools
+ */
+function openaiToolsToAnthropic(tools) {
+    if (!tools || tools.length === 0) return undefined;
+
+    return tools
+        .filter(t => t.type === 'function' && t.function)
+        .map(t => ({
+            name: t.function.name,
+            description: t.function.description || '',
+            input_schema: t.function.parameters
+        }));
+}
+
+/**
+ * Convert OpenAI messages to Anthropic format
+ */
+function openaiMessagesToAnthropic(messages) {
+    let system = undefined;
+    const anthropicMessages = [];
+
+    for (const msg of messages) {
+        if (msg.role === 'system') {
+            system = msg.content;
+            continue;
+        }
+
+        if (msg.role === 'user') {
+            anthropicMessages.push({
+                role: 'user',
+                content: msg.content
+            });
+            continue;
+        }
+
+        if (msg.role === 'assistant') {
+            const content = [];
+            
+            if (msg.content) {
+                content.push({ type: 'text', text: msg.content });
+            }
+            
+            if (msg.tool_calls) {
+                for (const tc of msg.tool_calls) {
+                    let input = {};
+                    try {
+                        input = typeof tc.function.arguments === 'string'
+                            ? JSON.parse(tc.function.arguments)
+                            : tc.function.arguments;
+                    } catch {}
+                    
+                    content.push({
+                        type: 'tool_use',
+                        id: tc.id,
+                        name: tc.function.name,
+                        input: input
+                    });
+                }
+            }
+            
+            anthropicMessages.push({
+                role: 'assistant',
+                content: content
+            });
+            continue;
+        }
+
+        if (msg.role === 'tool') {
+            anthropicMessages.push({
+                role: 'user',
+                content: [{
+                    type: 'tool_result',
+                    tool_use_id: msg.tool_call_id,
+                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+                }]
+            });
+            continue;
+        }
+    }
+
+    return { system, messages: anthropicMessages };
+}
+
+/**
+ * Convert Anthropic response to OpenAI format
+ */
+function anthropicResponseToOpenai(response) {
+    const message = { role: 'assistant' };
+    const toolCalls = [];
+    let content = '';
+
+    for (const block of response.content) {
+        if (block.type === 'text') {
+            content += block.text;
+        } else if (block.type === 'tool_use') {
+            toolCalls.push({
+                id: block.id,
+                type: 'function',
+                function: {
+                    name: block.name,
+                    arguments: JSON.stringify(block.input)
+                }
+            });
+        }
+    }
+
+    if (content) message.content = content;
+    else message.content = null;
+
+    if (toolCalls.length > 0) {
+        message.tool_calls = toolCalls;
+    }
+
+    return {
+        choices: [{
+            index: 0,
+            message: message,
+            finish_reason: response.stop_reason === 'tool_use' ? 'tool_calls' : 'stop'
+        }],
+        usage: {
+            prompt_tokens: response.usage?.input_tokens || 0,
+            completion_tokens: response.usage?.output_tokens || 0,
+            total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+        }
+    };
 }
 
 // ─── Utility Functions ───────────────────────────────────────────────────

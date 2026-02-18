@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Simple working AI Assistant Entry Point
 import { main } from './src/main.mjs';
 

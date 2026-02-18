@@ -1,0 +1,28 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="100" cy="100" r="95" fill="#f0f4f8" stroke="#d1d9e6" stroke-width="2"/>
+  
+  <line x1="100" y1="40" x2="100" y2="25" stroke="#4a5568" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="100" cy="20" r="5" fill="#ed64a6"/>
+  
+  <rect x="60" y="45" width="80" height="50" rx="15" fill="#2d3748"/>
+  <rect x="70" y="55" width="60" height="30" rx="8" fill="#4a5568"/>
+  
+  <circle cx="85" cy="70" r="6" fill="#63b3ed">
+    <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
+  </circle>
+  <circle cx="115" cy="70" r="6" fill="#63b3ed">
+    <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
+  </circle>
+  
+  <rect x="90" y="95" width="20" height="10" fill="#718096"/>
+  
+  <rect x="55" y="105" width="90" height="70" rx="10" fill="#2d3748"/>
+  
+  <rect x="70" y="120" width="50" height="10" rx="5" fill="#4a5568"/>
+  <circle cx="80" cy="150" r="8" fill="#48bb78"/>
+  <circle cx="100" cy="150" r="8" fill="#ecc94b"/>
+  <circle cx="120" cy="150" r="8" fill="#f56565"/>
+  
+  <rect x="35" y="115" width="15" height="40" rx="7" fill="#718096"/>
+  <rect x="150" y="115" width="15" height="40" rx="7" fill="#718096"/>
+</svg>

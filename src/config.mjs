@@ -14,12 +14,28 @@ export const config = {
   // AI Configuration
   ai: {
     model: process.env.AI_MODEL || 'gpt-4o', // Default model
-    provider: process.env.AI_PROVIDER || '', // Auto-detected from model name if empty. Options: 'local', 'openai', 'gemini'
+    provider: process.env.AI_PROVIDER || '', // Auto-detected from model name if empty. Options: 'local', 'openai', 'gemini', 'anthropic'
     endpoint: process.env.AI_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
     maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096', 10),
     contextWindowSize: parseInt(process.env.AI_CONTEXT_WINDOW || '128000', 10),
-    maxTurns: parseInt(process.env.AI_MAX_TURNS || '30', 10),
+    maxTurns: parseInt(process.env.AI_MAX_TURNS || '100', 10),
+  },
+
+  // Prompt Routing Configuration
+  routing: {
+    agentic: process.env.ROUTE_AGENTIC || '',
+    reasoning_high: process.env.ROUTE_REASONING_HIGH || '',
+    reasoning_medium: process.env.ROUTE_REASONING_MEDIUM || '',
+    reasoning_low: process.env.ROUTE_REASONING_LOW || '',
+    summarizer: process.env.ROUTE_SUMMARIZER || '',
+    code_completion: process.env.ROUTE_CODE_COMPLETION || '',
+  },
+
+  // Vertex AI Configuration (for Anthropic/Claude)
+  vertex: {
+    projectId: process.env.VERTEX_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
+    region: process.env.VERTEX_REGION || 'us-east5',
   },
   
   // System Configuration
@@ -35,11 +51,11 @@ export const config = {
     allowedFileExtensions: (process.env.ALLOWED_FILE_EXTENSIONS || '.js,.mjs,.json,.md,.txt').split(','),
   },
 
-  // API Keys (accessed safely)
+  // API Keys (accessed safely via getters for live updates from secrets vault)
   keys: {
-    openai: process.env.OPENAI_API_KEY,
-    anthropic: process.env.ANTHROPIC_API_KEY,
-    google: process.env.GOOGLE_API_KEY,
+    get openai() { return process.env.OPENAI_API_KEY; },
+    get anthropic() { return process.env.ANTHROPIC_API_KEY; },
+    get google() { return process.env.GOOGLE_API_KEY; },
   }
 };
 

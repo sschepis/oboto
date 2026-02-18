@@ -1,0 +1,488 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tailwind v4 Theme Extensions
+   ═══════════════════════════════════════════════════════════════════ */
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+
+  /* Custom easing curves */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+
+  /* Custom animation timings */
+  --animate-fade-in: fade-in 0.4s var(--ease-smooth) both;
+  --animate-fade-in-up: fade-in-up 0.5s var(--ease-out-expo) both;
+  --animate-fade-in-down: fade-in-down 0.4s var(--ease-out-expo) both;
+  --animate-scale-in: scale-in 0.3s var(--ease-bounce) both;
+  --animate-slide-in-right: slide-in-right 0.35s var(--ease-out-expo) both;
+  --animate-slide-in-left: slide-in-left 0.35s var(--ease-out-expo) both;
+  --animate-slide-in-up: slide-in-up 0.35s var(--ease-out-expo) both;
+  --animate-slide-in-down: slide-in-down 0.3s var(--ease-out-expo) both;
+  --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-breathe: breathe 4s ease-in-out infinite;
+  --animate-shake: shake 0.3s ease-in-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Keyframe Definitions
+   ═══════════════════════════════════════════════════════════════════ */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-down {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(var(--color-primary-rgb), 0.15); }
+  50%      { box-shadow: 0 0 20px rgba(var(--color-primary-rgb), 0.35); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.8; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes progress-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(var(--color-primary-rgb), 0.1); }
+  50%      { border-color: rgba(var(--color-primary-rgb), 0.3); }
+}
+
+/* Stagger delay utilities for child animations */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Root Styles
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Dynamic Theme Tokens ────────────────────────────────────────── */
+  --color-primary: #818cf8;
+  --color-primary-rgb: 129,140,248;
+  --color-accent: #a78bfa;
+  --color-accent-rgb: 167,139,250;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-info: #60a5fa;
+  --color-surface: #080808;
+  --color-surface-raised: #111111;
+  --color-surface-overlay: #191919;
+  --color-border: rgba(63,63,70,0.2);
+  --color-text: #e4e4e7;
+  --color-text-muted: #a1a1aa;
+  --color-selection: rgba(99,102,241,0.3);
+  --color-scrollbar: rgba(63,63,70,0.4);
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  /* Global transition timing */
+  --transition-fast: 150ms;
+  --transition-base: 250ms;
+  --transition-slow: 400ms;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Selection
+   ═══════════════════════════════════════════════════════════════════ */
+::selection {
+  background-color: var(--color-selection);
+  color: white;
+}
+
+::-moz-selection {
+  background-color: var(--color-selection);
+  color: white;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Scrollbars – Ultra-thin, fade on hover
+   ═══════════════════════════════════════════════════════════════════ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.3);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-primary-rgb), 0.4);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Custom scrollbar class – even thinner for panels */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.2);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-primary-rgb), 0.35);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Focus Styles – Accessible but elegant
+   ═══════════════════════════════════════════════════════════════════ */
+*:focus-visible {
+  outline: 1px solid rgba(var(--color-primary-rgb), 0.5);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Global Link Hover Effects
+   ═══════════════════════════════════════════════════════════════════ */
+a {
+  transition: color var(--transition-fast) ease, opacity var(--transition-fast) ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Button Base Transitions
+   ═══════════════════════════════════════════════════════════════════ */
+button {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: var(--transition-fast);
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+button:active {
+  transform: scale(0.97);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Glass & Surface Utilities
+   ═══════════════════════════════════════════════════════════════════ */
+.glass-surface {
+  background: rgba(9, 9, 11, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(63, 63, 70, 0.2);
+}
+
+.glass-surface-subtle {
+  background: rgba(9, 9, 11, 0.6);
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+}
+
+.surface-glow {
+  box-shadow:
+    0 0 0 1px rgba(63, 63, 70, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.surface-glow-lg {
+  box-shadow:
+    0 0 0 1px rgba(63, 63, 70, 0.1),
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 12px 48px rgba(0, 0, 0, 0.3);
+}
+
+.indigo-glow {
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.1),
+    0 2px 8px rgba(var(--color-primary-rgb), 0.15),
+    0 8px 32px rgba(var(--color-primary-rgb), 0.1);
+}
+
+.emerald-glow {
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.1),
+    0 2px 8px rgba(16, 185, 129, 0.15),
+    0 8px 32px rgba(16, 185, 129, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Gradient Text Utility
+   ═══════════════════════════════════════════════════════════════════ */
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Noise Texture Overlay (for depth)
+   ═══════════════════════════════════════════════════════════════════ */
+.noise-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shimmer / Loading Utilities
+   ═══════════════════════════════════════════════════════════════════ */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Ambient Border Glow
+   ═══════════════════════════════════════════════════════════════════ */
+.border-glow {
+  position: relative;
+}
+.border-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), transparent 40%, rgba(var(--color-accent-rgb), 0.1));
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.border-glow:hover::before {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Surface Component Dark Theme Defaults
+   Forces dark-theme styling on dynamically rendered surface components.
+   ═══════════════════════════════════════════════════════════════════ */
+.surface-component-scope {
+  color: #e4e4e7;        /* zinc-200 */
+  background: transparent;
+}
+
+.surface-component-scope h1,
+.surface-component-scope h2,
+.surface-component-scope h3,
+.surface-component-scope h4,
+.surface-component-scope h5,
+.surface-component-scope h6 {
+  color: #f4f4f5;        /* zinc-100 */
+}
+
+.surface-component-scope p,
+.surface-component-scope span,
+.surface-component-scope li,
+.surface-component-scope td,
+.surface-component-scope th,
+.surface-component-scope label {
+  color: #a1a1aa;        /* zinc-400 */
+}
+
+.surface-component-scope a {
+  color: var(--color-primary);
+}
+
+.surface-component-scope input,
+.surface-component-scope textarea,
+.surface-component-scope select {
+  background: rgba(24, 24, 27, 0.8);  /* zinc-900/80 */
+  border: 1px solid rgba(63, 63, 70, 0.5);
+  color: #e4e4e7;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.surface-component-scope input:focus,
+.surface-component-scope textarea:focus,
+.surface-component-scope select:focus {
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+  outline: none;
+}
+
+.surface-component-scope button {
+  background: rgba(39, 39, 42, 0.8);  /* zinc-800/80 */
+  border: 1px solid rgba(63, 63, 70, 0.4);
+  color: #e4e4e7;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.surface-component-scope button:hover {
+  background: rgba(63, 63, 70, 0.6);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.surface-component-scope table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.surface-component-scope th {
+  border-bottom: 1px solid rgba(63, 63, 70, 0.4);
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #d4d4d8;        /* zinc-300 */
+}
+
+.surface-component-scope td {
+  border-bottom: 1px solid rgba(63, 63, 70, 0.15);
+  padding: 8px 12px;
+}
+
+.surface-component-scope hr {
+  border-color: rgba(63, 63, 70, 0.3);
+}
+
+.surface-component-scope code {
+  background: rgba(24, 24, 27, 0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  color: #a78bfa;        /* violet-400 */
+}
+
+.surface-component-scope pre {
+  background: rgba(9, 9, 11, 0.8);
+  border: 1px solid rgba(63, 63, 70, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+}
+
+/* Checkbox styling in surfaces */
+.surface-component-scope input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(63, 63, 70, 0.6);
+  border-radius: 4px;
+  background: rgba(24, 24, 27, 0.6);
+  cursor: pointer;
+  vertical-align: middle;
+  position: relative;
+}
+
+.surface-component-scope input[type="checkbox"]:checked {
+  background: rgba(99, 102, 241, 0.6);
+  border-color: rgba(99, 102, 241, 0.8);
+}
+
+.surface-component-scope input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -1px;
+  left: 2px;
+  font-size: 12px;
+  color: white;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Reduced Motion
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

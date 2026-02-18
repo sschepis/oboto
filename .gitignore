@@ -19,6 +19,10 @@ Thumbs.db
 .ai-session.workspace.json
 temp_speech.mp3
 
+# Encrypted secrets vault
+.secrets.enc
+.secrets.enc.bak
+
 # Testing
 test-library.mjs
 coverage/

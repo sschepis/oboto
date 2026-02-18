@@ -12,11 +12,11 @@ export class FileTools {
     }
 
     // Validate path is within workspace
-    validatePath(filePath) {
+    validatePath(filePath, allowOutside = false) {
         const resolvedPath = path.resolve(this.workspaceRoot, filePath);
         
         // Check if path starts with workspace root
-        if (!resolvedPath.startsWith(this.workspaceRoot)) {
+        if (!allowOutside && !resolvedPath.startsWith(this.workspaceRoot)) {
             // Allow access to temporary files if needed, but for now strict workspace confinement
             throw new Error(`Access denied: Path '${filePath}' is outside the workspace root.`);
         }
@@ -26,12 +26,12 @@ export class FileTools {
 
     // Read file content
     async readFile(args) {
-        const { path: filePath, encoding = 'utf8' } = args;
+        const { path: filePath, encoding = 'utf8', _allowOutside = false } = args;
         
         consoleStyler.log('working', `Reading file: ${filePath}`);
         
         try {
-            const resolvedPath = this.validatePath(filePath);
+            const resolvedPath = this.validatePath(filePath, _allowOutside);
             
             if (!fs.existsSync(resolvedPath)) {
                 throw new Error(`File not found: ${filePath}`);
@@ -49,12 +49,12 @@ export class FileTools {
 
     // Write content to file
     async writeFile(args) {
-        const { path: filePath, content, encoding = 'utf8' } = args;
+        const { path: filePath, content, encoding = 'utf8', _allowOutside = false } = args;
         
         consoleStyler.log('working', `Writing file: ${filePath}`);
         
         try {
-            const resolvedPath = this.validatePath(filePath);
+            const resolvedPath = this.validatePath(filePath, _allowOutside);
             
             // Ensure directory exists
             const dirPath = path.dirname(resolvedPath);
@@ -82,12 +82,12 @@ export class FileTools {
 
     // List files in directory
     async listFiles(args) {
-        const { path: dirPath = '.', recursive = false } = args;
+        const { path: dirPath = '.', recursive = false, _allowOutside = false } = args;
         
         consoleStyler.log('working', `Listing files in: ${dirPath} (recursive: ${recursive})`);
         
         try {
-            const resolvedPath = this.validatePath(dirPath);
+            const resolvedPath = this.validatePath(dirPath, _allowOutside);
             
             if (!fs.existsSync(resolvedPath)) {
                 throw new Error(`Directory not found: ${dirPath}`);
@@ -136,6 +136,45 @@ export class FileTools {
         } catch (error) {
             consoleStyler.log('error', `List files failed: ${error.message}`);
             return `Error listing files: ${error.message}`;
+        }
+    }
+
+    async editFile(args) {
+        const { path: filePath, edits, _allowOutside = false } = args;
+        
+        try {
+            const fs = await import('fs');
+            const pathModule = await import('path');
+            
+            // Replicate validatePath logic since editFile uses pathModule explicitly
+            const absPath = pathModule.default.resolve(this.workspaceRoot || process.cwd(), filePath);
+            
+            if (!_allowOutside && !absPath.startsWith(this.workspaceRoot)) {
+                return `Access denied: Path '${filePath}' is outside the workspace root.`;
+            }
+            
+            if (!fs.existsSync(absPath)) {
+                return `Error: File not found: ${filePath}`;
+            }
+            
+            let content = fs.readFileSync(absPath, 'utf8');
+            const changes = [];
+            
+            for (let i = 0; i < edits.length; i++) {
+                const edit = edits[i];
+                const idx = content.indexOf(edit.search);
+                if (idx === -1) {
+                    changes.push(`⚠ Edit ${i + 1}: Search text not found: "${edit.search.substring(0, 60)}${edit.search.length > 60 ? '...' : ''}"`);
+                    continue;
+                }
+                content = content.substring(0, idx) + edit.replace + content.substring(idx + edit.search.length);
+                changes.push(`✓ Edit ${i + 1}: Replaced at offset ${idx} (${edit.search.length} → ${edit.replace.length} chars)`);
+            }
+            
+            fs.writeFileSync(absPath, content, 'utf8');
+            return `File edited: ${filePath}\n${changes.join('\n')}`;
+        } catch (error) {
+            return `Error editing file: ${error.message}`;
         }
     }
 }

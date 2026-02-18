@@ -1,114 +1,207 @@
-# AI Man Library Interface
+# AI Man Library API Reference
 
-This module exposes the core AI Assistant capabilities as a structured library, allowing integration into other AI agents, tools, or applications.
+This document provides a comprehensive reference for the AI Man library, which allows you to embed advanced AI software engineering capabilities into your own applications.
 
-## Overview
+## Table of Contents
 
-The `AiMan` class provides a high-level interface to the AI system. It supports:
-- **Dependency Injection**: Plug in your own LLM provider and status reporting mechanisms.
-- **Agent Integration**: Easily expose the system as a tool for other AI agents (e.g., LangChain, AutoGPT).
-- **Callback Statusing**: Receive real-time updates on progress, tool execution, and logs.
+- [AiMan Class](#aiman-class)
+  - [Constructor](#constructor)
+  - [Execution Methods](#execution-methods)
+  - [Structured Development Methods](#structured-development-methods)
+  - [State Management](#state-management)
+  - [Customization](#customization)
+- [Structured Development Modules](#structured-development-modules)
+  - [FlowManager](#flowmanager)
+  - [ManifestManager](#manifestmanager)
+  - [Visualizers & Generators](#visualizers--generators)
+- [Core Components](#core-components)
 
-## Usage
+---
 
-### Basic Usage
+## AiMan Class
 
-```javascript
-import { AiMan } from 'ai-assistant/lib';
+The `AiMan` class is the main entry point for the library. It orchestrates the AI assistant, manages context, and provides high-level methods for software development tasks.
 
-// Initialize with default settings (uses internal LLM and console output)
-const ai = new AiMan();
-
-// Execute a complex task
-const result = await ai.execute("Create a new feature for user authentication in the current project");
-
-console.log(result);
-```
-
-### Advanced Usage with Custom Adapters
-
-You can inject custom adapters to control how the AI communicates and reports status.
+### Constructor
 
 ```javascript
-import { AiMan } from 'ai-assistant/lib';
+import { AiMan } from 'ai-man/lib';
 
-// Custom LLM Adapter (must implement generateContent)
-const myLLMAdapter = {
-    async generateContent(request) {
-        // request follows OpenAI Chat Completion API format
-        // Call your own model service here...
-        return {
-            choices: [{
-                message: { role: 'assistant', content: '...' }
-            }]
-        };
-    }
-};
-
-// Custom Status Adapter (must implement log, onProgress, etc.)
-const myStatusAdapter = {
-    log(level, message, meta) {
-        // Send logs to your dashboard/frontend
-        socket.emit('log', { level, message, meta });
-    },
-    onProgress(percent, status) {
-        updateProgressBar(percent, status);
-    },
-    onToolStart(name, args) {
-        console.log(`Tool Started: ${name}`);
-    },
-    onToolEnd(name, result) {
-        console.log(`Tool Ended: ${name}`);
-    }
-};
-
-// Initialize with adapters
 const ai = new AiMan({
-    workingDir: '/path/to/project',
-    llmAdapter: myLLMAdapter,
-    statusAdapter: myStatusAdapter
+    workingDir: process.cwd(),      // Root directory for file operations
+    llmAdapter: myLLMAdapter,       // Optional: Custom LLM provider
+    statusAdapter: myStatusAdapter, // Optional: Custom status reporter
+    memoryAdapter: myMemoryAdapter, // Optional: Persistent memory store
+    maxTurns: 30,                   // Maximum conversation turns per execution
+    overrides: {}                   // Internal component overrides
 });
-
-await ai.execute("Refactor the login module");
 ```
 
-## Agent Integration
+### Execution Methods
 
-To use AI Man as a tool within another agent (e.g., a "Manager" agent delegating coding tasks), use `getToolDefinition()`:
+#### `execute(task, options)`
+Executes a natural language task.
+- **task** (`string`): The task description.
+- **options** (`Object`): Execution options (e.g., `signal` for aborting).
+- **Returns**: `Promise<string>` (The final result).
+
+#### `executeStream(task, onChunk, options)`
+Executes a task and streams the response chunks.
+- **onChunk** (`Function`): Callback `(chunk: string) => void`.
+
+#### `design(task, options)`
+Runs the agent in **Design Mode** to produce a technical design document without writing code.
+- **Returns**: `Promise<DesignResult>`
+
+#### `implement(designResult, options)`
+Takes a `DesignResult` and implements the features described in it.
+- **designResult** (`DesignResult`): The output from `design()`.
+- **Returns**: `Promise<string>` (Implementation summary).
+
+#### `designAndImplement(task, options)`
+Convenience method that chains `design()` and `implement()`.
+- **options.onDesignComplete**: Callback invoked when design is ready, before implementation starts.
+- **Returns**: `Promise<{ design: DesignResult, result: string }>`
+
+#### `test(implementationResult, options)`
+Generates and runs unit tests for the implemented code.
+
+#### `review(designResult, implementationResult, options)`
+Performs an automated code review, comparing the implementation against the design.
+- **Returns**: `Promise<{ overallScore, findings: [], summary }>`
+
+### General Purpose Assistant
+
+The library can be used as a general-purpose assistant via the `chat()` method and `RoboDev` alias.
+
+#### `chat(message, options)`
+Send a conversational message to the assistant. Unlike `execute()`, which is task-oriented, `chat()` allows for interactive sessions where the assistant maintains context across multiple turns.
 
 ```javascript
-const aiMan = new AiMan();
-const toolDef = aiMan.getToolDefinition();
+import { RoboDev } from 'ai-man/lib'; // RoboDev is an alias for AiMan
 
-// toolDef matches standard JSON Schema for function calling:
-// {
-//   "name": "execute_software_development_task",
-//   "description": "...",
-//   "parameters": { ... }
-// }
+const assistant = new RoboDev();
 
-// Register this tool with your primary agent
-myAgent.registerTool(toolDef, async (args) => {
-    return await aiMan.execute(args.task);
+// General knowledge
+const response = await assistant.chat("What is the capital of France?");
+console.log(response);
+
+// Code analysis
+await assistant.chat("Summarize the contents of src/lib/index.mjs");
+```
+
+### State Management
+
+#### `fork()`
+Creates a complete copy of the current assistant state, including conversation history and tools. Useful for exploring alternative paths without affecting the main session.
+- **Returns**: `AiMan` (A new instance).
+
+#### `checkpoint(name)`
+Saves the current conversation state with a name.
+- **name** (`string`): Checkpoint identifier.
+
+#### `rollbackTo(name)`
+Restores the conversation state to a specific checkpoint.
+
+#### `listCheckpoints()`
+Returns a list of all saved checkpoints with metadata.
+
+### Customization
+
+#### `registerTool(schema, handler)`
+Registers a custom tool for the agent to use.
+- **schema**: JSON Schema defining the tool (OpenAI format).
+- **handler**: Async function implementing the tool logic.
+
+```javascript
+ai.registerTool({
+  type: 'function',
+  function: {
+    name: 'get_weather',
+    description: 'Get weather for location',
+    parameters: { type: 'object', properties: { location: { type: 'string' } } }
+  }
+}, async ({ location }) => {
+  return "Sunny, 25C";
 });
 ```
 
-## API Reference
+#### `use(middleware)`
+Adds middleware to the execution chain. Middleware can intercept requests and responses.
 
-### `AiMan` Class
+#### `on(event, listener)` / `off(event, listener)`
+Subscribe to lifecycle events:
+- `tool:start`: When a tool begins execution.
+- `tool:end`: When a tool completes.
 
-#### `constructor(config)`
-- `config.workingDir`: Path to the project root (default: `process.cwd()`).
-- `config.llmAdapter`: Object implementing `LLMAdapter` interface.
-- `config.statusAdapter`: Object implementing `StatusAdapter` interface.
-- `config.overrides`: Optional configuration overrides (model, etc.).
+---
 
-#### `async execute(task)`
-Executes the given natural language task. Returns a Promise resolving to the final output string.
+## Structured Development Modules
 
-#### `getToolDefinition()`
-Returns a JSON Schema object describing the `execute` capability, suitable for LLM function calling.
+These modules power the structured development workflow and can be imported directly for specialized use cases.
 
-### Interfaces
+```javascript
+import { FlowManager, ManifestManager, C4Visualizer } from 'ai-man/lib';
+```
 
-See `src/lib/interfaces.d.ts` for TypeScript definitions of `LLMAdapter` and `StatusAdapter`.
+### FlowManager
+Manages the transition between development phases (Discovery -> Design -> Interface -> Implementation).
+- `initStructuredDev(targetDir)`: Initialize the environment.
+- `submitTechnicalDesign(featureId, doc)`: Submit a design.
+- `approveDesign(featureId)`: Move to Interface phase.
+- `lockInterfaces(featureId, defs)`: Lock API signatures.
+- `submitCritique(featureId, critique)`: Review implementation.
+
+### ManifestManager
+Handles the reading and writing of `SYSTEM_MAP.md`, the "Living Manifest" of the project.
+- `initManifest()`: Create a new manifest.
+- `readManifest()`: Get current manifest content.
+- `addFeature(id, name, ...)`: Register a feature.
+- `addInvariant(id, name, desc)`: Add a global invariant.
+- `createSnapshot(desc)`: Save manifest state.
+
+### Visualizers & Generators
+
+#### `C4Visualizer`
+Generates Mermaid.js C4 architecture diagrams from the manifest.
+- `generateComponentDiagram()`: Returns Mermaid syntax.
+
+#### `KnowledgeGraphBuilder`
+Analyzes the codebase to build a graph of files, classes, and dependencies.
+- `buildGraph()`: Returns `{ nodes, edges }`.
+
+#### `CiCdArchitect`
+Generates CI/CD pipeline configurations.
+- `generatePipeline(platform)`: Supports 'github' and 'gitlab'.
+
+#### `ContainerizationWizard`
+Generates Docker configurations.
+- `generateConfig()`: Returns Dockerfile, .dockerignore, docker-compose.yml.
+
+#### `ApiDocSmith`
+Generates Markdown API documentation from source code JSDoc.
+- `generateDocs(targetDir)`: Returns markdown string.
+
+#### `TutorialGenerator`
+Creates tutorials based on the session history.
+- `generateTutorial(title)`: Returns markdown tutorial.
+
+#### `EnhancementGenerator`
+Proactively analyzes code to suggest improvements.
+- `generateEnhancements(category, focusDirs)`: Returns list of suggestions.
+- `implementEnhancements(list)`: Auto-implements selected enhancements.
+
+---
+
+## Core Components
+
+### `AiManEventBus`
+A typed `EventEmitter` for system-wide events.
+
+### `MiddlewareChain`
+Manages a stack of middleware functions for request/response processing.
+
+### `MemoryAdapter`
+Abstract base class for implementing persistent memory (e.g., Vector DB, File System).
+- `store(text, metadata)`
+- `retrieve(query, topK)`

@@ -3,18 +3,72 @@
 .github/
 .gitignore
 
-# Config
+# Config / IDE
 .env
 .env.*
+!.env.example
 .vscode/
+.cursor/
+.claude/
 
-# Local Dev
+# Local Dev / Workspaces
 node_modules/
 .ai-man/
-*.log
+.ai-session.history.json
+.ai-session.workspace.json
+.memory.json
+.secrets.enc
+.secrets.enc.bak
 temp_speech.mp3
 test-library.mjs
+coverage/
 
-# Documentation/External
+# Build / Lock files (consumers install their own)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+package-lock.json
+
+# Workspace packages (not published)
+BubbleLab/
+ui/
+sample/
+
+# Documentation / Design (not needed at runtime)
 kanvas/
 plans/
+*.md
+!README.md
+!src/lib/README.md
+
+# Design / planning docs at root
+ADDITIONAL_CAPABILITIES.md
+AI_CODESENSE_DESIGN.md
+BROWSER_PREVIEW_DESIGN.md
+BUBBLELAB_INTEGRATION_PLAN.md
+current_SYSTEM_MAP.md
+current_TECHNICAL_DESIGN_UI_MVP.md
+DESIGN.md
+ENHANCEMENT_IMPLEMENTATION_PLAN.md
+ENHANCEMENTS.md
+IMPLEMENTATION_PLANS.md
+NEXT_STEPS_DESIGN.md
+PROMPT_ROUTING_DESIGN.md
+SECRETS_DESIGN.md
+SURFACES_DESIGN.md
+SYSTEM_MAP.md
+TASK_MANAGEMENT_DESIGN.md
+
+# Test configuration
+jest.config.cjs
+jest.setup.cjs
+tsconfig.json
+src/**/__tests__/
+src/**/*.test.*
+src/**/*.spec.*
+
+# Static assets not needed in package
+surface.html
+
+# Logs
+*.log
+npm-debug.log*

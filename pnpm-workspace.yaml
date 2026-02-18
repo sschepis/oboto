@@ -1,0 +1,7 @@
+packages:
+  - '.'
+  - 'BubbleLab/packages/bubble-core'
+  - 'BubbleLab/packages/bubble-runtime'
+  - 'BubbleLab/packages/bubble-shared-schemas'
+  - 'BubbleLab/packages/bubble-scope-manager'
+  - 'ui'

@@ -15,6 +15,24 @@ export class CLIInterface {
         consoleStyler.log('system', 'AI Assistant (Interactive Mode). Type "exit" to quit.');
         consoleStyler.log('system', `Working Directory: ${workingDir}`);
         
+        // Listen for background task completions
+        if (assistant.eventBus) {
+            assistant.eventBus.on('task:completed', (payload) => {
+                // We use process.stdout.write to bypass the readline prompt line if possible, 
+                // or just log it. The readline interface handles partial lines well usually.
+                // Move cursor to start of line, clear line
+                readline.cursorTo(process.stdout, 0);
+                readline.clearLine(process.stdout, 0);
+                
+                consoleStyler.log('system', `🔔 Background task completed: "${payload.description}" (${payload.taskId})`);
+                
+                // Re-display prompt if we were waiting for input
+                if (this.rl) {
+                    this.rl.prompt(true);
+                }
+            });
+        }
+
         // Create readline with minimal config
         this.rl = readline.createInterface({
             input: process.stdin,
@@ -121,15 +139,24 @@ export class CLIInterface {
         const resumeIndex = args.indexOf('--resume');
         const resume = resumeIndex !== -1;
         
+        const serverIndex = args.indexOf('--server');
+        const isServer = serverIndex !== -1;
+        
         // Remove flags from args
         if (resume) {
-            args.splice(resumeIndex, 1);
+            const idx = args.indexOf('--resume'); // Re-find index as splice shifts
+            if (idx !== -1) args.splice(idx, 1);
+        }
+        if (isServer) {
+            const idx = args.indexOf('--server');
+            if (idx !== -1) args.splice(idx, 1);
         }
 
         return {
             args,
             workingDir,
             resume,
+            isServer,
             isInteractive: args.length === 0,
             userInput: args.length > 0 ? args.join(' ') : null
         };

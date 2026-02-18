@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { background: white; margin: 0; padding: 20px; font-family: sans-serif; }
+    .container { display: flex; gap: 20px; align-items: flex-start; }
+    .icon-box { display: flex; align-items: center; justify-content: center; background: transparent; }
+    
+    /* Robot Icon Style */
+    svg { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Icon Generator</h1>
+  <p>Use Puppeteer to screenshot these elements.</p>
+  
+  <div class="container">
+    <div id="icon-16" class="icon-box" style="width: 16px; height: 16px;">
+      <!-- Simple Robot Head -->
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="80" height="80" rx="15" fill="#333" />
+        <circle cx="35" cy="40" r="10" fill="#00E676" />
+        <circle cx="65" cy="40" r="10" fill="#00E676" />
+        <rect x="30" y="65" width="40" height="10" rx="5" fill="#fff" />
+        <rect x="5" y="40" width="5" height="20" fill="#666" />
+        <rect x="90" y="40" width="5" height="20" fill="#666" />
+        <rect x="45" y="5" width="10" height="5" fill="#666" />
+      </svg>
+    </div>
+
+    <div id="icon-48" class="icon-box" style="width: 48px; height: 48px;">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="80" height="80" rx="15" fill="#333" />
+        <circle cx="35" cy="40" r="10" fill="#00E676" />
+        <circle cx="65" cy="40" r="10" fill="#00E676" />
+        <rect x="30" y="65" width="40" height="10" rx="5" fill="#fff" />
+        <rect x="5" y="40" width="5" height="20" fill="#666" />
+        <rect x="90" y="40" width="5" height="20" fill="#666" />
+        <rect x="45" y="5" width="10" height="5" fill="#666" />
+      </svg>
+    </div>
+
+    <div id="icon-128" class="icon-box" style="width: 128px; height: 128px;">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="80" height="80" rx="15" fill="#333" />
+        <circle cx="35" cy="40" r="10" fill="#00E676" />
+        <circle cx="65" cy="40" r="10" fill="#00E676" />
+        <rect x="30" y="65" width="40" height="10" rx="5" fill="#fff" />
+        <rect x="5" y="40" width="5" height="20" fill="#666" />
+        <rect x="90" y="40" width="5" height="20" fill="#666" />
+        <rect x="45" y="5" width="10" height="5" fill="#666" />
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    // Optional: manual download script if opened in browser
+    function download(id, size) {
+      const svg = document.querySelector(`#${id} svg`);
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const data = (new XMLSerializer()).serializeToString(svg);
+      const img = new Image();
+      const svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(svgBlob);
+      
+      img.onload = function() {
+        ctx.drawImage(img, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        
+        const a = document.createElement('a');
+        a.download = `icon-${size}.png`;
+        a.href = canvas.toDataURL('image/png');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      
+      img.src = url;
+    }
+  </script>
+</body>
+</html>

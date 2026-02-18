@@ -2,17 +2,12 @@ import { MiniAIAssistant } from '../core/ai-assistant.mjs';
 import { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 import { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
 import { consoleStyler } from '../ui/console-styler.mjs';
-import { config } from '../config.mjs';
-
-/**
- * Error thrown when an agent execution is cancelled via AbortSignal.
- */
-export class CancellationError extends Error {
-    constructor(message = 'Agent execution was cancelled') {
-        super(message);
-        this.name = 'CancellationError';
-    }
-}
+import { AiManEventBus } from './event-bus.mjs';
+import { MiddlewareChain } from './middleware.mjs';
+import { TaskManager } from '../core/task-manager.mjs';
+import { CancellationError } from './cancellation-error.mjs';
+import { DesignResult } from './design-result.mjs';
+import { runDesign, runImplement, runTest, runReview } from './workflows.mjs';
 
 /**
  * Main entry point for the AI Man Library.
@@ -36,16 +31,62 @@ export class AiMan {
         this.statusAdapter = cfg.statusAdapter || new ConsoleStatusAdapter();
         
         // Configure global logger redirect if a custom status adapter is provided
-        // This ensures that internal components using consoleStyler route logs through the adapter
         if (cfg.statusAdapter) {
              consoleStyler.setListener(this.statusAdapter);
         }
 
+        // Initialize event bus and middleware
+        this.events = new AiManEventBus();
+        this.middleware = new MiddlewareChain();
+        this.taskManager = new TaskManager(this.events);
+
+        // Store config for creating fresh assistants in design/implement
+        this._cfg = cfg;
+        this._registeredTools = [];
+
         // Initialize the core assistant with injected dependencies
+        this.memoryAdapter = cfg.memoryAdapter || null;
         this.assistant = new MiniAIAssistant(this.workingDir, {
             llmAdapter: this.llmAdapter,
-            maxTurns: cfg.maxTurns
+            statusAdapter: this.statusAdapter,
+            maxTurns: cfg.maxTurns,
+            eventBus: this.events,
+            middleware: this.middleware,
+            memoryAdapter: this.memoryAdapter,
+            taskManager: this.taskManager
         });
+    }
+
+    /**
+     * Subscribe to lifecycle events
+     * @param {string} event - Event name
+     * @param {Function} listener - Callback function
+     * @returns {this}
+     */
+    on(event, listener) {
+        this.events.on(event, listener);
+        return this;
+    }
+
+    /**
+     * Unsubscribe from lifecycle events
+     * @param {string} event - Event name
+     * @param {Function} listener - Callback function
+     * @returns {this}
+     */
+    off(event, listener) {
+        this.events.off(event, listener);
+        return this;
+    }
+
+    /**
+     * Add middleware to the execution chain
+     * @param {Object} middleware - Middleware object with hooks
+     * @returns {this}
+     */
+    use(middleware) {
+        this.middleware.use(middleware);
+        return this;
     }
 
     /**
@@ -56,38 +97,142 @@ export class AiMan {
     }
 
     /**
+     * Create a fresh assistant instance (used by design/implement to get clean conversation state)
+     * @returns {MiniAIAssistant}
+     * @private
+     */
+    _createAssistant() {
+        const assistant = new MiniAIAssistant(this.workingDir, {
+            llmAdapter: this.llmAdapter,
+            statusAdapter: this.statusAdapter,
+            maxTurns: this._cfg.maxTurns,
+            eventBus: this.events,
+            middleware: this.middleware,
+            memoryAdapter: this.memoryAdapter,
+            taskManager: this.taskManager
+        });
+        // Replay registered tools on fresh assistants
+        for (const { schema, handler } of this._registeredTools) {
+            assistant.allTools.push(schema);
+            assistant.toolExecutor.registerTool(schema.function.name, handler);
+        }
+        return assistant;
+    }
+
+    registerTool(schema, handler) {
+        this._registeredTools.push({ schema, handler });
+        this.assistant.allTools.push(schema);
+        this.assistant.toolExecutor.registerTool(schema.function.name, handler);
+        return this;
+    }
+
+    /**
+     * Create a fork of the current conversation state.
+     * @returns {AiMan} A new AiMan instance with independent state
+     */
+    fork() {
+        // Create new instance with same config
+        const forked = new AiMan({
+            ...this._cfg,
+            workingDir: this.workingDir,
+            llmAdapter: this.llmAdapter,
+            statusAdapter: this.statusAdapter,
+        });
+        
+        // Inject the cloned history
+        forked.assistant.historyManager = this.assistant.historyManager.clone();
+        
+        // Copy tools state
+        forked.assistant.customToolsLoaded = this.assistant.customToolsLoaded;
+        forked.assistant.allTools = [...this.assistant.allTools];
+        
+        // Copy registered custom tools
+        forked._registeredTools = [...this._registeredTools];
+        
+        // Re-register tool handlers in the new executor
+        for (const { schema, handler } of this._registeredTools) {
+            forked.assistant.toolExecutor.registerTool(schema.function.name, handler);
+        }
+        
+        return forked;
+    }
+
+    /**
+     * Create a named checkpoint of the current conversation state
+     * @param {string} name - Checkpoint name
+     * @returns {this}
+     */
+    checkpoint(name) {
+        this.assistant.historyManager.checkpoint(name);
+        return this;
+    }
+
+    /**
+     * Rollback conversation to a named checkpoint
+     * @param {string} name - Checkpoint name
+     * @returns {number} Timestamp of the checkpoint
+     */
+    rollbackTo(name) {
+        return this.assistant.historyManager.rollbackTo(name);
+    }
+
+    /**
+     * List all conversation checkpoints
+     * @returns {Array<{name: string, timestamp: number, messageCount: number}>}
+     */
+    listCheckpoints() {
+        return this.assistant.historyManager.listCheckpoints();
+    }
+
+    /**
+     * Send a conversational message to the assistant.
+     * @param {string} message - The message to send
+     * @param {Object} [options] - Execution options
+     */
+    async chat(message, options = {}) {
+        if (!this.assistant.customToolsLoaded) {
+            await this.initialize();
+        }
+
+        this.statusAdapter.onToolStart('ai_man_chat', { message });
+        this.events.emitTyped('tool:start', { toolName: 'ai_man_chat', args: { message } });
+
+        try {
+            const result = await this.assistant.run(message, options);
+            this.statusAdapter.onToolEnd('ai_man_chat', result);
+            this.events.emitTyped('tool:end', { toolName: 'ai_man_chat', result });
+            return result;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                const cancellation = new CancellationError(error.message);
+                this.statusAdapter.log('system', 'Chat was cancelled');
+                throw cancellation;
+            }
+            const errorMessage = `Chat failed: ${error.message}`;
+            this.statusAdapter.log('error', errorMessage);
+            throw error;
+        }
+    }
+
+    /**
      * Execute a high-level task
      * @param {string} task - The task description
      * @param {Object} [options] - Execution options
-     * @param {AbortSignal} [options.signal] - AbortSignal to cancel execution
-     * @returns {Promise<string>} The result of the task execution
-     * @throws {CancellationError} If execution is cancelled via signal
-     *
-     * @example
-     * const controller = new AbortController();
-     * const promise = aiMan.execute('build feature X', { signal: controller.signal });
-     * // Cancel after 60 seconds
-     * setTimeout(() => controller.abort(), 60000);
-     * try {
-     *   const result = await promise;
-     * } catch (err) {
-     *   if (err instanceof CancellationError) console.log('Cancelled');
-     * }
      */
     async execute(task, options = {}) {
-        // Ensure initialized
         if (!this.assistant.customToolsLoaded) {
             await this.initialize();
         }
         
         this.statusAdapter.onToolStart('ai_man_execute', { task });
+        this.events.emitTyped('tool:start', { toolName: 'ai_man_execute', args: { task } });
         
         try {
-            const result = await this.assistant.run(task, { signal: options.signal });
+            const result = await this.assistant.run(task, options); 
             this.statusAdapter.onToolEnd('ai_man_execute', result);
+            this.events.emitTyped('tool:end', { toolName: 'ai_man_execute', result });
             return result;
         } catch (error) {
-            // Wrap AbortError into our CancellationError for a cleaner public API
             if (error.name === 'AbortError') {
                 const cancellation = new CancellationError(error.message);
                 this.statusAdapter.log('system', 'Agent execution was cancelled');
@@ -101,24 +246,19 @@ export class AiMan {
 
     /**
      * Execute a high-level task with streaming output
-     * @param {string} task - The task description
-     * @param {Function} onChunk - Callback for each chunk of streamed content
-     * @param {Object} [options] - Execution options
-     * @param {AbortSignal} [options.signal] - AbortSignal to cancel execution
-     * @returns {Promise<string>} The final result
-     * @throws {CancellationError} If execution is cancelled via signal
      */
     async executeStream(task, onChunk, options = {}) {
-        // Ensure initialized
         if (!this.assistant.customToolsLoaded) {
             await this.initialize();
         }
 
         this.statusAdapter.onToolStart('ai_man_execute_stream', { task });
+        this.events.emitTyped('tool:start', { toolName: 'ai_man_execute_stream', args: { task } });
 
         try {
             const result = await this.assistant.runStream(task, onChunk, { signal: options.signal });
             this.statusAdapter.onToolEnd('ai_man_execute_stream', result);
+            this.events.emitTyped('tool:end', { toolName: 'ai_man_execute_stream', result });
             return result;
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -133,9 +273,71 @@ export class AiMan {
     }
 
     /**
-     * Get the tool definition for integrating this library as a tool in another agent
-     * @returns {Object} JSON Schema for the tool
+     * Design phase: Run the agent to produce a structured technical design document.
      */
+    async design(task, options = {}) {
+        return runDesign(() => this._createAssistant(), this.statusAdapter, task, options);
+    }
+
+    /**
+     * Implementation phase: Take a design result and implement all features.
+     */
+    async implement(designResult, options = {}) {
+        return runImplement(() => this._createAssistant(), this.statusAdapter, designResult, options);
+    }
+
+    /**
+     * Generate and run tests for an implementation.
+     */
+    async test(implementationResult, options = {}) {
+        return runTest(() => this._createAssistant(), implementationResult, options);
+    }
+
+    /**
+     * Review implementation against design.
+     */
+    async review(designResult, implementationResult, options = {}) {
+        return runReview(() => this._createAssistant(), designResult, implementationResult, options);
+    }
+
+    /**
+     * Convenience method: Design and implement in one call.
+     */
+    async designAndImplement(task, options = {}) {
+        const { signal, onDesignComplete, ...rest } = options;
+
+        this.statusAdapter.log('system', 'Starting design phase...');
+        const design = await this.design(task, { signal, ...rest });
+
+        this.statusAdapter.log('system', 'Design phase complete. Starting implementation phase...');
+        
+        if (typeof onDesignComplete === 'function') {
+            onDesignComplete(design);
+        }
+
+        const result = await this.implement(design, { signal, ...rest });
+
+        return { design, result };
+    }
+
+    // Async Task Public API
+    
+    spawnTask(query, description, options = {}) {
+        return this.taskManager.spawnTask(query, description, MiniAIAssistant, options);
+    }
+
+    getTaskStatus(taskId) {
+        return this.taskManager.getTask(taskId);
+    }
+
+    listTasks(filter) {
+        return this.taskManager.listTasks(filter);
+    }
+
+    waitForTask(taskId, timeout) {
+        return this.taskManager.waitForTask(taskId, timeout);
+    }
+
     getToolDefinition() {
         return {
             name: "execute_software_development_task",
@@ -153,10 +355,6 @@ export class AiMan {
         };
     }
     
-    /**
-     * Get the current status/context of the assistant
-     * @returns {Object} Context object
-     */
     getContext() {
         return this.assistant.getContext();
     }
@@ -168,3 +366,22 @@ export { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
 export { MiniAIAssistant } from '../core/ai-assistant.mjs';
 export { config } from '../config.mjs';
 export { consoleStyler } from '../ui/console-styler.mjs';
+export { AiManEventBus } from './event-bus.mjs';
+export { MiddlewareChain } from './middleware.mjs';
+export { FlowManager } from '../structured-dev/flow-manager.mjs';
+export { ManifestManager } from '../structured-dev/manifest-manager.mjs';
+export { C4Visualizer } from '../structured-dev/c4-visualizer.mjs';
+export { KnowledgeGraphBuilder } from '../structured-dev/knowledge-graph-builder.mjs';
+export { CiCdArchitect } from '../structured-dev/cicd-architect.mjs';
+export { ContainerizationWizard } from '../structured-dev/containerization-wizard.mjs';
+export { ApiDocSmith } from '../structured-dev/api-doc-smith.mjs';
+export { TutorialGenerator } from '../structured-dev/tutorial-generator.mjs';
+export { EnhancementGenerator } from '../structured-dev/enhancement-generator.mjs';
+export { CancellationError } from './cancellation-error.mjs';
+export { DesignResult } from './design-result.mjs';
+export { WorkflowService } from '../services/workflow-service.mjs';
+
+/**
+ * Alias for AiMan, emphasizing the robotic developer persona.
+ */
+export const RoboDev = AiMan;

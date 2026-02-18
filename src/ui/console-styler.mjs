@@ -98,6 +98,7 @@ export class ConsoleStyler {
             workCompleted: '✨',
             custom: '🛠️',
             loading: '⟳',
+            status: '📡',
             check: figures.tick,
             cross: figures.cross,
             bullet: figures.bullet,
@@ -231,6 +232,10 @@ export class ConsoleStyler {
             case 'workCompleted':
                 colorFunc = theme.success;
                 label = 'WORK COMPLETED';
+                break;
+            case 'status':
+                colorFunc = theme.primary;
+                label = 'STATUS';
                 break;
             case 'custom':
                 colorFunc = theme.accent;
@@ -405,12 +410,13 @@ export class ConsoleStyler {
 
     // Log with enhanced styling
     log(type, content, options = {}) {
-        if (this.listener && typeof this.listener.log === 'function') {
-            this.listener.log(type, content, options);
-            return;
-        }
+        // Always output to console
         const formatted = this.formatMessage(type, content, options);
         console.log(formatted);
+        // Additionally forward to listener (e.g. eventBus for WebSocket broadcast)
+        if (this.listener && typeof this.listener.log === 'function') {
+            this.listener.log(type, content, options);
+        }
     }
 
     // Clear all active spinners
