@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "RoboDev Chrome Controller",
+  "name": "Oboto Chrome Controller",
   "version": "1.0.0",
-  "description": "Chrome automation controller for RoboDev",
+  "description": "Chrome automation controller for Oboto",
   "permissions": [
     "tabs",
     "activeTab",
@@ -35,7 +35,7 @@
     }
   ],
   "action": {
-    "default_title": "RoboDev: Click to connect",
+    "default_title": "Oboto: Click to connect",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",

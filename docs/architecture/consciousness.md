@@ -1,6 +1,6 @@
 # Consciousness Architecture
 
-The Robodev system features a unique "Consciousness Processor" designed to simulate self-awareness, embodied cognition, and deep understanding of user intent.
+The Oboto system features a unique "Consciousness Processor" designed to simulate self-awareness, embodied cognition, and deep understanding of user intent.
 
 ## 1. Overview (`src/core/consciousness-processor.mjs`)
 

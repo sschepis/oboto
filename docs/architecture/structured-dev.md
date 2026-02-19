@@ -1,10 +1,10 @@
 # Structured Development Architecture
 
-Robodev includes a robust "Structured Development" framework (`src/structured-dev`) designed to manage complex software projects through a disciplined, manifest-driven approach.
+Oboto includes a robust "Structured Development" framework (`src/structured-dev`) designed to manage complex software projects through a disciplined, manifest-driven approach.
 
 ## 1. Core Concept
 
-Instead of ad-hoc coding, Robodev encourages maintaining a "Living Manifest" (`SYSTEM_MAP.md`) that serves as the single source of truth for the project's state. All architectural decisions, feature statuses, and invariants are recorded here.
+Instead of ad-hoc coding, Oboto encourages maintaining a "Living Manifest" (`SYSTEM_MAP.md`) that serves as the single source of truth for the project's state. All architectural decisions, feature statuses, and invariants are recorded here.
 
 ## 2. The Living Manifest (`SYSTEM_MAP.md`)
 

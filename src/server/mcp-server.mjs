@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AiMan } from '../lib/index.mjs';
 
 const server = new Server({
-    name: 'robodev',
+    name: 'oboto',
     version: '1.0.0',
 }, {
     capabilities: { tools: {} }
@@ -15,7 +15,7 @@ server.setRequestHandler('tools/list', async () => ({
     tools: [
         {
             name: 'execute_dev_task',
-            description: 'Execute a software development task using the AI-powered robodev system.',
+            description: 'Execute a software development task using the AI-powered oboto system.',
             inputSchema: {
                 type: 'object',
                 properties: {

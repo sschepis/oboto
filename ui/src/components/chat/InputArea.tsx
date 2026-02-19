@@ -483,7 +483,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               onPaste={handlePaste}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={isAgentWorking ? "Queue a message..." : "Message RoboDev..."}
+              placeholder={isAgentWorking ? "Queue a message..." : "Message Oboto..."}
               className="
                 w-full bg-transparent border-none focus:ring-0
                 text-[13px] text-zinc-100 placeholder:text-zinc-600

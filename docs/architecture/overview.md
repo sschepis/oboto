@@ -1,10 +1,10 @@
 # System Architecture Overview
 
-This document provides a high-level overview of the Robodev system architecture.
+This document provides a high-level overview of the Oboto system architecture.
 
 ## 1. High-Level Architecture
 
-Robodev is a modular AI assistant designed for autonomous software development. It consists of three main layers:
+Oboto is a modular AI assistant designed for autonomous software development. It consists of three main layers:
 
 1.  **Frontend (UI)**: A React-based web interface for user interaction.
 2.  **Backend (Server)**: A Node.js/Express server that hosts the AI agent and manages communication.

@@ -1,7 +1,7 @@
 /**
- * RoboDev Tray App — Electron main process
+ * Oboto Tray App — Electron main process
  *
- * Tray-only application (no visible window).  Manages the RoboDev server
+ * Tray-only application (no visible window).  Manages the Oboto server
  * daemon as a child process, provides a system tray icon with status
  * indication and workspace management controls.
  */
@@ -91,7 +91,7 @@ function buildContextMenu() {
         : 'Stopped';
 
     const template = [
-        { label: `RoboDev: ${statusLabel}`, enabled: false },
+        { label: `Oboto: ${statusLabel}`, enabled: false },
         { type: 'separator' },
         {
             label: 'Load Workspace...',
@@ -139,7 +139,7 @@ function buildContextMenu() {
         },
         { type: 'separator' },
         {
-            label: 'Quit RoboDev',
+            label: 'Quit Oboto',
             click: () => quit(),
         },
     ];
@@ -158,14 +158,14 @@ function refreshMenu() {
 function setTrayStatus(color, tooltip) {
     if (!tray) return;
     tray.setImage(createTrayIcon(color));
-    tray.setToolTip(tooltip || 'RoboDev');
+    tray.setToolTip(tooltip || 'Oboto');
 }
 
 // ── Workspace management ─────────────────────────────────────────────────
 
 async function pickWorkspace() {
     const result = await dialog.showOpenDialog({
-        title: 'Select RoboDev Workspace',
+        title: 'Select Oboto Workspace',
         properties: ['openDirectory', 'createDirectory'],
         buttonLabel: 'Load Workspace',
     });
@@ -186,7 +186,7 @@ async function loadWorkspace(workspacePath) {
         // Show notification
         if (Notification.isSupported()) {
             new Notification({
-                title: 'RoboDev',
+                title: 'Oboto',
                 body: `Workspace loaded: ${path.basename(workspacePath)}`,
             }).show();
         }
@@ -196,7 +196,7 @@ async function loadWorkspace(workspacePath) {
 
         if (Notification.isSupported()) {
             new Notification({
-                title: 'RoboDev Error',
+                title: 'Oboto Error',
                 body: `Failed to load workspace: ${err.message}`,
             }).show();
         }
@@ -256,7 +256,7 @@ app.whenReady().then(async () => {
     daemon.on('task-completed', (payload) => {
         if (Notification.isSupported()) {
             new Notification({
-                title: 'RoboDev — Task Completed',
+                title: 'Oboto — Task Completed',
                 body: payload.description || 'A background task has finished.',
             }).show();
         }
@@ -265,7 +265,7 @@ app.whenReady().then(async () => {
     daemon.on('task-failed', (payload) => {
         if (Notification.isSupported()) {
             new Notification({
-                title: 'RoboDev — Task Failed',
+                title: 'Oboto — Task Failed',
                 body: `${payload.description || 'A task'} failed: ${payload.error || 'unknown error'}`,
             }).show();
         }
@@ -280,7 +280,7 @@ app.whenReady().then(async () => {
 
     // Create the system tray
     tray = new Tray(createTrayIcon('yellow'));
-    tray.setToolTip('RoboDev — Initialising...');
+    tray.setToolTip('Oboto — Initialising...');
     tray.setContextMenu(buildContextMenu());
 
     // If there's a saved workspace, auto-start the daemon

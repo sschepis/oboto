@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2 } from 'lucide-react';
+import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
 import type { ConversationInfo } from '../../hooks/useChat';
 
 export interface EditorTab {
   id: string;        // 'chat' or file path
   label: string;     // display name
-  type: 'chat' | 'file' | 'html-preview' | 'surface';
+  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf';
   filePath?: string;
   surfaceId?: string;
   isDirty?: boolean;
@@ -329,6 +329,10 @@ const TabBar: React.FC<TabBarProps> = ({
                 <Eye size={12} className={`${iconColor} transition-colors duration-200`} />
               ) : tab.type === 'surface' ? (
                 <LayoutDashboard size={12} className={`${iconColor} transition-colors duration-200`} />
+              ) : tab.type === 'image' ? (
+                <ImageIcon size={12} className={`${iconColor} transition-colors duration-200`} />
+              ) : tab.type === 'pdf' ? (
+                <FileText size={12} className={`${isActive ? 'text-red-400' : 'text-zinc-600'} transition-colors duration-200`} />
               ) : (
                 <FileText size={12} className={`${iconColor} transition-colors duration-200`} />
               )}

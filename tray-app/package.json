@@ -1,7 +1,7 @@
 {
-  "name": "robodev-tray",
+  "name": "oboto-tray",
   "version": "1.0.0",
-  "description": "RoboDev system tray service — manages the background AI daemon",
+  "description": "Oboto system tray service — manages the background AI daemon",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -12,8 +12,8 @@
     "build:all": "electron-builder --mac --win"
   },
   "build": {
-    "appId": "com.robodev.tray",
-    "productName": "RoboDev",
+    "appId": "com.oboto.tray",
+    "productName": "Oboto",
     "directories": {
       "output": "dist"
     },

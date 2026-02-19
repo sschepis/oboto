@@ -1,8 +1,8 @@
-# RoboDev Service + Tray App Architecture
+# Oboto Service + Tray App Architecture
 
 ## Overview
 
-This design adds the ability to run RoboDev as a **persistent background service** with a **system tray icon** on macOS and Windows. The tray provides workspace management (pick a folder), status indication (running/idle/error), and auto-start on login. When a workspace is loaded, the service acts as a **headless client** that opens the workspace, auto-activates all schedules and the agent loop, and keeps it running in the background. Users can then monitor via the web client in a browser.
+This design adds the ability to run Oboto as a **persistent background service** with a **system tray icon** on macOS and Windows. The tray provides workspace management (pick a folder), status indication (running/idle/error), and auto-start on login. When a workspace is loaded, the service acts as a **headless client** that opens the workspace, auto-activates all schedules and the agent loop, and keeps it running in the background. Users can then monitor via the web client in a browser.
 
 ---
 
@@ -132,7 +132,7 @@ class DaemonManager extends EventEmitter {
 
 #### Key Module: `preferences.js`
 
-Uses `electron-store` or simple JSON file at `~/.robodev-service/preferences.json`:
+Uses `electron-store` or simple JSON file at `~/.oboto-service/preferences.json`:
 
 ```json
 {
@@ -262,16 +262,16 @@ Electron handles this via `app.setLoginItemSettings()`. Under the hood, this cre
 For a packaged Electron app, this works out of the box. For development, you can also use a **launchd plist** as a fallback:
 
 ```xml
-<!-- ~/Library/LaunchAgents/com.robodev.service.plist -->
+<!-- ~/Library/LaunchAgents/com.oboto.service.plist -->
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.robodev.service</string>
+    <string>com.oboto.service</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/path/to/RoboDev.app/Contents/MacOS/RoboDev</string>
+        <string>/path/to/Oboto.app/Contents/MacOS/Oboto</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

@@ -123,6 +123,12 @@ class WSService {
     }
   }
 
+  readMediaFile(filePath: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'read-media-file', payload: filePath }));
+    }
+  }
+
   listDirs(dirPath?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'list-dirs', payload: dirPath || '/' }));
@@ -153,9 +159,9 @@ class WSService {
     }
   }
 
-  saveFile(filePath: string, content: string) {
+  saveFile(filePath: string, content: string, encoding?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'save-file', payload: { path: filePath, content } }));
+      this.ws.send(JSON.stringify({ type: 'save-file', payload: { path: filePath, content, encoding } }));
     }
   }
 

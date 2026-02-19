@@ -1,6 +1,6 @@
 # Tools Reference
 
-Robodev comes with a comprehensive suite of tools categorized by function.
+Oboto comes with a comprehensive suite of tools categorized by function.
 
 ## 1. File System Operations
 **Source:** `src/tools/file-tools.mjs`

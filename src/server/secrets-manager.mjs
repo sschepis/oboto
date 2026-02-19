@@ -86,7 +86,7 @@ const CATEGORIES = ['AI Providers', 'Integrations', 'Endpoints', 'Custom'];
 export class SecretsManager {
     /**
      * @param {string} [workspaceDir] - Optional workspace directory.
-     *   The .secrets.enc file is stored at the RoboDev project root,
+     *   The .secrets.enc file is stored at the Oboto project root,
      *   NOT in the user's workspace.
      */
     constructor(workspaceDir) {

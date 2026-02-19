@@ -1,7 +1,7 @@
 // Main entry point for the AI Assistant
 // Orchestrates CLI interface and AI assistant initialization
 
-import { MiniAIAssistant } from './core/ai-assistant.mjs';
+import { AssistantFacade as MiniAIAssistant } from './core/assistant-facade.mjs';
 import { CLIInterface } from './cli/cli-interface.mjs';
 import { AiManEventBus } from './lib/event-bus.mjs';
 import { consoleStyler } from './ui/console-styler.mjs';

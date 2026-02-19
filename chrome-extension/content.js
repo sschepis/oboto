@@ -1,6 +1,6 @@
-// content.js - RoboDev Chrome Controller Content Script
+// content.js - Oboto Chrome Controller Content Script
 
-console.log("RoboDev content script loaded");
+console.log("Oboto content script loaded");
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // message format: { type, params }

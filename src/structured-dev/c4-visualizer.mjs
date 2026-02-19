@@ -29,7 +29,7 @@ export class C4Visualizer {
         mermaid += '    title System Component Diagram (from SYSTEM_MAP.md)\n\n';
 
         // Define the System Boundary
-        mermaid += '    Boundary(b0, "Robodev System", "AI Development Assistant") {\n';
+        mermaid += '    Boundary(b0, "Oboto System", "AI Development Assistant") {\n';
 
         // Add Features as Components
         features.forEach(feat => {

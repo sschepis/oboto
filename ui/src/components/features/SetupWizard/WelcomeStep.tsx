@@ -15,7 +15,7 @@ export default function WelcomeStep({ onNext, onSkip }: WelcomeStepProps) {
       </div>
 
       <h1 className="text-3xl font-bold text-white mb-4">
-        Welcome to RoboDev
+        Welcome to Oboto
       </h1>
       
       <p className="text-zinc-400 max-w-md mb-10 leading-relaxed">

@@ -1,6 +1,6 @@
 # Setup and Usage Guide
 
-This guide will help you set up and run the Robodev AI Assistant.
+This guide will help you set up and run the Oboto AI Assistant.
 
 ## Prerequisites
 
@@ -12,8 +12,8 @@ This guide will help you set up and run the Robodev AI Assistant.
 
 1.  **Clone the Repository**
     ```bash
-    git clone https://github.com/sschepis/robodev.git
-    cd robodev
+    git clone https://github.com/sschepis/oboto.git
+    cd oboto
     ```
 
 2.  **Install Root Dependencies**

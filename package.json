@@ -1,13 +1,13 @@
 {
-  "name": "@sschepis/robodev",
+  "name": "@sschepis/oboto",
   "version": "1.0.1",
   "type": "module",
-  "description": "Robodev: AI-powered development assistant",
+  "description": "Oboto: AI-powered development assistant",
   "author": "sschepis",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sschepis/robodev.git"
+    "url": "git+https://github.com/sschepis/oboto.git"
   },
   "keywords": [
     "ai",
@@ -18,7 +18,7 @@
     "dev-tool"
   ],
   "bin": {
-    "robodev": "./ai.mjs"
+    "oboto": "./ai.mjs"
   },
   "main": "src/lib/index.mjs",
   "types": "src/lib/interfaces.d.ts",

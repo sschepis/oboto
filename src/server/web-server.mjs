@@ -97,7 +97,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             res.send(`
                 <html>
                     <body style="font-family: sans-serif; background: #111; color: #fff; padding: 2rem; text-align: center;">
-                        <h1>RoboDev AI Server</h1>
+                        <h1>Oboto AI Server</h1>
                         <p>Server is running, but the UI has not been built.</p>
                         <p>Please run <code>npm run build:ui</code> in the project root.</p>
                     </body>

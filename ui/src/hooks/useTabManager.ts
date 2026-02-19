@@ -102,6 +102,18 @@ export function useTabManager(
     return ext === 'html' || ext === 'htm';
   }, []);
 
+  // Determine if a file is an image
+  const isImageFile = useCallback((filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext);
+  }, []);
+
+  // Determine if a file is a PDF
+  const isPdfFile = useCallback((filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    return ext === 'pdf';
+  }, []);
+
   // Determine if a file is a surface definition
   const isSurfaceFile = useCallback((filePath: string) => {
     return filePath.endsWith('.sur');
@@ -117,6 +129,8 @@ export function useTabManager(
     }
 
     const htmlPreview = isHtmlFile(filePath);
+    const imagePreview = isImageFile(filePath);
+    const pdfPreview = isPdfFile(filePath);
     const tabId = htmlPreview ? `html-preview:${filePath}` : filePath;
 
     const existingTab = tabs.find(t => t.id === tabId);
@@ -127,14 +141,14 @@ export function useTabManager(
       const newTab: EditorTab = {
         id: tabId,
         label: htmlPreview ? `▶ ${fileName}` : fileName,
-        type: htmlPreview ? 'html-preview' : 'file',
+        type: htmlPreview ? 'html-preview' : imagePreview ? 'image' : pdfPreview ? 'pdf' : 'file',
         filePath,
         isDirty: false,
       };
       setTabs(prev => [...prev, newTab]);
       setActiveTabId(tabId);
     }
-  }, [tabs, isHtmlFile, isSurfaceFile, handleSurfaceClick]);
+  }, [tabs, isHtmlFile, isImageFile, isPdfFile, isSurfaceFile, handleSurfaceClick]);
 
   // Switch from HTML preview to code editor for the same file
   const handleSwitchToEditor = useCallback((filePath: string) => {

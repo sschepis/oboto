@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The Setup Wizard provides a guided first-run onboarding experience for new RoboDev users. It walks users through essential configuration — selecting an AI provider, entering API keys, choosing a workspace, and optionally setting up OpenClaw integration — before they can start using the application.
+The Setup Wizard provides a guided first-run onboarding experience for new Oboto users. It walks users through essential configuration — selecting an AI provider, entering API keys, choosing a workspace, and optionally setting up OpenClaw integration — before they can start using the application.
 
 ### Goals
 - **Zero-friction start**: A new user should be productive within 2 minutes
@@ -74,7 +74,7 @@ flowchart TD
 ### Step Details
 
 #### Step 1 — Welcome
-- Brief intro to RoboDev
+- Brief intro to Oboto
 - "Get started" CTA
 - Option to skip wizard entirely (for advanced users who will configure manually)
 
@@ -98,7 +98,7 @@ flowchart TD
 #### Step 4 — Workspace Selection
 - Shows current working directory
 - Reuses existing `DirectoryPicker` component
-- Brief explanation of what a "workspace" means in RoboDev context
+- Brief explanation of what a "workspace" means in Oboto context
 - Creates `.ai-man/` directory if needed
 
 #### Step 5 — OpenClaw Integration (Optional)
@@ -127,7 +127,7 @@ Add a new handler `setup-handler.mjs` that manages wizard state:
 - `complete-setup` → Marks setup as done, persists flag
 - `validate-api-key` → Tests an API key against its provider, returns `{ valid: boolean, error?: string }`
 
-**Persistence:** Store setup completion state in a `.ai-man/setup.json` file at the robodev project root (alongside `.secrets.enc`). Structure:
+**Persistence:** Store setup completion state in a `.ai-man/setup.json` file at the oboto project root (alongside `.secrets.enc`). Structure:
 
 ```json
 {
@@ -420,7 +420,7 @@ validateApiKey(provider: string, key: string): Promise<{ valid: boolean; error?:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                                                         │
-│                    🤖 Welcome to RoboDev                │
+│                    🤖 Welcome to Oboto                │
 │                                                         │
 │     Your AI-powered development assistant is almost     │
 │     ready. Let us walk you through a quick setup.       │
@@ -499,7 +499,7 @@ validateApiKey(provider: string, key: string): Promise<{ valid: boolean; error?:
 │  ● ● ● ○ ○ ○                    Step 3 of 5            │
 │                                                         │
 │  Choose Your Workspace                                  │
-│  This is where RoboDev will manage your project files.  │
+│  This is where Oboto will manage your project files.  │
 │                                                         │
 │  Current: /Users/dev/my-project                         │
 │                                                         │
@@ -1474,7 +1474,7 @@ await fs.promises.writeFile(
 );
 ```
 
-The AI provider API key is **not** duplicated — OpenClaw reads it from environment variables which RoboDev already sets via `process.env` when spawning the gateway child process. The [`spawnProcess()`](src/integration/openclaw/manager.mjs:164) method already passes `{ ...process.env }` to the child.
+The AI provider API key is **not** duplicated — OpenClaw reads it from environment variables which Oboto already sets via `process.env` when spawning the gateway child process. The [`spawnProcess()`](src/integration/openclaw/manager.mjs:164) method already passes `{ ...process.env }` to the child.
 
 ### 15.12 Spawn Process Enhancement
 
@@ -1500,7 +1500,7 @@ async spawnProcess() {
     const gatewayEnv = {
         ...process.env,
         OPENCLAW_GATEWAY_TOKEN: this.config.authToken,
-        // Forward the AI API keys from RoboDev's environment
+        // Forward the AI API keys from Oboto's environment
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
         GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
@@ -1621,7 +1621,7 @@ async function handleCheckPrereqs(data, ctx) {
 
 ### 15.14 Lifecycle Management
 
-When RoboDev shuts down, the OpenClaw gateway child process must be cleaned up:
+When Oboto shuts down, the OpenClaw gateway child process must be cleaned up:
 
 ```javascript
 // In main.mjs — add process cleanup

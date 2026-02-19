@@ -128,12 +128,13 @@ export class ConsoleStyler {
     displayStartupBanner(workingDir) {
         const theme = this.getTheme();
         const banner = `
-    ██╗     ██╗    ██╗    ██████╗ ███████╗███████╗██╗███████╗████████╗ █████╗ ███╗   ██╗████████╗
-    ██║     ██║    ██║    ██╔══██╗██╔════╝██╔════╝██║██╔════╝╚══██╔══╝██╔══██╗████╗  ██║╚══██╔══╝
-    ██║     ██║ █╗ ██║    ███████║███████╗███████╗██║███████╗   ██║   ███████║██╔██╗ ██║   ██║   
-    ██║     ██║███╗██║    ██╔══██║╚════██║╚════██║██║╚════██║   ██║   ██╔══██║██║╚██╗██║   ██║   
-    ███████╗╚███╔███╔╝    ██║  ██║███████║███████║██║███████║   ██║   ██║  ██║██║ ╚████║   ██║   
-    ╚══════╝ ╚══╝╚══╝     ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   
+     ██████╗ ██████╗  ██████╗ ████████╗ ██████╗ 
+    ██╔═══██╗██╔══██╗██╔═══██╗╚══██╔══╝██╔═══██╗
+    ██║   ██║██████╔╝██║   ██║   ██║   ██║   ██║
+    ██║   ██║██╔══██╗██║   ██║   ██║   ██║   ██║
+    ╚██████╔╝██████╔╝╚██████╔╝   ██║   ╚██████╔╝
+     ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝ 
+          your ai-powered everything assistant
     `;
 
         const styledBanner = theme.primary(banner);
@@ -495,7 +496,7 @@ export class ConsoleStyler {
         const theme = this.getTheme();
         
         console.log('\n' + theme.accent('═'.repeat(80)));
-        console.log(theme.success(`${this.icons.ai} AI ASSISTANT RESPONSE`));
+        console.log(theme.success(`${this.icons.ai} OBOTO`));
         console.log(theme.accent('═'.repeat(80)) + '\n');
         
         const formattedContent = this.formatMarkdown(content);

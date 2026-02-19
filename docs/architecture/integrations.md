@@ -1,16 +1,16 @@
 # Integrations Architecture
 
-Robodev is designed to extend its capabilities through external integrations. This document outlines the two primary integration mechanisms: **OpenClaw** and **Model Context Protocol (MCP)**.
+Oboto is designed to extend its capabilities through external integrations. This document outlines the two primary integration mechanisms: **OpenClaw** and **Model Context Protocol (MCP)**.
 
 ## 1. OpenClaw Integration
 
-[OpenClaw](https://github.com/sschepis/openclaw) is a personal AI assistant and gateway that can execute tasks and manage sessions. Robodev integrates with OpenClaw to offload specific tasks or coordinate with external agents.
+[OpenClaw](https://github.com/sschepis/openclaw) is a personal AI assistant and gateway that can execute tasks and manage sessions. Oboto integrates with OpenClaw to offload specific tasks or coordinate with external agents.
 
 ### Architecture
 
 The integration operates in two modes:
-1.  **Integrated Mode**: Robodev spawns and manages a local OpenClaw Gateway process.
-2.  **External Mode**: Robodev connects to an existing running OpenClaw Gateway via WebSocket.
+1.  **Integrated Mode**: Oboto spawns and manages a local OpenClaw Gateway process.
+2.  **External Mode**: Oboto connects to an existing running OpenClaw Gateway via WebSocket.
 
 ### Components
 
@@ -27,12 +27,12 @@ Configuration is handled via `.env`:
 
 ## 2. Model Context Protocol (MCP)
 
-The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is a standard for connecting AI assistants to data sources and tools. Robodev acts as an **MCP Client**, allowing it to connect to any MCP-compliant server.
+The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is a standard for connecting AI assistants to data sources and tools. Oboto acts as an **MCP Client**, allowing it to connect to any MCP-compliant server.
 
 ### Architecture (`src/core/mcp-client-manager.mjs`)
 
 The `McpClientManager` handles:
-1.  **Configuration**: Loading server definitions from `~/.robodev/mcp-servers.json` (global) and `.robodev/mcp-servers.json` (workspace).
+1.  **Configuration**: Loading server definitions from `~/.oboto/mcp-servers.json` (global) and `.oboto/mcp-servers.json` (workspace).
 2.  **Connection**: establishing connections to servers via:
     *   **Stdio Transport**: Spawning a local process (e.g., `npx -y @modelcontextprotocol/server-filesystem`).
     *   **SSE Transport**: Connecting to a remote HTTP/SSE endpoint.

@@ -1,6 +1,6 @@
 # Skills System
 
-The **Skills System** in Robodev allows the agent to learn and utilize specialized capabilities defined in markdown files. This provides a flexible way to extend the agent's knowledge and toolset without modifying the core codebase.
+The **Skills System** in Oboto allows the agent to learn and utilize specialized capabilities defined in markdown files. This provides a flexible way to extend the agent's knowledge and toolset without modifying the core codebase.
 
 ## 1. Concept
 

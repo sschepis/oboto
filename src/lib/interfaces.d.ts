@@ -405,6 +405,6 @@ export declare class WorkflowService {
 /**
  * Alias for AiMan, emphasizing the robotic developer persona.
  */
-export declare const RoboDev: typeof AiMan;
+export declare const Oboto: typeof AiMan;
 
 

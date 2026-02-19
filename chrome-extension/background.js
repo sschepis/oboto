@@ -1,4 +1,4 @@
-// background.js - RoboDev Chrome Controller Service Worker
+// background.js - Oboto Chrome Controller Service Worker
 
 let socket = null;
 let isConnected = false;
@@ -21,14 +21,14 @@ async function connect() {
   const port = (await chrome.storage.local.get('port')).port || 3000;
   const wsUrl = `ws://localhost:${port}/ws/chrome`;
 
-  console.log(`Connecting to RoboDev at ${wsUrl}...`);
+  console.log(`Connecting to Oboto at ${wsUrl}...`);
   updateBadge("...");
 
   try {
     socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
-      console.log("Connected to RoboDev");
+      console.log("Connected to Oboto");
       isConnected = true;
       retryCount = 0;
       updateBadge("ON");
@@ -46,7 +46,7 @@ async function connect() {
     };
 
     socket.onclose = () => {
-      console.log("Disconnected from RoboDev");
+      console.log("Disconnected from Oboto");
       isConnected = false;
       updateBadge("OFF");
       cleanupDebuggers(); // Detach all debuggers on disconnect

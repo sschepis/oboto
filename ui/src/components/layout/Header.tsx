@@ -99,7 +99,7 @@ const Header: React.FC<HeaderProps> = ({
   onSettingsClick,
   onWorkspaceClick,
   onOpenClawClick,
-  title = "RoboDev",
+  title = "Oboto",
   activeWorkspace,
   isConnected = true,
   workspacePort,

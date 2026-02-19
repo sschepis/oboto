@@ -72,15 +72,15 @@ Performs an automated code review, comparing the implementation against the desi
 
 ### General Purpose Assistant
 
-The library can be used as a general-purpose assistant via the `chat()` method and `RoboDev` alias.
+The library can be used as a general-purpose assistant via the `chat()` method and `Oboto` alias.
 
 #### `chat(message, options)`
 Send a conversational message to the assistant. Unlike `execute()`, which is task-oriented, `chat()` allows for interactive sessions where the assistant maintains context across multiple turns.
 
 ```javascript
-import { RoboDev } from 'ai-man/lib'; // RoboDev is an alias for AiMan
+import { Oboto } from 'ai-man/lib'; // Oboto is an alias for AiMan
 
-const assistant = new RoboDev();
+const assistant = new Oboto();
 
 // General knowledge
 const response = await assistant.chat("What is the capital of France?");

@@ -1,10 +1,10 @@
 # UI Surfaces Guide
 
-UI Surfaces are a powerful feature in Robodev that allows the AI agent to create, modify, and display custom user interfaces dynamically.
+UI Surfaces are a powerful feature in Oboto that allows the AI agent to create, modify, and display custom user interfaces dynamically.
 
 ## 1. Concept
 
-A "Surface" is a dedicated tab in the Robodev UI that acts as a canvas for React components. The agent can use tools to:
+A "Surface" is a dedicated tab in the Oboto UI that acts as a canvas for React components. The agent can use tools to:
 1.  **Create** a new surface (e.g., "Project Dashboard", "Server Monitor").
 2.  **Add Components** to that surface (e.g., charts, tables, buttons).
 3.  **Update Data** in real-time.

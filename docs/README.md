@@ -1,11 +1,11 @@
-# Robodev Documentation
+# Oboto Documentation
 
-Welcome to the documentation for **Robodev**, an advanced AI-powered development assistant designed for autonomous software engineering.
+Welcome to the documentation for **Oboto**, an advanced AI-powered development assistant designed for autonomous software engineering.
 
 ## 📚 Documentation Index
 
 ### 🏗 Architecture
-Learn about the internal design of Robodev.
+Learn about the internal design of Oboto.
 *   [**System Overview**](architecture/overview.md): High-level architecture, components, and data flow.
 *   [**Multi-Agent Architecture**](architecture/multi-agent.md): Multiple conversations, background tasks, recurring tasks, and the autonomous agent loop.
 *   [**Consciousness Processor**](architecture/consciousness.md): Understanding the agent's "mind" (inference, somatic state, symbolic continuity).
@@ -14,7 +14,7 @@ Learn about the internal design of Robodev.
 *   [**Skills System**](architecture/skills.md): Extending the agent with modular skills (`SKILL.md`).
 
 ### 🚀 Guides & Usage
-Practical guides for setting up and using Robodev.
+Practical guides for setting up and using Oboto.
 *   [**Setup & Installation**](guides/setup.md): How to install and run the project.
 *   [**Tools Reference**](guides/tools.md): A complete list of available tools and commands.
 *   [**UI Surfaces**](guides/ui-surfaces.md): Using dynamic dashboards and UI components.

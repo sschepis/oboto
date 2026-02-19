@@ -15,8 +15,8 @@ export class McpClientManager {
         this.workspaceDir = workspaceDir;
         this.clients = new Map(); // serverName -> { client, transport, capabilities, tools }
         this.config = { mcpServers: {} };
-        this.globalConfigPath = path.join(os.homedir(), '.robodev', 'mcp-servers.json');
-        this.workspaceConfigPath = path.join(workspaceDir, '.robodev', 'mcp-servers.json');
+        this.globalConfigPath = path.join(os.homedir(), '.oboto', 'mcp-servers.json');
+        this.workspaceConfigPath = path.join(workspaceDir, '.oboto', 'mcp-servers.json');
     }
 
     /**
@@ -157,7 +157,7 @@ export class McpClientManager {
             }
 
             const client = new Client({
-                name: "robodev-client",
+                name: "oboto-client",
                 version: "1.0.0",
             }, {
                 capabilities: {}

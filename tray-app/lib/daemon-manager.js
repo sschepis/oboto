@@ -1,5 +1,5 @@
 /**
- * DaemonManager — spawns, monitors, and restarts the RoboDev server
+ * DaemonManager — spawns, monitors, and restarts the Oboto server
  * as a child process of the Electron tray app.
  *
  * Communication flow:
@@ -62,7 +62,7 @@ class DaemonManager extends EventEmitter {
         this.state = 'starting';
         this.emit('state-changed', this.state);
 
-        // Resolve path to ai.mjs relative to the robodev project
+        // Resolve path to ai.mjs relative to the oboto project
         let projectRoot;
         
         // In packaged app, extraResources puts the backend in resources/backend

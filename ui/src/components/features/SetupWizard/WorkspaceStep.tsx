@@ -20,7 +20,7 @@ export default function WorkspaceStep({ config, onChange, onNext, onBack }: Work
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white mb-2">Choose Your Workspace</h2>
         <p className="text-zinc-400 text-sm">
-          This is where RoboDev will create and manage your project files.
+          This is where Oboto will create and manage your project files.
         </p>
       </div>
 

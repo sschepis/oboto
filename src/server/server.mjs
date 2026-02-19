@@ -84,6 +84,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const port = process.env.PORT || 3000;
     const app = createServer();
     app.listen(port, () => {
-        console.log(`Robodev server running on http://localhost:${port}`);
+        console.log(`Oboto server running on http://localhost:${port}`);
     });
 }

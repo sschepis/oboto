@@ -97,16 +97,135 @@ export class WorkspaceContentServer {
             }
         }
         app.use('/images', express.static(imagesPath));
+        // Add index for images
+        app.get('/images/', (req, res) => this.serveDirectoryIndex(req, res, imagesPath, 'Generated Images'));
 
         // Serve public folder at root (optional but good practice)
         const publicPath = path.join(workspaceRoot, 'public');
         if (fs.existsSync(publicPath)) {
             app.use(express.static(publicPath));
         }
+        
+        // Root index
+        app.get('/', (req, res) => this.serveRootIndex(req, res, workspaceRoot, publicPath));
 
         // Serve Surface API & HTML
         app.get('/api/surface/:id', (req, res) => this.handleSurfaceApi(req, res));
         app.get('/surface/:id', (req, res) => this.handleSurfaceHtml(req, res));
+    }
+
+    async serveDirectoryIndex(req, res, dirPath, title) {
+        if (!fs.existsSync(dirPath)) return res.status(404).send('Not Found');
+        
+        try {
+            const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
+            const list = files.map(dirent => {
+                const name = dirent.name;
+                const isDir = dirent.isDirectory();
+                const link = name + (isDir ? '/' : '');
+                return `<li><a href="${link}" class="${isDir ? 'dir' : 'file'}">${isDir ? '📁' : '📄'} ${name}</a></li>`;
+            }).join('');
+            
+            res.send(`
+                <html>
+                <head>
+                    <title>Index of ${title}</title>
+                    <style>
+                        body { font-family: system-ui, sans-serif; padding: 2rem; background: #111; color: #ccc; }
+                        h1 { color: #fff; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+                        ul { list-style: none; padding: 0; }
+                        li { margin: 0.5rem 0; padding: 0.5rem; background: #1a1a1a; border-radius: 4px; }
+                        li:hover { background: #222; }
+                        a { color: #4af; text-decoration: none; font-size: 1.1rem; display: block; }
+                        a:hover { text-decoration: underline; }
+                        .dir { color: #fa4; font-weight: bold; }
+                        .file { color: #cdf; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Index of ${title}</h1>
+                    <ul>
+                        <li><a href=".." class="dir">📁 ..</a></li>
+                        ${list}
+                    </ul>
+                </body>
+                </html>
+            `);
+        } catch (e) {
+            res.status(500).send('Error listing directory');
+        }
+    }
+
+    async serveRootIndex(req, res, workspaceRoot, publicPath) {
+        // Collect surfaces
+        const surfacesDir = path.join(workspaceRoot, '.surfaces');
+        let surfaces = [];
+        if (fs.existsSync(surfacesDir)) {
+            try {
+                const files = await fs.promises.readdir(surfacesDir);
+                for (const file of files) {
+                    if (file.endsWith('.sur')) {
+                        const content = await fs.promises.readFile(path.join(surfacesDir, file), 'utf8');
+                        const data = JSON.parse(content);
+                        surfaces.push({ id: data.id || file.replace('.sur', ''), name: data.name || 'Untitled' });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Collect public files
+        let publicFiles = [];
+        if (fs.existsSync(publicPath)) {
+            try {
+                const files = await fs.promises.readdir(publicPath, { withFileTypes: true });
+                publicFiles = files.map(d => ({ 
+                    name: d.name, 
+                    isDir: d.isDirectory(),
+                    link: d.name + (d.isDirectory() ? '/' : '')
+                }));
+            } catch (e) {}
+        }
+
+        const surfacesList = surfaces.map(s => `<li><a href="/surface/${s.id}" class="surface">🎨 ${s.name}</a> <span style="font-size:0.8em;color:#666">(${s.id})</span></li>`).join('');
+        const filesList = publicFiles.map(f => `<li><a href="${f.link}" class="${f.isDir ? 'dir' : 'file'}">${f.isDir ? '📁' : '📄'} ${f.name}</a></li>`).join('');
+
+        res.send(`
+            <html>
+            <head>
+                <title>Workspace Root</title>
+                <style>
+                    body { font-family: system-ui, sans-serif; padding: 2rem; background: #111; color: #ccc; max-width: 800px; margin: 0 auto; }
+                    h1, h2 { color: #fff; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+                    ul { list-style: none; padding: 0; }
+                    li { margin: 0.5rem 0; padding: 0.5rem; background: #1a1a1a; border-radius: 4px; }
+                    li:hover { background: #222; }
+                    a { color: #4af; text-decoration: none; font-size: 1.1rem; display: block; }
+                    .surface { color: #f7a; font-weight: bold; }
+                    .dir { color: #fa4; font-weight: bold; }
+                    .file { color: #cdf; }
+                    .section { margin-bottom: 2rem; }
+                </style>
+            </head>
+            <body>
+                <h1>Workspace Content</h1>
+                
+                <div class="section">
+                    <h2>Surfaces</h2>
+                    <ul>
+                        ${surfaces.length ? surfacesList : '<li><span style="color:#666">No surfaces found</span></li>'}
+                    </ul>
+                </div>
+
+                <div class="section">
+                    <h2>Files & Directories</h2>
+                    <ul>
+                        <li><a href="/images/" class="dir">🖼️ Generated Images (/images/)</a></li>
+                        ${filesList}
+                    </ul>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
     applyRouteMap(app, map, workspaceRoot) {

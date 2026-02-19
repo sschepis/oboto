@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * WorkflowService manages the lifecycle of BubbleLab workflow executions
- * bound to Robodev Surfaces.
+ * bound to Oboto Surfaces.
  *
  * Responsibilities:
  * - Starting workflows from AI agent tool calls

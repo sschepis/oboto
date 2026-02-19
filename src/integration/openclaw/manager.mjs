@@ -384,7 +384,7 @@ export class OpenClawManager {
     const gatewayEnv = {
         ...process.env,
         OPENCLAW_GATEWAY_TOKEN: this.config.authToken,
-        // Forward the AI API keys from RoboDev's environment
+        // Forward the AI API keys from Oboto's environment
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
         GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,

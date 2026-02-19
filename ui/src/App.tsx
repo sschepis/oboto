@@ -10,6 +10,8 @@ import SettingsDialog from './components/features/SettingsDialog';
 import DirectoryPicker from './components/features/DirectoryPicker';
 import TabBar from './components/layout/TabBar';
 import FileEditor from './components/features/FileEditor';
+import ImageViewer from './components/features/ImageViewer';
+import PdfViewer from './components/features/PdfViewer';
 import HtmlPreview from './components/features/HtmlPreview';
 import KeyboardShortcutsHelp from './components/features/KeyboardShortcutsHelp';
 import TaskManagerPanel from './components/features/TaskManagerPanel';
@@ -401,6 +403,24 @@ function App() {
                   filePath={tab.filePath!}
                   onSwitchToEditor={tabManager.handleSwitchToEditor}
                 />
+              </div>
+            ))}
+
+            {tabManager.tabs.filter(t => t.type === 'image').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <ImageViewer filePath={tab.filePath!} />
+              </div>
+            ))}
+
+            {tabManager.tabs.filter(t => t.type === 'pdf').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <PdfViewer filePath={tab.filePath!} />
               </div>
             ))}
 

@@ -1,8 +1,8 @@
 # Multi-Agent Architecture
 
-Robodev is not a single-threaded chatbot. It is a **multi-agent system** where the primary chat conversation acts as a command hub, background agents execute tasks autonomously, recurring schedules fire periodically, and named conversations serve as parallel workstreams—all sharing a unified workspace memory.
+Oboto is not a single-threaded chatbot. It is a **multi-agent system** where the primary chat conversation acts as a command hub, background agents execute tasks autonomously, recurring schedules fire periodically, and named conversations serve as parallel workstreams—all sharing a unified workspace memory.
 
-This document covers the four pillars of Robodev's multi-agent capability:
+This document covers the four pillars of Oboto's multi-agent capability:
 
 1. [**Multiple Conversations**](#1-multiple-conversations) — parallel named conversations per workspace
 2. [**Background Tasks**](#2-background-tasks) — one-shot asynchronous agent invocations
@@ -253,7 +253,7 @@ Schedules are persisted to `<workspace>/.ai-man/schedules.json` and automaticall
 
 ### Concept
 
-The **Agent Loop** is Robodev's autonomous heartbeat — a recurring background invocation that runs independently of user interaction. Unlike recurring tasks (which execute a static query), the agent loop dynamically assembles a **briefing packet** for each tick that includes:
+The **Agent Loop** is Oboto's autonomous heartbeat — a recurring background invocation that runs independently of user interaction. Unlike recurring tasks (which execute a static query), the agent loop dynamically assembles a **briefing packet** for each tick that includes:
 
 - Recent foreground conversation history
 - Active schedules and their results
@@ -407,4 +407,4 @@ The four systems form a layered multi-agent architecture:
 5. A `create_recurring_task` monitors build health every 30 minutes
 6. The agent loop notices a failing test in its next tick and reports it to the user
 
-All of this happens with shared memory, shared workspace state, and unified event broadcasting — making Robodev a truly multi-agent development environment.
+All of this happens with shared memory, shared workspace state, and unified event broadcasting — making Oboto a truly multi-agent development environment.

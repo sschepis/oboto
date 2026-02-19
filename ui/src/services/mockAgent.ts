@@ -33,7 +33,7 @@ export const generateMockResponse = (input: string): Message => {
       role: 'ai',
       type: 'html-sandbox',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      code: `<!DOCTYPE html><html><body class="bg-black text-white p-8 flex items-center justify-center h-screen"><div class="text-center"><h1 class="text-4xl font-bold mb-4">RoboDev Sandbox</h1><p class="text-gray-400">Environment Active</p></div></body></html>`
+      code: `<!DOCTYPE html><html><body class="bg-black text-white p-8 flex items-center justify-center h-screen"><div class="text-center"><h1 class="text-4xl font-bold mb-4">Oboto Sandbox</h1><p class="text-gray-400">Environment Active</p></div></body></html>`
     };
   }
 
@@ -85,7 +85,7 @@ export const generateMockResponse = (input: string): Message => {
     id: Date.now().toString(),
     role: 'ai',
     type: 'agent-execution',
-    title: `RoboDev Response to: ${input.substring(0, 20)}...`,
+    title: `Oboto Response to: ${input.substring(0, 20)}...`,
     status: 'completed',
     steps: [
       { label: 'Intent mapped', status: 'done' }, 

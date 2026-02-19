@@ -35,11 +35,17 @@ async function handleReadFile(data, ctx) {
 async function handleSaveFile(data, ctx) {
     const { ws, assistant, broadcastFileTree } = ctx;
     try {
-        const { path: filePath, content } = data.payload;
+        const { path: filePath, content, encoding } = data.payload;
         const fullPath = path.isAbsolute(filePath) ? filePath : path.join(assistant.workingDir, filePath);
         // Ensure directory exists
         await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.promises.writeFile(fullPath, content, 'utf8');
+        
+        if (encoding === 'base64') {
+             await fs.promises.writeFile(fullPath, Buffer.from(content, 'base64'));
+        } else {
+             await fs.promises.writeFile(fullPath, content, 'utf8');
+        }
+        
         ws.send(JSON.stringify({ type: 'file-saved', payload: { path: filePath } }));
         broadcastFileTree();
     } catch (err) {
@@ -127,9 +133,24 @@ async function handleListDirs(data, ctx) {
     }
 }
 
+async function handleReadMediaFile(data, ctx) {
+    const { ws, assistant } = ctx;
+    try {
+        const filePath = data.payload;
+        const fullPath = path.isAbsolute(filePath) ? filePath : path.join(assistant.workingDir, filePath);
+        const buffer = await fs.promises.readFile(fullPath);
+        const content = buffer.toString('base64');
+        ws.send(JSON.stringify({ type: 'media-file-content', payload: { path: filePath, content } }));
+    } catch (err) {
+        consoleStyler.log('error', `Failed to read media file: ${err.message}`);
+        ws.send(JSON.stringify({ type: 'error', payload: `Failed to read media file: ${err.message}` }));
+    }
+}
+
 export const handlers = {
     'get-files': handleGetFiles,
     'read-file': handleReadFile,
+    'read-media-file': handleReadMediaFile,
     'save-file': handleSaveFile,
     'delete-file': handleDeleteFile,
     'copy-file': handleCopyFile,
