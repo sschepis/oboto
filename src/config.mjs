@@ -14,7 +14,7 @@ export const config = {
   // AI Configuration
   ai: {
     model: process.env.AI_MODEL || 'gpt-4o', // Default model
-    provider: process.env.AI_PROVIDER || '', // Auto-detected from model name if empty. Options: 'local', 'openai', 'gemini', 'anthropic'
+    provider: process.env.AI_PROVIDER || '', // Auto-detected from model name if empty. Options: 'lmstudio', 'openai', 'gemini', 'anthropic'
     endpoint: process.env.AI_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
     maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096', 10),
@@ -49,6 +49,13 @@ export const config = {
   tools: {
     enableUnsafeTools: process.env.ENABLE_UNSAFE_TOOLS === 'true',
     allowedFileExtensions: (process.env.ALLOWED_FILE_EXTENSIONS || '.js,.mjs,.json,.md,.txt').split(','),
+  },
+
+  // Symbolic Continuity Configuration
+  symbolicContinuity: {
+    enabled: process.env.SYMBOLIC_CONTINUITY !== 'false',  // Default ON
+    chineseRoom: process.env.SYMBOLIC_CONTINUITY_CHINESE_ROOM === 'true',  // Default OFF
+    secret: process.env.SYMBOLIC_CONTINUITY_SECRET || null,
   },
 
   // API Keys (accessed safely via getters for live updates from secrets vault)

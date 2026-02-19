@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Command, FolderOpen, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Command, FolderOpen, Wifi, WifiOff, Loader2, Settings, Copy, ExternalLink } from 'lucide-react';
 import { wsService } from '../../services/wsService';
+import type { AgentLoopStatus, AgentLoopInvocation } from '../../hooks/useAgentLoop';
+import type { ConversationInfo } from '../../hooks/useChat';
+import { AgentLoopControls } from '../features/AgentLoopControls';
+import ConversationSwitcher from '../features/ConversationSwitcher';
 
 interface OpenClawStatus {
   available: boolean;
@@ -13,6 +17,7 @@ interface HeaderProps {
   isAgentWorking: boolean;
   queuedMessageCount: number;
   onOpenPalette: () => void;
+  onSettingsClick?: () => void;
   onWorkspaceClick?: () => void;
   onOpenClawClick?: () => void;
   title?: string;
@@ -20,6 +25,23 @@ interface HeaderProps {
   showAudioVisualizer?: boolean;
   activeWorkspace?: string;
   isConnected?: boolean;
+  workspacePort?: number | null;
+
+  // Agent Loop Props
+  agentLoopStatus: AgentLoopStatus;
+  agentLoopLastInvocation: AgentLoopInvocation | null;
+  onAgentLoopPlay: (intervalMs?: number) => void;
+  onAgentLoopPause: () => void;
+  onAgentLoopStop: () => void;
+  onAgentLoopSetInterval: (intervalMs: number) => void;
+
+  // Conversation Props
+  conversations: ConversationInfo[];
+  activeConversation: string;
+  onSwitchConversation: (name: string) => void;
+  onCreateConversation: (name: string) => void;
+  onDeleteConversation: (name: string) => void;
+  onRenameConversation: (oldName: string, newName: string) => void;
 }
 
 /** Small OpenClaw connection badge shown in the header. */
@@ -56,14 +78,14 @@ const OpenClawBadge: React.FC<{ onClick?: () => void }> = ({ onClick }) => {
       onClick={onClick}
       title={tooltip}
       className={`
-        inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider cursor-pointer select-none
+        inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer select-none
         transition-all duration-200 hover:scale-105 active:scale-95
         ${connected
           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/15'
           : 'bg-zinc-800/40 text-zinc-500 border border-zinc-700/30 hover:bg-zinc-800/60'}
       `}
     >
-      <span className="text-[10px] leading-none" aria-hidden>🦞</span>
+      <span className="text-[11px] leading-none" aria-hidden>🦞</span>
       <span>OC</span>
       <span className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : 'bg-zinc-600'}`} />
     </button>
@@ -74,22 +96,44 @@ const Header: React.FC<HeaderProps> = ({
   isAgentWorking,
   queuedMessageCount,
   onOpenPalette,
+  onSettingsClick,
   onWorkspaceClick,
   onOpenClawClick,
   title = "RoboDev",
   activeWorkspace,
-  isConnected = true
+  isConnected = true,
+  workspacePort,
+  agentLoopStatus,
+  agentLoopLastInvocation,
+  onAgentLoopPlay,
+  onAgentLoopPause,
+  onAgentLoopStop,
+  onAgentLoopSetInterval,
+  conversations,
+  activeConversation,
+  onSwitchConversation,
+  onCreateConversation,
+  onDeleteConversation,
+  onRenameConversation,
 }) => {
   // Shortened workspace path for display
   const shortWorkspace = activeWorkspace
     ? activeWorkspace.replace(/^\/Users\/[^/]+/, '~')
     : null;
 
+  const workspaceUrl = workspacePort ? `http://localhost:${workspacePort}` : null;
+
+  const copyWorkspaceUrl = () => {
+    if (workspaceUrl) {
+      navigator.clipboard.writeText(workspaceUrl);
+    }
+  };
+
   return (
     <header
       className={`
         h-11 border-b flex items-center justify-between px-4 select-none shrink-0
-        transition-all duration-500 relative overflow-hidden
+        transition-all duration-500 relative
         ${isAgentWorking
           ? 'bg-[#0c0c0c]/95 border-indigo-500/20'
           : 'bg-[#0c0c0c]/95 border-zinc-800/60'}
@@ -107,7 +151,7 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Left: App identity + workspace */}
+      {/* Left: App identity + workspace + conversation */}
       <div className="flex items-center gap-2.5 min-w-0 relative z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <div className={`
           w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden shrink-0
@@ -120,14 +164,14 @@ const Header: React.FC<HeaderProps> = ({
         `}>
           <img src="/robot.svg" alt="" className={`w-5 h-5 transition-all duration-300 ${!isConnected ? 'grayscale opacity-40' : ''}`} />
         </div>
-        <span className="text-[11px] font-bold text-zinc-200 tracking-tight shrink-0">{title}</span>
+        <span className="text-[12px] font-bold text-zinc-200 tracking-tight shrink-0 hidden md:inline">{title}</span>
 
         {shortWorkspace && (
           <>
-            <span className="text-zinc-700/60 text-[10px]">›</span>
+            <span className="text-zinc-700/60 text-[11px]">›</span>
             <button
               onClick={onWorkspaceClick}
-              className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500 truncate max-w-[280px] hover:text-indigo-400 transition-all duration-200 px-1.5 py-0.5 rounded-md hover:bg-indigo-500/5 cursor-pointer"
+              className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-500 truncate max-w-[200px] hover:text-indigo-400 transition-all duration-200 px-1.5 py-0.5 rounded-md hover:bg-indigo-500/5 cursor-pointer"
               title={`${activeWorkspace} — click to change`}
             >
               <FolderOpen size={10} className="shrink-0 text-zinc-600" />
@@ -135,30 +179,79 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           </>
         )}
+
+        {conversations.length > 0 && (
+          <>
+            <span className="text-zinc-700/60 text-[11px]">›</span>
+            <ConversationSwitcher
+              conversations={conversations}
+              activeConversation={activeConversation}
+              onSwitch={onSwitchConversation}
+              onCreate={onCreateConversation}
+              onDelete={onDeleteConversation}
+              onRename={onRenameConversation}
+            />
+          </>
+        )}
       </div>
 
-      {/* Center: Status */}
-      <div className="flex items-center gap-2 absolute left-1/2 -translate-x-1/2 z-10">
-        {isAgentWorking && (
-          <div className="flex items-center gap-2 text-amber-400 animate-fade-in px-3 py-1 rounded-full bg-amber-500/5 border border-amber-500/10">
-            <Loader2 size={11} className="animate-spin" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Working</span>
+      {/* Center: Agent Loop Controls & Status */}
+      <div className="flex items-center gap-3 absolute left-1/2 -translate-x-1/2 z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <AgentLoopControls
+          status={agentLoopStatus}
+          lastInvocation={agentLoopLastInvocation}
+          onPlay={onAgentLoopPlay}
+          onPause={onAgentLoopPause}
+          onStop={onAgentLoopStop}
+          onSetInterval={onAgentLoopSetInterval}
+        />
+
+        {/* Show working/queued indicators alongside loop controls */}
+        {(isAgentWorking || queuedMessageCount > 0) && (
+          <div className="flex items-center gap-2 animate-fade-in pl-2 border-l border-zinc-800/40">
+            {isAgentWorking && (
+              <div className="flex items-center gap-1.5 text-amber-400">
+                <Loader2 size={11} className="animate-spin" />
+              </div>
+            )}
+            {!isAgentWorking && queuedMessageCount > 0 && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70">
+                {queuedMessageCount} queued
+              </span>
+            )}
           </div>
-        )}
-        {!isAgentWorking && queuedMessageCount > 0 && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500/70 animate-fade-in px-2.5 py-0.5 rounded-full bg-amber-500/5 border border-amber-500/10">
-            {queuedMessageCount} queued
-          </span>
         )}
       </div>
 
       {/* Right: Controls */}
       <div className="flex items-center gap-2 relative z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {workspaceUrl && (
+          <div className="flex items-center gap-1 mr-2 bg-zinc-800/50 rounded-md px-1.5 py-0.5 border border-zinc-700/30">
+            <span className="text-[10px] font-mono text-zinc-500 select-all mr-1">:{workspacePort}</span>
+            <button 
+              onClick={copyWorkspaceUrl} 
+              className="text-zinc-500 hover:text-zinc-300 transition-colors p-0.5" 
+              title={`Copy server URL: ${workspaceUrl}`}
+            >
+              <Copy size={10} />
+            </button>
+            <a 
+              href={workspaceUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-zinc-500 hover:text-zinc-300 transition-colors p-0.5" 
+              title="Open server"
+            >
+              <ExternalLink size={10} />
+            </a>
+          </div>
+        )}
+
         <OpenClawBadge onClick={onOpenClawClick} />
 
         {/* Connection indicator */}
         <div className={`
-          flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider
+          flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
           transition-all duration-300
           ${isConnected
             ? 'text-emerald-500/60 hover:text-emerald-400'
@@ -166,6 +259,17 @@ const Header: React.FC<HeaderProps> = ({
         `}>
           {isConnected ? <Wifi size={10} /> : <WifiOff size={10} className="animate-pulse" />}
         </div>
+
+        <button
+          onClick={onSettingsClick}
+          className="
+            flex items-center gap-1.5 text-zinc-500 hover:text-zinc-200 p-1.5 rounded-lg
+            transition-all duration-200 hover:bg-zinc-800/50 active:scale-95
+          "
+          title="Settings (⌘,)"
+        >
+          <Settings size={13} />
+        </button>
 
         <button
           onClick={onOpenPalette}
@@ -176,7 +280,7 @@ const Header: React.FC<HeaderProps> = ({
           title="Command Palette (⌘⇧P)"
         >
           <Command size={13} />
-          <kbd className="hidden md:inline text-[9px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/30">⌘⇧P</kbd>
+          <kbd className="hidden md:inline text-[10px] font-mono text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/30">⌘⇧P</kbd>
         </button>
       </div>
     </header>

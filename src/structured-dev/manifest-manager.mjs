@@ -6,6 +6,25 @@ import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
+const CURSOR_RULES_TEMPLATE = `# Structured Development Rules
+
+READ \`SYSTEM_MAP.md\` BEFORE any coding request.
+
+## Rules
+1. **Read manifest first** — understand current state, locks, and invariants.
+2. **Respect locks:**
+   - Interface/Implementation phase features have LOCKED API signatures. NEVER change without explicit user override.
+   - Locked features: NEVER modify.
+3. **Follow phase flow:**
+   - Discovery → \`submit_technical_design\`
+   - Design Review → wait for approval → \`approve_design\`
+   - Interface → define types → \`lock_interfaces\`
+   - Implementation → write code → \`submit_critique\` → finalize
+
+## Tools
+\`read_manifest\`, \`submit_technical_design\`, \`approve_design\`, \`lock_interfaces\`, \`submit_critique\`
+`;
+
 export class ManifestManager {
     constructor(workingDir) {
         this.workingDir = workingDir;
@@ -50,28 +69,7 @@ Last Updated: ${new Date().toISOString()}
 - [${new Date().toISOString()}] Initial State Created
 `;
 
-        const cursorRulesTemplate = `# Roo Code - Structured Development Rules
-
-You are an AI assistant operating within a **Structured Development Framework**.
-Your behavior must be governed by the "Living Manifest" (SYSTEM_MAP.md) located in the project root.
-
-## Core Directives
-
-1. **Check the Manifest First**: Before answering any coding request, read \`SYSTEM_MAP.md\` to understand the current system state, locked features, and global invariants.
-2. **Respect Locks**:
-   - If a feature is in **Interface** or **Implementation** phase, its API signatures are **LOCKED**. You cannot change them without explicit user override.
-   - If a feature is **Locked**, you cannot modify it.
-3. **Follow the Flow**:
-   - **Discovery Phase**: Analyze requirements -> Call \`submit_technical_design\`.
-   - **Design Review**: Wait for user approval -> Call \`approve_design\`.
-   - **Interface Phase**: Define types -> Call \`lock_interfaces\`.
-   - **Implementation Phase**: Write code -> Call \`submit_critique\` -> Finalize.
-
-## Tool Usage
-
-- Use \`read_manifest\` to access the system map.
-- Use \`submit_technical_design\`, \`approve_design\`, \`lock_interfaces\`, and \`submit_critique\` to move through the development phases.
-`;
+        const cursorRulesTemplate = CURSOR_RULES_TEMPLATE;
 
         // Create example hooks file
         const hooksExample = {
@@ -161,28 +159,7 @@ ${depGraph.trimEnd()}
 - [${new Date().toISOString()}] Initial State Created (bootstrapped from design document)
 `;
 
-        const cursorRulesTemplate = `# Roo Code - Structured Development Rules
-
-You are an AI assistant operating within a **Structured Development Framework**.
-Your behavior must be governed by the "Living Manifest" (SYSTEM_MAP.md) located in the project root.
-
-## Core Directives
-
-1. **Check the Manifest First**: Before answering any coding request, read \`SYSTEM_MAP.md\` to understand the current system state, locked features, and global invariants.
-2. **Respect Locks**:
-   - If a feature is in **Interface** or **Implementation** phase, its API signatures are **LOCKED**. You cannot change them without explicit user override.
-   - If a feature is **Locked**, you cannot modify it.
-3. **Follow the Flow**:
-   - **Discovery Phase**: Analyze requirements -> Call \`submit_technical_design\`.
-   - **Design Review**: Wait for user approval -> Call \`approve_design\`.
-   - **Interface Phase**: Define types -> Call \`lock_interfaces\`.
-   - **Implementation Phase**: Write code -> Call \`submit_critique\` -> Finalize.
-
-## Tool Usage
-
-- Use \`read_manifest\` to access the system map.
-- Use \`submit_technical_design\`, \`approve_design\`, \`lock_interfaces\`, and \`submit_critique\` to move through the development phases.
-`;
+        const cursorRulesTemplate = CURSOR_RULES_TEMPLATE;
 
         // Create .ai-man directory and hooks example
         const hooksExample = {

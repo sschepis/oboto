@@ -140,5 +140,33 @@ export const CORE_TOOLS = [
                 required: ["query"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "report_to_parent",
+            description: "Reports results from the current child conversation back to the parent (main 'chat') conversation. Use this in child conversations to send a summary of completed work, findings, or results to the parent conversation. The parent conversation will receive the report as a system message.",
+            parameters: {
+                type: "object",
+                properties: {
+                    summary: {
+                        type: "string",
+                        description: "Summary of the work done, findings, or results to report back to the parent conversation."
+                    },
+                    status: {
+                        type: "string",
+                        description: "Status of the work: 'completed', 'in-progress', 'blocked', or 'failed'.",
+                        enum: ["completed", "in-progress", "blocked", "failed"],
+                        default: "completed"
+                    },
+                    key_findings: {
+                        type: "array",
+                        description: "Optional list of key findings or action items.",
+                        items: { type: "string" }
+                    }
+                },
+                required: ["summary"]
+            }
+        }
     }
 ];

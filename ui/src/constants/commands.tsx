@@ -1,0 +1,57 @@
+import { 
+  Moon, Download, Users, Settings, Zap, Activity, Code2, Trash2, HelpCircle, 
+  FlaskConical, KeyRound, Terminal, ListTodo, FileSearch, FileCode, Eraser, 
+  Keyboard, BookOpen, FolderOpen, Palette, RotateCcw, FileText
+} from 'lucide-react';
+import type { Command } from '../types';
+
+export const globalActions: Command[] = [
+  { id: 'theme', label: 'Toggle Interface Theme', desc: 'Switch obsidian modes', icon: <Moon size={14} />, shortcut: 'T' },
+  { id: 'export', label: 'Export Protocol Log', desc: 'Download as JSON', icon: <Download size={14} />, shortcut: 'E' },
+  { id: 'agents', label: 'Manage Personas', desc: 'Reconfigure collaborators', icon: <Users size={14} />, shortcut: 'A' },
+  { id: 'settings', label: 'System Settings', desc: 'Configure engine', icon: <Settings size={14} />, shortcut: '⌘,' },
+  { id: 'deploy-openclaw', label: 'Deploy OpenClaw', desc: 'Start local gateway', icon: <Zap size={14} /> },
+  { id: 'connect-openclaw', label: 'Connect to OpenClaw', desc: 'Configure external gateway', icon: <Settings size={14} /> },
+  { id: 'secrets', label: 'Secrets Vault', desc: 'Manage API keys & secrets', icon: <KeyRound size={14} />, shortcut: 'K' },
+  { id: 'tasks', label: 'Task Manager', desc: 'Track implementation', icon: <ListTodo size={14} />, shortcut: '⌘⇧T' },
+  { id: 'terminal', label: 'Toggle Terminal', desc: 'Drop-down shell', icon: <Terminal size={14} />, shortcut: '⌘`' },
+  { id: 'console', label: 'Toggle Console', desc: 'Server log console', icon: <Terminal size={14} />, shortcut: '⌘J' },
+  { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View key bindings', icon: <Keyboard size={14} />, shortcut: '⌘/' },
+  { id: 'workspace', label: 'Change Workspace', desc: 'Switch project directory', icon: <FolderOpen size={14} /> },
+  { id: 'lock', label: 'Lock Terminal', desc: 'Secure session', icon: <Settings size={14} />, shortcut: 'L' },
+  { id: 'clear', label: 'Clear Chat', desc: 'Wipe thread memory', icon: <Eraser size={14} /> },
+  { id: 'theme-reset', label: 'Reset UI Style', desc: 'Restore original appearance', icon: <RotateCcw size={14} /> },
+  { id: 'theme-cyberpunk', label: 'Theme: Cyberpunk', desc: 'Neon pink/purple palette', icon: <Palette size={14} /> },
+  { id: 'theme-ocean', label: 'Theme: Ocean', desc: 'Deep blue/teal palette', icon: <Palette size={14} /> },
+  { id: 'theme-sunset', label: 'Theme: Sunset', desc: 'Warm rose/gold palette', icon: <Palette size={14} /> },
+  { id: 'theme-matrix', label: 'Theme: Matrix', desc: 'Green terminal palette', icon: <Palette size={14} /> },
+  { id: 'theme-midnight', label: 'Theme: Midnight', desc: 'Default dark palette', icon: <Palette size={14} /> },
+  { id: 'theme-arctic', label: 'Theme: Arctic', desc: 'Cool ice-blue palette', icon: <Palette size={14} /> },
+  { id: 'theme-forest', label: 'Theme: Forest', desc: 'Green nature palette', icon: <Palette size={14} /> },
+  { id: 'theme-lavender', label: 'Theme: Lavender', desc: 'Soft purple palette', icon: <Palette size={14} /> },
+  { id: 'theme-ember', label: 'Theme: Ember', desc: 'Warm orange palette', icon: <Palette size={14} /> },
+  { id: 'theme-monochrome', label: 'Theme: Monochrome', desc: 'Grayscale palette', icon: <Palette size={14} /> },
+  { id: 'theme-daylight', label: 'Theme: Daylight', desc: 'Bright white/blue palette', icon: <Palette size={14} /> },
+  { id: 'theme-paper', label: 'Theme: Paper', desc: 'Warm cream/sepia palette', icon: <Palette size={14} /> },
+  { id: 'theme-corporate', label: 'Theme: Corporate', desc: 'Professional blue/slate palette', icon: <Palette size={14} /> },
+];
+
+export const inlineCommands: Command[] = [
+  { id: 'analyze', label: '/analyze', desc: 'Deep system diagnostic', icon: <Zap size={14} /> },
+  { id: 'visualize', label: '/visualize', desc: 'Real-time neural map', icon: <Activity size={14} /> },
+  { id: 'plan', label: '/plan', desc: 'Create implementation plan', icon: <FileText size={14} /> },
+  { id: 'tasks', label: '/tasks', desc: 'Manage project tasks', icon: <ListTodo size={14} /> },
+  { id: 'sandbox', label: '/sandbox', desc: 'Init UI prototype', icon: <Code2 size={14} /> },
+  { id: 'survey', label: '/survey', desc: 'Insert decision survey', icon: <HelpCircle size={14} /> },
+  { id: 'test', label: '/test', desc: 'Run tests & show results', icon: <FlaskConical size={14} /> },
+  { id: 'lint', label: '/lint', desc: 'Run code linter', icon: <FileSearch size={14} /> },
+  { id: 'format', label: '/format', desc: 'Format project code', icon: <FileCode size={14} /> },
+  { id: 'doc', label: '/doc', desc: 'Generate documentation', icon: <BookOpen size={14} /> },
+  { id: 'terminal', label: '/term', desc: 'Open terminal', icon: <Terminal size={14} /> },
+  { id: 'console', label: '/console', desc: 'Toggle server console', icon: <Terminal size={14} /> },
+  { id: 'clear', label: '/clear', desc: 'Wipe thread memory', icon: <Trash2 size={14} /> },
+  { id: 'secrets', label: '/secrets', desc: 'Manage secrets', icon: <KeyRound size={14} /> },
+  { id: 'settings', label: '/settings', desc: 'System settings', icon: <Settings size={14} /> },
+  { id: 'shortcuts', label: '/shortcuts', desc: 'Keyboard shortcuts', icon: <Keyboard size={14} /> },
+  { id: 'new-chat', label: '/new-chat', desc: 'Start a new conversation', icon: <FileText size={14} /> },
+];

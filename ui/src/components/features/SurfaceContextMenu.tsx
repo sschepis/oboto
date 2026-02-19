@@ -91,7 +91,7 @@ const SurfaceContextMenu: React.FC<SurfaceContextMenuProps> = ({
     position: 'fixed',
     left: menu.x,
     top: menu.y,
-    zIndex: 9999,
+    zIndex: 99999,
   };
 
   return (

@@ -109,5 +109,34 @@ export const UI_STYLE_TOOLS = [
                 required: []
             }
         }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'set_display_names',
+            description:
+                'Set the display names shown in the chat UI for the user and/or the AI agent. ' +
+                'Call this when you learn the user\'s name (e.g. they introduce themselves) ' +
+                'or when you adopt/change your own name. The chat will show these names ' +
+                'instead of the default "You" and "Nexus" labels.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    user_name: {
+                        type: 'string',
+                        description:
+                            'The user\'s name to display on their chat messages. ' +
+                            'Omit to leave unchanged.'
+                    },
+                    agent_name: {
+                        type: 'string',
+                        description:
+                            'The AI agent\'s name to display on its chat messages. ' +
+                            'Omit to leave unchanged.'
+                    }
+                },
+                required: []
+            }
+        }
     }
 ];

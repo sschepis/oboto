@@ -66,28 +66,17 @@ export class PlanExecutor {
             // Instantiate a new AI agent for this task
             const agent = new this.AiAssistant(workingDir);
             
-            // Context Prompt
-            const prompt = `
-Task: Implement Feature ${taskId} (${taskName})
-Role: You are a specialized implementation agent working in parallel with others.
-Context: 
-- You are responsible ONLY for feature ${taskId}.
-- Current Status: ${task.status || 'Active'}
-- Phase: ${task.phase || 'Implementation'}
-- Dependencies: ${task.dependencies ? task.dependencies.join(', ') : 'None'}
-- Read the 'SYSTEM_MAP.md' to understand the full system context.
-- Read any design docs or interfaces related to ${taskId} (check 'src/' or 'docs/').
+            const prompt = `Implement feature ${taskId} (${taskName}). You own ONLY this feature.
 
-Execution Steps:
-1.  **Project Context Analysis**: Scan the existing project structure (using \`list_files\`) to understand the directory layout, naming conventions, and architectural patterns. Derive the appropriate location for your new files based on this context.
-2.  **Implementation**: Write the core logic for the feature. Ensure strict adherence to interfaces.
-3.  **Unit Test Generation**: Create comprehensive unit tests for the implemented code. Aim for high coverage.
-4.  **Production Refinement**: Review your code for error handling, edge cases, and performance. Refactor for clarity and maintainability.
-5.  **Documentation**: Add JSDoc comments to all public functions and classes. Create or update a README.md for the module if appropriate.
-6.  **Finalize**: Update the SYSTEM_MAP.md status to 'Completed' only after all above steps are done.
+Status: ${task.status || 'Active'} | Phase: ${task.phase || 'Implementation'} | Dependencies: ${task.dependencies ? task.dependencies.join(', ') : 'None'}
 
-Action: execute these steps now.
-`;
+STEPS:
+1. Read \`SYSTEM_MAP.md\` and any design docs for ${taskId}.
+2. \`list_files\` to understand project structure and naming conventions.
+3. Implement core logic. FOLLOW interfaces exactly.
+4. Write unit tests with high coverage.
+5. Add error handling, edge cases, JSDoc on public APIs.
+6. Update SYSTEM_MAP.md status to 'Completed' ONLY after all steps done.`;
 
             // Run the agent
             // We use run() which runs the conversation loop until completion

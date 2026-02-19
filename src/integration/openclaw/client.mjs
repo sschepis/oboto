@@ -386,7 +386,11 @@ export class OpenClawClient extends EventEmitter {
 
   disconnect() {
     if (this.ws) {
-      this.ws.terminate(); // Force close
+      try {
+        this.ws.terminate(); // Force close
+      } catch (e) {
+        // Ignore errors during termination (e.g. if already closed or connecting)
+      }
       this.ws = null;
     }
     this.isConnected = false;

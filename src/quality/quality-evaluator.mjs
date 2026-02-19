@@ -24,45 +24,41 @@ export class QualityEvaluator {
         consoleStyler.log('quality', 'Preparing comprehensive quality evaluation context...');
 
         // Create comprehensive context for quality evaluation
-        let evaluationContext = `Please evaluate the quality of this AI response using the evaluate_response_quality tool:
+        let evaluationContext = `Evaluate this response using evaluate_response_quality tool.
 
-ORIGINAL QUERY: "${userInput}"
-
-AI RESPONSE: "${finalResponse}"`;
+QUERY: "${userInput}"
+RESPONSE: "${finalResponse}"`;
 
         if (toolCallsSummary.length > 0) {
-            evaluationContext += `
-
-TOOLS USED BY AI:`;
+            evaluationContext += `\nTOOL CALLS (${toolCallsSummary.length} total):`;
             toolCallsSummary.forEach((call, i) => {
-                evaluationContext += `
-${i + 1}. ${call.tool}(${Object.entries(call.parameters).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})`;
+                evaluationContext += `\n${i + 1}. ${call.tool}(${Object.entries(call.parameters).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})`;
             });
 
             if (toolResults.length > 0) {
-                evaluationContext += `
-
-TOOL RESULTS:`;
+                evaluationContext += `\nTOOL RESULTS:`;
                 toolResults.forEach((result, i) => {
                     let resultStr = typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
                     if (resultStr === undefined) resultStr = 'undefined';
-                    evaluationContext += `
-${i + 1}. ${result.tool}: ${resultStr.substring(0, 200)}${resultStr.length > 200 ? '...' : ''}`;
+                    evaluationContext += `\n${i + 1}. ${result.tool}: ${resultStr.substring(0, 200)}${resultStr.length > 200 ? '...' : ''}`;
                 });
             }
         }
 
         evaluationContext += `
 
-EVALUATION CRITERIA:
-- 10 = Perfect response that fully addresses the query (consider both text response AND tool usage)
-- 7-9 = Good response with minor issues
-- 4-6 = Adequate but could be improved
-- 1-3 = Poor response that doesn't address the query properly
+SCORING:
+- 8-10 = Fully addresses query with correct tool usage
+- 5-7 = Addresses query with minor issues
+- 1-4 = Fails to address query
 
-IMPORTANT: When evaluating, consider BOTH the text response AND the tools that were called. If the user asked for something to be done and the AI called the appropriate tools successfully, that should be reflected in the quality score even if the text response is brief.
+SCOPE VIOLATIONS (PENALIZE HEAVILY):
+- Agent made >5 tool calls for a simple request → cap score at 4
+- Agent took actions BEYOND what was asked → cap score at 3
+- Agent continued after task was complete → cap score at 3
 
-If rating < 4, provide specific remedy suggestions.`;
+Evaluate BOTH text response AND tool usage. Successful tool calls count even if text is brief.
+IF rating < 4: provide specific remedy.`;
 
         // Create a quality evaluation request
         const qualityCheckHistory = [
@@ -157,12 +153,12 @@ If rating < 4, provide specific remedy suggestions.`;
         // Create improved prompt with remedy
         const improvedPrompt = `${userInput}
 
-PREVIOUS RESPONSE WAS INADEQUATE (rated ${qualityResult.rating}/10):
+PREVIOUS RESPONSE FAILED (${qualityResult.rating}/10):
 "${finalResponse}"
 
-REMEDY REQUIRED: ${qualityResult.remedy}
+REQUIRED FIX: ${qualityResult.remedy}
 
-Please provide a better response that addresses these quality issues.`;
+SCOPE: Address ONLY the original request. Do NOT add unrequested actions.`;
         
         return improvedPrompt;
     }

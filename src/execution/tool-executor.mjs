@@ -39,6 +39,9 @@ import { dryRunGuard } from './dry-run-guard.mjs';
 import { McpHandlers } from './handlers/mcp-handlers.mjs'; // New import
 import { registerPersonaHandlers } from './handlers/persona-handlers.mjs';
 import { UIStyleHandlers } from './handlers/ui-style-handlers.mjs';
+import { MathHandlers } from './handlers/math-handlers.mjs';
+import { ImageHandlers } from './handlers/image-handlers.mjs';
+import { EmbedHandlers } from './handlers/embed-handlers.mjs';
 
 const TOOL_TIMEOUTS = {
     read_file: 10_000,
@@ -87,6 +90,7 @@ export class ToolExecutor {
         this.mcpClientManager = options.mcpClientManager; // New: MCP Client Manager
         this.personaManager = options.personaManager; // Persona Manager
         this.assistant = options.assistant; // Reference to parent assistant (for persona prompt refresh)
+        this.workspaceContentServer = options.workspaceContentServer; // New: Workspace Content Server
         
         this._plannedChanges = [];
         this.recursionLevel = 0;
@@ -117,7 +121,7 @@ export class ToolExecutor {
         this.skillsManager = new SkillsManager(workspaceRoot);
 
         // Initialize Handlers
-        this.coreHandlers = new CoreHandlers(this.packageManager, this.historyManager, this.memoryAdapter);
+        this.coreHandlers = new CoreHandlers(this.packageManager, this.historyManager, this.memoryAdapter, { assistant: this.assistant });
         this.workflowHandlers = new WorkflowHandlers();
         this.structuredDevHandlers = new StructuredDevHandlers(workspaceRoot, this.aiAssistantClass, this.manifestManager);
         this.webHandlers = new WebHandlers();
@@ -131,7 +135,10 @@ export class ToolExecutor {
         this.firecrawlHandlers = new FirecrawlHandlers();
         this.skillHandlers = new SkillHandlers(this.skillsManager, this.aiAssistantClass);
         this.mcpHandlers = this.mcpClientManager ? new McpHandlers(this.mcpClientManager) : null;
-        this.uiStyleHandlers = new UIStyleHandlers(this.eventBus);
+        this.uiStyleHandlers = new UIStyleHandlers(this.eventBus, workspaceRoot);
+        this.mathHandlers = new MathHandlers();
+        this.imageHandlers = new ImageHandlers(workspaceRoot, this.workspaceContentServer);
+        this.embedHandlers = new EmbedHandlers(this.eventBus);
 
         // Initialize tool registry
         this.toolRegistry = new Map();
@@ -241,6 +248,7 @@ export class ToolExecutor {
         this.registerTool('read_conversation_history', args => this.coreHandlers.readConversationHistory(args));
         this.registerTool('promote_memory', args => this.coreHandlers.promoteMemory(args));
         this.registerTool('query_global_memory', args => this.coreHandlers.queryGlobalMemory(args));
+        this.registerTool('report_to_parent', args => this.coreHandlers.reportToParent(args));
 
         // Workflow Tools
         this.registerTool('create_todo_list', this.workflowHandlers.createTodoList.bind(this.workflowHandlers));
@@ -382,6 +390,21 @@ export class ToolExecutor {
         this.registerTool('inject_ui_css', this.uiStyleHandlers.injectUICSS.bind(this.uiStyleHandlers));
         this.registerTool('reset_ui_style', this.uiStyleHandlers.resetUIStyle.bind(this.uiStyleHandlers));
         this.registerTool('get_ui_style_state', this.uiStyleHandlers.getUIStyleState.bind(this.uiStyleHandlers));
+        this.registerTool('set_display_names', this.uiStyleHandlers.setDisplayNames.bind(this.uiStyleHandlers));
+
+        // Math Tools
+        this.registerTool('evaluate_math', this.mathHandlers.evaluateMath.bind(this.mathHandlers));
+        this.registerTool('unit_conversion', this.mathHandlers.unitConversion.bind(this.mathHandlers));
+        this.registerTool('solve_equation', this.mathHandlers.solveEquation.bind(this.mathHandlers));
+
+        // Image Tools
+        this.registerTool('generate_image', this.imageHandlers.generateImage.bind(this.imageHandlers));
+        this.registerTool('create_image_variation', this.imageHandlers.createImageVariation.bind(this.imageHandlers));
+        this.registerTool('manipulate_image', this.imageHandlers.manipulateImage.bind(this.imageHandlers));
+        this.registerTool('get_image_info', this.imageHandlers.getImageInfo.bind(this.imageHandlers));
+
+        // Embed Tools
+        this.registerTool('embed_object', this.embedHandlers.embedObject.bind(this.embedHandlers));
     }
 
     setDryRun(enabled) {

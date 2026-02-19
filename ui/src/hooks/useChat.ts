@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Message, Task, Command, TestResults, OpenClawStatus, ConfirmationRequest } from '../types';
+import type { Message, Command, TestResults, OpenClawStatus, ConfirmationRequest } from '../types';
 import { wsService } from '../services/wsService';
 import { generateMockResponse } from '../services/mockAgent';
 import { type ProjectStatusData } from '../components/features/ProjectStatus';
@@ -23,6 +23,15 @@ export interface ActivityLogEntry {
   timestamp: string;
 }
 
+export interface ConversationInfo {
+  name: string;
+  isDefault: boolean;
+  messageCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+  parentReports?: Array<{ from: string; summary: string; status: string; timestamp: string }>;
+}
+
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [isWorking, setIsWorking] = useState(false);
@@ -38,6 +47,8 @@ export const useChat = () => {
   const [confirmationRequest, setConfirmationRequest] = useState<ConfirmationRequest | null>(null);
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationInfo[]>([]);
+  const [activeConversation, setActiveConversation] = useState<string>('chat');
   const queueRef = useRef<string[]>([]);
   const logIdRef = useRef(0);
   const allLogIdRef = useRef(0);
@@ -143,40 +154,65 @@ export const useChat = () => {
       }),
       
       wsService.on('message', (payload: unknown) => {
-          // If payload is a message object
-          setMessages(p => [...p, payload as Message]);
+          const incoming = payload as Message;
+          setMessages(prev => {
+              // Check if there's a pending response message to merge into
+              const pendingIdx = prev.findIndex(m => m._pending === true && m.role === 'ai');
+              if (pendingIdx !== -1) {
+                  // Merge: set the content and remove pending flag
+                  const pendingMsg = prev[pendingIdx];
+                  const merged: Message = {
+                      ...pendingMsg,
+                      content: incoming.content || '',
+                      _pending: undefined,
+                  };
+                  // Preserve timestamp from incoming if available
+                  if (incoming.timestamp) merged.timestamp = incoming.timestamp;
+                  const newMsgs = [...prev];
+                  newMsgs[pendingIdx] = merged;
+                  return newMsgs;
+              }
+              // No pending message — just append (text-only response, no tools were called)
+              return [...prev, incoming];
+          });
       }),
       
       wsService.on('tool-start', (payload: unknown) => {
          const p = payload as { toolName: string; args: unknown };
          setIsWorking(true);
          setMessages(prev => {
-             const newTask: Task = { 
-                 name: p.toolName, 
-                 status: 'running', 
-                 progress: 0, 
-                 subtext: JSON.stringify(p.args).substring(0, 50) + '...'
+             const newToolCall = {
+                 toolName: p.toolName,
+                 args: p.args,
+                 result: undefined,
+                 status: 'running' as const,
              };
              
-             // Check if we should add to an existing active background-tasks message (e.g. the last one)
-             // or create a new one.
-             const lastIdx = prev.length - 1;
-             const lastMsg = prev[lastIdx];
+             // Check if there's already a pending response message to add to
+             const pendingIdx = prev.findIndex(m => m._pending === true && m.role === 'ai');
              
-             if (lastMsg && lastMsg.type === 'background-tasks') {
-                 const updatedMsg = { 
-                     ...lastMsg, 
-                     tasks: [...(lastMsg.tasks || []), newTask] 
+             if (pendingIdx !== -1) {
+                 // Add tool call to existing pending response
+                 const pendingMsg = prev[pendingIdx];
+                 const updatedMsg: Message = {
+                     ...pendingMsg,
+                     toolCalls: [...(pendingMsg.toolCalls || []), newToolCall]
                  };
-                 return [...prev.slice(0, lastIdx), updatedMsg];
+                 const newMsgs = [...prev];
+                 newMsgs[pendingIdx] = updatedMsg;
+                 return newMsgs;
              } else {
-                 return [...prev, {
-                     id: Date.now().toString(),
+                 // Create a new pending response message with this tool call
+                 const responseMsg: Message = {
+                     id: `response-${Date.now()}`,
                      role: 'ai',
-                     type: 'background-tasks',
-                     tasks: [newTask],
-                     timestamp: new Date().toLocaleTimeString()
-                 }];
+                     type: 'text',
+                     content: '',
+                     toolCalls: [newToolCall],
+                     timestamp: new Date().toLocaleTimeString(),
+                     _pending: true,
+                 };
+                 return [...prev, responseMsg];
              }
          });
       }),
@@ -184,24 +220,24 @@ export const useChat = () => {
       wsService.on('tool-end', (payload: unknown) => {
          const p = payload as { toolName: string; result: unknown };
          setMessages(prev => {
-             // Find the background-tasks message containing this tool
-             // We search from end
-             const msgIdx = prev.map(m => m.type).lastIndexOf('background-tasks');
-             if (msgIdx !== -1) {
-                 const msg = prev[msgIdx];
-                 if (msg.tasks) {
-                     const taskIdx = msg.tasks.findIndex(t => t.name === p.toolName && t.status === 'running');
-                     if (taskIdx !== -1) {
-                         const updatedTasks = [...msg.tasks];
-                         updatedTasks[taskIdx] = {
-                             ...updatedTasks[taskIdx],
+             // Find the pending response message containing this tool call
+             const pendingIdx = prev.findIndex(m => m._pending === true && m.role === 'ai');
+             if (pendingIdx !== -1) {
+                 const pendingMsg = prev[pendingIdx];
+                 if (pendingMsg.toolCalls) {
+                     const toolIdx = pendingMsg.toolCalls.findIndex(
+                         tc => tc.toolName === p.toolName && tc.status === 'running'
+                     );
+                     if (toolIdx !== -1) {
+                         const updatedToolCalls = [...pendingMsg.toolCalls];
+                         updatedToolCalls[toolIdx] = {
+                             ...updatedToolCalls[toolIdx],
+                             result: p.result,
                              status: 'completed',
-                             progress: 100,
-                             logs: [typeof p.result === 'string' ? p.result : JSON.stringify(p.result)]
                          };
-                         const updatedMsg = { ...msg, tasks: updatedTasks };
+                         const updatedMsg: Message = { ...pendingMsg, toolCalls: updatedToolCalls };
                          const newMsgs = [...prev];
-                         newMsgs[msgIdx] = updatedMsg;
+                         newMsgs[pendingIdx] = updatedMsg;
                          return newMsgs;
                      }
                  }
@@ -222,31 +258,26 @@ export const useChat = () => {
         }]);
       }),
 
-      wsService.on('progress', (payload: unknown) => {
-         const p = payload as { progress: number; status: string };
-         setMessages(prev => {
-             const msgIdx = prev.map(m => m.type).lastIndexOf('background-tasks');
-             if (msgIdx !== -1) {
-                 const msg = prev[msgIdx];
-                 if (msg.tasks) {
-                     const taskIdx = msg.tasks.findIndex(t => t.status === 'running');
-                     if (taskIdx !== -1) {
-                         const updatedTasks = [...msg.tasks];
-                         updatedTasks[taskIdx] = {
-                             ...updatedTasks[taskIdx],
-                             progress: p.progress,
-                             subtext: p.status
-                         };
-                         const updatedMsg = { ...msg, tasks: updatedTasks };
-                         const newMsgs = [...prev];
-                         newMsgs[msgIdx] = updatedMsg;
-                         return newMsgs;
-                     }
-                 }
-             }
-             return prev;
-         });
-      })
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      wsService.on('progress', (_payload: unknown) => {
+         // Progress events are informational; tool progress is tracked via tool-start/tool-end.
+         // The activity log (ThinkingIndicator) already shows progress details.
+         // No message mutation needed.
+      }),
+
+      // --- Conversation management events ---
+      wsService.on('conversation-list', (payload: unknown) => {
+        setConversations(payload as ConversationInfo[]);
+      }),
+      wsService.on('conversation-switched', (payload: unknown) => {
+        const p = payload as { name: string; switched?: boolean };
+        if (p.name) {
+          setActiveConversation(p.name);
+        }
+      }),
+      wsService.on('conversation-renamed', () => {
+        wsService.listConversations();
+      }),
     ];
 
     return () => unsubs.forEach(u => u());
@@ -271,6 +302,7 @@ export const useChat = () => {
     setMessages(prev => [...prev, userMsg]);
 
     if (isConnected) {
+      setIsWorking(true); // Optimistically set working state
       wsService.send(text, activeSurfaceId, selectedModel || undefined);
     } else {
       setIsWorking(true);
@@ -424,6 +456,28 @@ export const useChat = () => {
       }
   };
 
+  // --- Conversation management actions ---
+  const createConversation = (name: string) => {
+    wsService.createConversation(name);
+  };
+
+  const switchConversation = (name: string) => {
+    if (name === activeConversation) return;
+    wsService.switchConversation(name);
+  };
+
+  const deleteConversation = (name: string) => {
+    wsService.deleteConversation(name);
+  };
+
+  const renameConversation = (oldName: string, newName: string) => {
+    wsService.renameConversation(oldName, newName);
+  };
+
+  const refreshConversations = () => {
+    wsService.listConversations();
+  };
+
   return {
     messages,
     isWorking,
@@ -452,6 +506,14 @@ export const useChat = () => {
     confirmationRequest,
     respondToConfirmation,
     selectedModel,
-    setSelectedModel
+    setSelectedModel,
+    // Conversation management
+    conversations,
+    activeConversation,
+    createConversation,
+    switchConversation,
+    deleteConversation,
+    renameConversation,
+    refreshConversations,
   };
 };

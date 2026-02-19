@@ -1,8 +1,9 @@
 import React from 'react';
 import { Server, Zap, Cpu, Key, Globe, Box, ShieldCheck, ShieldAlert, ExternalLink } from 'lucide-react';
 import type { SecretItem } from '../../../hooks/useSecrets';
+import { Select, SelectItem } from '../../../surface-kit/primitives/Select';
 
-export type AIProviderType = 'openai' | 'gemini' | 'anthropic' | 'local';
+export type AIProviderType = 'openai' | 'gemini' | 'anthropic' | 'lmstudio';
 
 export interface AIProviderConfig {
   provider: AIProviderType;
@@ -15,7 +16,7 @@ const PROVIDER_SECRET_MAP: Record<AIProviderType, string | null> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GOOGLE_API_KEY',
   anthropic: null, // Uses Google Cloud ADC
-  local: null, // no key needed
+  lmstudio: null, // no key needed
 };
 
 interface AIProviderSettingsProps {
@@ -25,6 +26,12 @@ interface AIProviderSettingsProps {
   secrets?: SecretItem[];
   /** Callback to open the Secrets Vault panel */
   onOpenSecrets?: () => void;
+  modelRegistry?: Record<string, {
+    provider: string;
+    costTier?: string;
+    reasoningCapability?: string;
+    displayName?: string;
+  }>;
 }
 
 const colorStyles = {
@@ -95,7 +102,7 @@ const ProviderCard: React.FC<{
   );
 };
 
-export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, onChange, secrets, onOpenSecrets }) => {
+export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, onChange, secrets, onOpenSecrets, modelRegistry = {} }) => {
   const updateConfig = (updates: Partial<AIProviderConfig>) => {
     onChange({ ...config, ...updates });
   };
@@ -107,6 +114,29 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, 
     : null;
   const isKeyConfigured = secretEntry?.isConfigured ?? false;
   const keySource = secretEntry?.source ?? 'none';
+
+  // Filter models by provider
+  const availableModels = Object.entries(modelRegistry)
+    .filter(([, caps]) => caps.provider === config.provider)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  // Define recommended models for each provider
+  const RECOMMENDED_MODELS: Record<string, string[]> = {
+    openai: ['gpt-4o', 'o1-preview'],
+    gemini: ['gemini-1.5-pro', 'gemini-2.0-flash'],
+    anthropic: ['claude-3-5-sonnet-v2@20241022'],
+    lmstudio: ['llama-3.2-1b-instruct', 'mistral-7b-instruct'] // Examples
+  };
+
+  const isRecommended = (id: string) => {
+    const list = RECOMMENDED_MODELS[config.provider] || [];
+    return list.some(r => id.includes(r));
+  };
+
+  // Split into recommended and others for display order
+  const recommendedList = availableModels.filter(([id]) => isRecommended(id));
+  const otherList = availableModels.filter(([id]) => !isRecommended(id));
+  const sortedModels = [...recommendedList, ...otherList];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -136,11 +166,11 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, 
           colorClass="violet"
         />
         <ProviderCard
-          label="Local / Custom"
-          description="Ollama / LMStudio."
+          label="LMStudio"
+          description="Local LLMs via LM Studio."
           icon={<Server size={18} />}
-          active={config.provider === 'local'}
-          onClick={() => updateConfig({ provider: 'local', model: 'llama-3-8b' })}
+          active={config.provider === 'lmstudio'}
+          onClick={() => updateConfig({ provider: 'lmstudio', model: 'llama-3.2-1b-instruct' })}
           colorClass="amber"
         />
       </div>
@@ -150,9 +180,9 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, 
           {config.provider === 'openai' && <Zap size={14} className="text-emerald-500" />}
           {config.provider === 'gemini' && <Cpu size={14} className="text-blue-500" />}
           {config.provider === 'anthropic' && <Box size={14} className="text-violet-500" />}
-          {config.provider === 'local' && <Server size={14} className="text-amber-500" />}
+          {config.provider === 'lmstudio' && <Server size={14} className="text-amber-500" />}
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.15em]">
-            {config.provider === 'local' ? 'Endpoint Configuration' : 'Provider Configuration'}
+            {config.provider === 'lmstudio' ? 'Endpoint Configuration' : 'Provider Configuration'}
           </span>
         </div>
         
@@ -162,30 +192,59 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, 
             <label className="text-xs font-medium text-zinc-400 flex items-center gap-2">
               <Box size={11} /> Model Identifier
             </label>
-            <input 
-              type="text" 
-              value={config.model}
-              onChange={(e) => updateConfig({ model: e.target.value })}
-              className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
-              placeholder={config.provider === 'openai' ? 'gpt-4o' : config.provider === 'gemini' ? 'gemini-1.5-pro' : config.provider === 'anthropic' ? 'claude-3-5-sonnet-v2@20241022' : 'llama-3-8b'}
-            />
+            
+            {sortedModels.length > 0 ? (
+              <Select
+                value={config.model}
+                onValueChange={(val) => updateConfig({ model: val })}
+                placeholder="Select a model..."
+              >
+                {sortedModels.map(([id, caps]) => {
+                  const recommended = isRecommended(id);
+                  return (
+                    <SelectItem key={id} value={id}>
+                      <span className={recommended ? "font-bold text-indigo-300" : "text-zinc-200"}>
+                        {caps.displayName || id}
+                        {recommended && <span className="ml-2 text-[10px] bg-indigo-500/20 text-indigo-300 px-1 rounded">Recommended</span>}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </Select>
+            ) : (
+              <input 
+                type="text" 
+                value={config.model}
+                onChange={(e) => updateConfig({ model: e.target.value })}
+                className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
+                placeholder={config.provider === 'openai' ? 'gpt-4o' : config.provider === 'gemini' ? 'gemini-1.5-pro' : config.provider === 'anthropic' ? 'claude-3-5-sonnet-v2@20241022' : 'llama-3.2-1b-instruct'}
+              />
+            )}
+            
+            {sortedModels.length === 0 && (
+                <p className="text-[10px] text-zinc-500">
+                    {config.provider === 'lmstudio' 
+                        ? "Ensure LM Studio is running and 'Start Server' is enabled."
+                        : "No models found. Check API Key configuration."}
+                </p>
+            )}
           </div>
 
           {/* Provider Specific Fields */}
-          {config.provider === 'local' ? (
+          {config.provider === 'lmstudio' ? (
             <div className="space-y-2 animate-fade-in">
               <label className="text-xs font-medium text-zinc-400 flex items-center gap-2">
                 <Globe size={11} /> Endpoint URL
               </label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={config.endpoint || ''}
                 onChange={(e) => updateConfig({ endpoint: e.target.value })}
                 className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
-                placeholder="http://localhost:11434/v1"
+                placeholder="http://localhost:1234/v1/chat/completions"
               />
               <p className="text-[10px] text-zinc-600 leading-relaxed">
-                Compatible with OpenAI-style endpoints (Ollama, LMStudio, vLLM).
+                Use OpenAI-compatible endpoint for tool support (e.g. /v1/chat/completions).
               </p>
             </div>
           ) : config.provider === 'anthropic' ? (

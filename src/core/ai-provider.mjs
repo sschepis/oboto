@@ -8,7 +8,7 @@ import { config } from '../config.mjs';
  * Supported AI providers
  */
 export const AI_PROVIDERS = {
-    LOCAL: 'local',
+    LMSTUDIO: 'lmstudio',
     OPENAI: 'openai',
     GEMINI: 'gemini',
     ANTHROPIC: 'anthropic',
@@ -18,7 +18,7 @@ export const AI_PROVIDERS = {
  * Default endpoints for each provider
  */
 const PROVIDER_ENDPOINTS = {
-    [AI_PROVIDERS.LOCAL]: 'http://localhost:1234/v1/chat/completions',
+    [AI_PROVIDERS.LMSTUDIO]: 'http://localhost:1234/v1/chat/completions',
     [AI_PROVIDERS.OPENAI]: 'https://api.openai.com/v1/chat/completions',
     // Gemini uses SDK, not REST endpoint — this is only a fallback
     [AI_PROVIDERS.GEMINI]: null,
@@ -73,7 +73,7 @@ export function detectProvider(model) {
         return explicitProvider;
     }
 
-    if (!model) return AI_PROVIDERS.LOCAL;
+    if (!model) return AI_PROVIDERS.LMSTUDIO;
 
     const m = model.toLowerCase();
 
@@ -93,7 +93,7 @@ export function detectProvider(model) {
     }
 
     // Default: local server (LMStudio, Ollama, etc.)
-    return AI_PROVIDERS.LOCAL;
+    return AI_PROVIDERS.LMSTUDIO;
 }
 
 /**
@@ -104,11 +104,13 @@ export function detectProvider(model) {
 export function getEndpoint(provider) {
     // If user has explicitly set an endpoint, always use it
     const configuredEndpoint = config.ai.endpoint;
-    if (configuredEndpoint && configuredEndpoint !== 'http://localhost:1234/v1/chat/completions') {
+    if (configuredEndpoint &&
+        configuredEndpoint !== 'http://localhost:1234/v1/chat/completions' &&
+        configuredEndpoint !== 'http://localhost:1234/api/v1/chat') {
         return configuredEndpoint;
     }
 
-    return PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS[AI_PROVIDERS.LOCAL];
+    return PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS[AI_PROVIDERS.LMSTUDIO];
 }
 
 /**
@@ -124,7 +126,7 @@ export function getAuthHeaders(provider) {
             }
             return {};
 
-        case AI_PROVIDERS.LOCAL:
+        case AI_PROVIDERS.LMSTUDIO:
         default:
             // Local servers may still use an API key for compatibility
             if (config.keys.openai) {
@@ -210,13 +212,20 @@ function sanitizeSchemaForGemini(schema) {
  * Gemini: {systemInstruction, contents: [{role: "user"|"model", parts: [...]}]}
  */
 function openaiMessagesToGemini(messages) {
-    let systemInstruction = undefined;
+    // Collect ALL system messages and concatenate them.
+    // Previously this used `systemInstruction = msg.content` which meant
+    // only the LAST system message survived — consciousness/somatic injections
+    // would overwrite the main system prompt, stripping scope constraints
+    // and causing role confusion (the model would hallucinate fake user content).
+    const systemParts = [];
     const contents = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
-            // Extract system instruction (use the last one if multiple)
-            systemInstruction = msg.content;
+            // Accumulate all system messages — they'll be joined below
+            if (msg.content) {
+                systemParts.push(msg.content);
+            }
             continue;
         }
 
@@ -347,6 +356,12 @@ function openaiMessagesToGemini(messages) {
         }
     }
 
+    // Join all system messages with separators to form a single systemInstruction.
+    // The main system prompt is always first; consciousness/context messages follow.
+    const systemInstruction = systemParts.length > 0
+        ? systemParts.join('\n\n---\n\n')
+        : undefined;
+
     return { systemInstruction, contents: merged };
 }
 
@@ -426,7 +441,7 @@ export function transformRequestBody(provider, body) {
             // Keep it for models that might support it (o1, etc.)
             break;
 
-        case AI_PROVIDERS.LOCAL:
+        case AI_PROVIDERS.LMSTUDIO:
         default:
             // Local servers (LMStudio) typically support all OpenAI params
             break;
@@ -519,8 +534,8 @@ export async function callProviderStream(requestBody, options = {}) {
     });
 
     if (!response.ok) {
-        const providerLabel = ctx.provider === AI_PROVIDERS.LOCAL
-            ? 'Local AI server (is LMStudio running?)'
+        const providerLabel = ctx.provider === AI_PROVIDERS.LMSTUDIO
+            ? 'LMStudio AI server (is LMStudio running?)'
             : `${ctx.provider} API`;
         throw new Error(`${providerLabel} Error: ${response.status} - ${response.statusText}`);
     }
@@ -651,8 +666,8 @@ async function callOpenAIREST(ctx, requestBody, signal) {
     });
 
     if (!response.ok) {
-        const providerLabel = ctx.provider === AI_PROVIDERS.LOCAL
-            ? 'Local AI server (is LMStudio running?)'
+        const providerLabel = ctx.provider === AI_PROVIDERS.LMSTUDIO
+            ? 'LMStudio AI server (is LMStudio running?)'
             : `${ctx.provider} API`;
         throw new Error(`${providerLabel} Error: ${response.status} - ${response.statusText}`);
     }
@@ -712,12 +727,16 @@ function openaiToolsToAnthropic(tools) {
  * Convert OpenAI messages to Anthropic format
  */
 function openaiMessagesToAnthropic(messages) {
-    let system = undefined;
+    // Collect ALL system messages and concatenate them (same fix as Gemini).
+    // Previously only the last system message survived, causing role confusion.
+    const systemParts = [];
     const anthropicMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
-            system = msg.content;
+            if (msg.content) {
+                systemParts.push(msg.content);
+            }
             continue;
         }
 
@@ -773,6 +792,10 @@ function openaiMessagesToAnthropic(messages) {
             continue;
         }
     }
+
+    const system = systemParts.length > 0
+        ? systemParts.join('\n\n---\n\n')
+        : undefined;
 
     return { system, messages: anthropicMessages };
 }
@@ -831,7 +854,7 @@ function anthropicResponseToOpenai(response) {
 export function getProviderLabel(model) {
     const ctx = createProviderContext(model);
     const labels = {
-        [AI_PROVIDERS.LOCAL]: 'Local',
+        [AI_PROVIDERS.LMSTUDIO]: 'LMStudio',
         [AI_PROVIDERS.OPENAI]: 'OpenAI',
         [AI_PROVIDERS.GEMINI]: 'Gemini',
     };

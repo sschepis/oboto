@@ -47,5 +47,23 @@ export const SKILL_TOOLS = [
                 required: ["skill_name", "task"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "add_npm_skill",
+            description: "Add one or more npm packages as skills to the workspace. This will install the packages and make their documentation available as skills.",
+            parameters: {
+                type: "object",
+                properties: {
+                    packages: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "List of npm package names to add as skills"
+                    }
+                },
+                required: ["packages"]
+            }
+        }
     }
 ];

@@ -314,15 +314,15 @@ export class FlowManager {
                 manifest = "Manifest not available.";
             }
 
-            const prompt = `You are a project manager for a software project.
-Context: A developer just performed the action: "${action}".
+            const prompt = `Generate a 1-2 sentence project status update. Start with "Status: ". No markdown.
+
+Action: "${action}"
 Details: ${details}
 
-Current Project Manifest Summary:
-${manifest.substring(0, 2000)}... (truncated)
+Manifest:
+${manifest.substring(0, 2000)}
 
-Task: Generate a concise, natural language status update (1-2 sentences) summarizing the current state of the project and the immediate next step.
-Format: Just the text, no markdown headers. Start with "Status: ".`;
+Include: current state + immediate next step.`;
 
             const status = await assistant.run(prompt);
             consoleStyler.log('system', status);

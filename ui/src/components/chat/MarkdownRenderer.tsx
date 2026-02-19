@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import HtmlSandbox from '../features/HtmlSandbox';
 import { Copy, Check } from 'lucide-react';
+import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 
 /**
  * Renders markdown content with:
@@ -208,11 +209,12 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({ content }) => 
           return <em className="italic text-zinc-300">{children}</em>;
         },
 
-        // Images
+        // Images — resolve backend URLs for generated images
         img({ src, alt }) {
+          const resolvedSrc = resolveBackendUrl(src);
           return (
             <div className="my-4 rounded-xl overflow-hidden border border-zinc-800/30 shadow-md shadow-black/10">
-              <img src={src} alt={alt || ''} className="max-w-full h-auto" />
+              <img src={resolvedSrc} alt={alt || ''} className="max-w-full h-auto" />
               {alt && <p className="px-4 py-2 text-[10px] text-zinc-500 italic bg-zinc-900/20">{alt}</p>}
             </div>
           );

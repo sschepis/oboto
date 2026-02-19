@@ -49,10 +49,16 @@
     "build:ui": "cd ui && pnpm install && pnpm run build",
     "dev:ui": "cd ui && pnpm run dev",
     "build:all": "pnpm install && pnpm run build:ui",
-    "test": "jest",
+    "tray": "cd tray-app && npx electron .",
+    "tray:dev": "cd tray-app && npx electron . --dev",
+    "tray:install": "cd tray-app && npm install",
+    "tray:build:mac": "cd tray-app && npx electron-builder --mac",
+    "tray:build:win": "cd tray-app && npx electron-builder --win",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "prepublishOnly": "node -e \"const p=require('./package.json'); if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}\" && node -e \"import('./src/lib/index.mjs').then(()=>console.log('Library entry OK')).catch(e=>{console.error('Library entry FAILED:',e.message);process.exit(1)})\""
   },
   "dependencies": {
+    "@aleph-ai/tinyaleph": "^1.7.2",
     "@anthropic-ai/vertex-sdk": "^0.14.3",
     "@google/genai": "^1.41.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -73,6 +79,7 @@
     "puppeteer": "^24.37.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "sharp": "^0.34.5",
     "vm2": "^3.10.4",
     "ws": "^8.19.0",
     "zod": "=3.25.76"

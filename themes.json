@@ -62,5 +62,53 @@
     "reasoning": ["#00ffff", "#39ff14"],
     "quality": ["#fff200", "#ffff00"],
     "progress": ["#00ff41", "#00d4aa"]
+  },
+  "solarized": {
+    "primary": ["#268bd2", "#2aa198"],
+    "secondary": ["#6c71c4", "#d33682"],
+    "success": ["#859900", "#2aa198"],
+    "warning": ["#b58900", "#cb4b16"],
+    "error": ["#dc322f", "#d33682"],
+    "info": ["#268bd2", "#2aa198"],
+    "system": ["#657b83", "#586e75"],
+    "accent": ["#cb4b16", "#dc322f"],
+    "todo": ["#6c71c4", "#268bd2"],
+    "workspace": ["#fdf6e3", "#eee8d5"],
+    "tools": ["#2aa198", "#268bd2"],
+    "reasoning": ["#d33682", "#6c71c4"],
+    "quality": ["#b58900", "#859900"],
+    "progress": ["#859900", "#2aa198"]
+  },
+  "mermaid": {
+    "primary": ["#ff7eb3", "#7afcff"],
+    "secondary": ["#8e44ad", "#3498db"],
+    "success": ["#2ecc71", "#1abc9c"],
+    "warning": ["#f1c40f", "#e67e22"],
+    "error": ["#e74c3c", "#c0392b"],
+    "info": ["#3498db", "#2980b9"],
+    "system": ["#95a5a6", "#7f8c8d"],
+    "accent": ["#ff9ff3", "#f368e0"],
+    "todo": ["#9b59b6", "#8e44ad"],
+    "workspace": ["#e0f7fa", "#e1f5fe"],
+    "tools": ["#1abc9c", "#16a085"],
+    "reasoning": ["#fd79a8", "#e84393"],
+    "quality": ["#f39c12", "#d35400"],
+    "progress": ["#00d2d3", "#48dbfb"]
+  },
+  "quiet": {
+    "primary": ["#546e7a", "#78909c"],
+    "secondary": ["#b0bec5", "#cfd8dc"],
+    "success": ["#81c784", "#a5d6a7"],
+    "warning": ["#fff176", "#fff59d"],
+    "error": ["#e57373", "#ef9a9a"],
+    "info": ["#64b5f6", "#90caf9"],
+    "system": ["#9e9e9e", "#bdbdbd"],
+    "accent": ["#7986cb", "#9fa8da"],
+    "todo": ["#90a4ae", "#b0bec5"],
+    "workspace": ["#ffffff", "#f5f5f5"],
+    "tools": ["#80cbc4", "#b2dfdb"],
+    "reasoning": ["#ba68c8", "#ce93d8"],
+    "quality": ["#dce775", "#e6ee9c"],
+    "progress": ["#4db6ac", "#80cbc4"]
   }
 }

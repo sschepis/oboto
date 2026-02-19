@@ -473,6 +473,42 @@ export class AgentLoopController {
             }
         } catch (e) { /* ignore */ }
 
+        // ── Consciousness State ──
+        try {
+            if (this.assistant.consciousness) {
+                const snap = this.assistant.consciousness.getSnapshot();
+
+                // Known Facts / Recent Inferences
+                if (snap.factStats?.totalFacts > 0) {
+                    sections.push('## Known Facts');
+                    sections.push(`- Total facts: ${snap.factStats.totalFacts}`);
+                    if (snap.recentInferences.length > 0) {
+                        sections.push('- Recent inferences:');
+                        for (const inf of snap.recentInferences) {
+                            sections.push(`  • ${inf.subject}: ${inf.content}`);
+                        }
+                    }
+                    sections.push('');
+                }
+
+                // Current Inner State
+                if (snap.somaticSummary) {
+                    sections.push('## Current Inner State');
+                    sections.push(snap.somaticSummary);
+                    sections.push('');
+                }
+
+                // Archetype Field
+                if (snap.archetypes.length > 0) {
+                    sections.push('## Archetype Field');
+                    for (const a of snap.archetypes.slice(0, 3)) {
+                        sections.push(`- ${a.name} (${(a.activation * 100).toFixed(0)}%): ${a.description || a.category}`);
+                    }
+                    sections.push('');
+                }
+            }
+        } catch (e) { /* ignore */ }
+
         // ── Previous answers to blocking questions ──
         try {
             const answers = this._getRecentAnswers();
@@ -487,26 +523,23 @@ export class AgentLoopController {
         } catch (e) { /* ignore */ }
 
         // ── Directive ──
-        sections.push('## Your Directive');
-        sections.push('You are running autonomously as a background agent tick.');
-        sections.push('Follow your persona\'s OODA loop: Observe the current state, Orient on priorities, Decide on the most impactful action, and Act.');
+        sections.push('## Directive');
+        sections.push('1. OBSERVE the current state above.');
+        sections.push('2. ORIENT on highest-priority action.');
+        sections.push('3. DECIDE on one impactful action.');
+        sections.push('4. ACT — execute it.');
         sections.push('');
-        sections.push('## Communication Protocol');
-        sections.push('Your final response text will be injected directly into the user\'s main chat conversation as a message from the "Background Agent".');
-        sections.push('Write your response AS IF you are speaking directly to the user. Be concise, clear, and actionable.');
-        sections.push('If you have findings, updates, or recommendations, present them conversationally.');
+        sections.push('## Output');
+        sections.push('Your response is injected into the user\'s chat as "Background Agent". Write directly to the user. Be concise and actionable.');
         sections.push('');
-        sections.push('### Blocking Questions');
-        sections.push('If you ABSOLUTELY NEED information from the user to proceed with a critical task, use the `ask_blocking_question` tool.');
-        sections.push('This will pause the agent loop and present your question in the user\'s chat. The loop resumes when they answer.');
-        sections.push('ONLY ask blocking questions when you truly cannot proceed without the answer. Prefer to make reasonable assumptions.');
+        sections.push('## Blocking Questions');
+        sections.push('Use `ask_blocking_question` ONLY when you CANNOT proceed without user input. Prefer reasonable assumptions.');
         sections.push('');
 
         if (this.isForegroundBusy) {
-            sections.push('⚠️ The user is currently actively chatting in the foreground.');
-            sections.push('LIMIT yourself to read-only observation and planning. Do NOT write files or create surfaces that could conflict with the foreground conversation.');
+            sections.push('⚠️ USER IS ACTIVE in foreground. READ-ONLY mode — do NOT write files or create surfaces.');
         } else {
-            sections.push('The user is idle. You may take autonomous action — create surfaces, delegate to OpenClaw, file tasks, update plans, etc.');
+            sections.push('User is idle. You MAY take autonomous action — create surfaces, file tasks, update plans.');
         }
 
         return sections.join('\n');

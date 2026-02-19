@@ -1,5 +1,45 @@
 export type Role = 'user' | 'ai';
-export type MessageType = 'text' | 'image' | 'table' | 'log' | 'tool-call' | 'visualization' | 'html-sandbox' | 'survey' | 'agent-execution' | 'approval' | 'background-tasks' | 'agent-handoff' | 'code-diff' | 'telemetry' | 'search' | 'terminal' | 'secret-request' | 'test-results' | 'browser-preview';
+export type MessageType = 'text' | 'image' | 'table' | 'log' | 'tool-call' | 'visualization' | 'html-sandbox' | 'survey' | 'agent-execution' | 'approval' | 'background-tasks' | 'agent-handoff' | 'code-diff' | 'telemetry' | 'search' | 'terminal' | 'secret-request' | 'test-results' | 'browser-preview' | 'embed';
+
+/**
+ * Supported embedded object types for inline rendering in chat.
+ * - youtube: Embeds a YouTube video player
+ * - video: Embeds a generic video via <video> tag (mp4, webm, etc.)
+ * - audio: Embeds an audio player
+ * - iframe: Embeds arbitrary URL in a sandboxed iframe
+ * - map: Embeds Google Maps / OpenStreetMap
+ * - tweet: Embeds a Twitter/X post
+ * - codepen: Embeds a CodePen
+ * - spotify: Embeds a Spotify player
+ * - figma: Embeds a Figma file
+ * - gist: Embeds a GitHub Gist
+ * - loom: Embeds a Loom video
+ * - generic: Catch-all for any OEmbed-compatible URL
+ */
+export type EmbedType = 'youtube' | 'video' | 'audio' | 'iframe' | 'map' | 'tweet' | 'codepen' | 'spotify' | 'figma' | 'gist' | 'loom' | 'generic';
+
+export interface EmbeddedObject {
+  /** The embed provider type */
+  embedType: EmbedType;
+  /** Source URL (YouTube URL, video URL, iframe URL, etc.) */
+  url: string;
+  /** Display title */
+  title?: string;
+  /** Optional description / caption shown below the embed */
+  description?: string;
+  /** Width in px or CSS string (default: '100%') */
+  width?: string | number;
+  /** Height in px or CSS string (default: auto-calculated per type) */
+  height?: string | number;
+  /** Thumbnail URL for preview before loading */
+  thumbnailUrl?: string;
+  /** Start time in seconds (for video/audio) */
+  startTime?: number;
+  /** Whether to autoplay (default: false) */
+  autoplay?: boolean;
+  /** Extra provider-specific metadata */
+  meta?: Record<string, unknown>;
+}
 
 export interface Step {
   label: string;
@@ -116,12 +156,19 @@ export interface Message {
     logs: string[];
   };
 
+  // For Embedded Objects (type === 'embed')
+  embed?: EmbeddedObject;
+
   // For grouped tool calls attached to a text message
   toolCalls?: Array<{
       toolName: string;
       args: unknown;
       result?: unknown;
+      status?: 'running' | 'completed';
   }>;
+
+  // Marks a response message still being built (live streaming)
+  _pending?: boolean;
 }
 
 export interface Command {

@@ -29,12 +29,21 @@ export async function runStreamHandler(context, userInput, onChunk, options = {}
         model, // Default model (fallback)
         temperature,
         allTools,
-        promptRouter // New: Prompt Router injection
+        promptRouter, // New: Prompt Router injection
+        symbolicContinuity // Symbolic Continuity Manager
     } = context;
 
     // Check for cancellation before starting
     if (signal?.aborted) {
         throw new DOMException('Agent execution was cancelled', 'AbortError');
+    }
+
+    // ── Symbolic Continuity Injection ──
+    if (symbolicContinuity) {
+        const continuityMsg = symbolicContinuity.renderInjectionMessage();
+        if (continuityMsg) {
+            historyManager.addMessage('system', continuityMsg);
+        }
     }
 
     historyManager.addMessage('user', userInput);
@@ -142,6 +151,17 @@ export async function runStreamHandler(context, userInput, onChunk, options = {}
                 const content = message.content || '';
                 onChunk(content);
                 historyManager.addMessage('assistant', content);
+
+                // ── Symbolic Continuity Generation ──
+                if (symbolicContinuity && symbolicContinuity.shouldGenerate(userInput, content, 0)) {
+                    // Count tool calls from this streaming run
+                    const streamHistory = historyManager.getHistory();
+                    const lastUserIdx = streamHistory.map(m => m.role).lastIndexOf('user');
+                    const turnMsgs = lastUserIdx >= 0 ? streamHistory.slice(lastUserIdx) : [];
+                    const tcCount = turnMsgs.filter(m => m.tool_calls).length;
+                    await symbolicContinuity.generateSignature(userInput, content, tcCount);
+                }
+
                 return content;
             }
         }

@@ -23,6 +23,8 @@ export const TASK_ROLES = {
     SUMMARIZER: 'summarizer',
     /** Ghost text / inline code completion */
     CODE_COMPLETION: 'code_completion',
+    /** Fast feasibility check / triage */
+    TRIAGE: 'triage',
 };
 
 /**
@@ -59,6 +61,11 @@ const ROLE_METADATA = {
         description: 'Inline ghost text / code completion',
         requiresToolCalling: false,
     },
+    [TASK_ROLES.TRIAGE]: {
+        label: 'Triage / Feasibility',
+        description: 'Fast check for request feasibility and completeness',
+        requiresToolCalling: false,
+    },
 };
 
 export class PromptRouter {
@@ -74,6 +81,7 @@ export class PromptRouter {
             [TASK_ROLES.REASONING_LOW]: config.routing?.reasoning_low || config.ai.model,
             [TASK_ROLES.SUMMARIZER]: config.routing?.summarizer || config.ai.model,
             [TASK_ROLES.CODE_COMPLETION]: config.routing?.code_completion || config.ai.model,
+            [TASK_ROLES.TRIAGE]: config.routing?.triage || config.ai.model,
             ...routingOverrides,
         };
     }

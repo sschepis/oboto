@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Terminal, Copy, Trash2, RefreshCw, Pencil, Check, X } from 'lucide-react';
+import { Bot, Terminal, Copy, Trash2, RefreshCw, Pencil, Check, X, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolCall from '../features/ToolCall';
 import NeuralVisualization from '../features/NeuralVisualization';
@@ -16,7 +16,9 @@ import InteractiveTerminal from '../features/InteractiveTerminal';
 import SecretVaultBlock from '../features/SecretVaultBlock';
 import TestResultsPanel from '../features/TestResultsPanel';
 import BrowserPreview from '../features/BrowserPreview';
+import EmbeddedObject from '../features/EmbeddedObject';
 import { wsService } from '../../services/wsService';
+import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 import type { Message } from '../../types';
 
 export interface MessageActions {
@@ -33,6 +35,10 @@ export interface MessageActions {
 interface MessageItemProps {
   message: Message;
   actions?: MessageActions;
+  /** Label shown for user messages (defaults to "You") */
+  userLabel?: string;
+  /** Label shown for agent messages (defaults to "Nexus") */
+  agentLabel?: string;
 }
 
 /** Small icon button used in the action toolbar */
@@ -56,7 +62,7 @@ const ActionBtn: React.FC<{
   </button>
 );
 
-const MessageItem: React.FC<MessageItemProps> = ({ message, actions }) => {
+const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel = 'You', agentLabel = 'Nexus' }) => {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content || '');
@@ -126,7 +132,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions }) => {
       <div className={`max-w-[85%] space-y-3 ${isUser ? 'items-end flex flex-col' : ''}`}>
         <div className="flex items-center gap-3 px-1">
           <span className="text-[9px] font-black uppercase text-zinc-600 tracking-[0.15em]">
-            {isUser ? 'You' : 'Nexus'}
+            {isUser ? userLabel : agentLabel}
           </span>
           <span className="text-[9px] text-zinc-700/60 font-mono">{message.timestamp}</span>
         </div>
@@ -146,23 +152,39 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions }) => {
               <span className="whitespace-pre-wrap">{message.content}</span>
             ) : (
               <div className="space-y-4">
-                <MarkdownRenderer content={message.content || ''} />
-                
-                {/* Render attached tool calls inline */}
+                {/* Render tool calls FIRST (above text content) */}
                 {message.toolCalls && message.toolCalls.length > 0 && (
-                  <div className="pt-2 space-y-2 border-t border-zinc-800/30">
+                  <div className="space-y-2">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2 mb-2">
                       <Terminal size={10} /> Tool Calls
                     </div>
                     {message.toolCalls.map((tc, idx) => (
-                      <ToolCall 
-                        key={idx} 
-                        toolName={tc.toolName} 
-                        args={tc.args} 
-                        result={tc.result} 
+                      <ToolCall
+                        key={idx}
+                        toolName={tc.toolName}
+                        args={tc.args}
+                        result={tc.result}
                       />
                     ))}
                   </div>
+                )}
+                
+                {/* Pending indicator while waiting for response text */}
+                {message._pending && (!message.content || message.content.trim() === '') && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/30">
+                    <Loader2 size={14} className="animate-spin text-indigo-400" />
+                    <span className="text-[12px] text-zinc-500">Working...</span>
+                  </div>
+                )}
+
+                {/* Then render the text content */}
+                {message.content && message.content.trim() !== '' && (
+                  <>
+                    {message.toolCalls && message.toolCalls.length > 0 && (
+                      <div className="border-t border-zinc-800/30" />
+                    )}
+                    <MarkdownRenderer content={message.content} />
+                  </>
                 )}
               </div>
             )}
@@ -248,6 +270,11 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions }) => {
            />
         )}
 
+        {/* Embedded objects (YouTube, Spotify, etc.) */}
+        {message.type === 'embed' && message.embed && (
+           <EmbeddedObject embed={message.embed} />
+        )}
+
         {/* Background tasks */}
         {message.type === 'background-tasks' && (
            <BackgroundSubstrate tasks={message.tasks || []} />
@@ -274,7 +301,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions }) => {
         {/* Images */}
         {message.type === 'image' && (
           <div className="w-full bg-[#111111] border border-zinc-800/40 rounded-2xl overflow-hidden shadow-lg shadow-black/20 transition-all duration-300 hover:border-zinc-700/50">
-            <img src={message.url} className="w-full h-auto max-h-[400px] object-cover" alt={message.caption} />
+            <img src={resolveBackendUrl(message.url)} className="w-full h-auto max-h-[400px] object-cover" alt={message.caption} />
             <p className="p-4 text-xs italic text-zinc-500">{message.caption}</p>
           </div>
         )}

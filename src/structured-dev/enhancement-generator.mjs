@@ -61,24 +61,12 @@ ${JSON.stringify(relevantNodes.slice(0, 50), null, 2)}
             try {
                 const agent = new this.AiAssistant(this.workspaceRoot);
                 
-                const prompt = `
-Analyze the following project context and suggest a list of enhancements.
-Focus on category: ${category}.
+                const prompt = `Generate 3-5 high-impact ${category} enhancements for this project.
 
-Context:
 ${context}
 
-Task:
-Generate a JSON object with a key "enhancements" containing a list of 3-5 high-impact enhancements.
-Each enhancement must have:
-- id: string (unique)
-- title: string
-- description: string (detailed)
-- type: 'refactor' | 'feature' | 'security' | 'performance'
-- priority: 'high' | 'medium' | 'low'
-- affected_files: array of strings (inferred from context)
-
-Output ONLY the JSON object.
+Return JSON ONLY:
+{"enhancements": [{"id": "string", "title": "string", "description": "string", "type": "refactor|feature|security|performance", "priority": "high|medium|low", "affected_files": ["string"]}]}
 `;
                 const response = await agent.run(prompt, { responseFormat: { type: "json_object" } });
                 
@@ -144,23 +132,18 @@ Output ONLY the JSON object.
             try {
                 const agent = new this.AiAssistant(this.workspaceRoot);
                 
-                const prompt = `
-Task: Implement the following enhancement.
+                const prompt = `Implement this enhancement:
 
-Enhancement:
 Title: ${enhancement.title}
 Description: ${enhancement.description}
 Type: ${enhancement.type}
 Files: ${enhancement.affected_files ? enhancement.affected_files.join(', ') : 'Unknown'}
 
-Instructions:
-1. Analyze the affected files.
-2. Implement the changes safely.
-3. Verify the changes (run tests if possible or check syntax).
-4. Report completion.
-
-Action: Implement this now.
-`;
+STEPS:
+1. Read affected files.
+2. Implement changes.
+3. Verify (run tests or check syntax).
+4. Report what changed.`;
                 const response = await agent.run(prompt);
                 
                 results.push({

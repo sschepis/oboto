@@ -183,6 +183,36 @@ class WSService {
     }
   }
 
+  // --- Setup Wizard methods ---
+
+  getSetupStatus() {
+    this.sendMessage('get-setup-status');
+  }
+
+  completeSetup(config: { provider: string; openclawEnabled: boolean }) {
+    this.sendMessage('complete-setup', config);
+  }
+
+  validateApiKey(provider: string, key: string, endpoint?: string): Promise<{ valid: boolean; error?: string }> {
+    return new Promise((resolve) => {
+        const unsub = this.on('api-key-validation', (payload: unknown) => {
+            unsub();
+            resolve(payload as { valid: boolean; error?: string });
+        });
+        // Timeout after 10s
+        setTimeout(() => { unsub(); resolve({ valid: false, error: 'Timeout' }); }, 10000);
+        this.sendMessage('validate-api-key', { provider, key, endpoint });
+    });
+  }
+
+  checkOpenClawPrereqs() {
+    this.sendMessage('openclaw-check-prereqs');
+  }
+
+  installOpenClaw(path: string, method: 'source' | 'npm' | 'docker' = 'source', resumeFrom?: string) {
+    this.sendMessage('openclaw-install', { path, method, resumeFrom });
+  }
+
   getSurfaces() {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'get-surfaces' }));
@@ -337,6 +367,60 @@ class WSService {
   agentLoopAnswer(questionId: string, answer: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'agent-loop-answer', payload: { questionId, answer } }));
+    }
+  }
+
+  // --- Skills Management methods ---
+
+  getSkills() {
+    this.sendMessage('get-skills');
+  }
+
+  searchClawHub(query: string) {
+    this.sendMessage('search-clawhub', { query });
+  }
+
+  installClawHubSkill(slug: string, version?: string) {
+    this.sendMessage('install-clawhub-skill', { slug, version });
+  }
+
+  installNpmSkill(packageName: string) {
+    this.sendMessage('install-npm-skill', { packageName });
+  }
+
+  uninstallSkill(name: string) {
+    this.sendMessage('uninstall-skill', { name });
+  }
+
+  // --- Conversation Management methods ---
+
+  listConversations() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'list-conversations' }));
+    }
+  }
+
+  createConversation(name: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'create-conversation', payload: { name } }));
+    }
+  }
+
+  switchConversation(name: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'switch-conversation', payload: { name } }));
+    }
+  }
+
+  deleteConversation(name: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'delete-conversation', payload: { name } }));
+    }
+  }
+
+  renameConversation(oldName: string, newName: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'rename-conversation', payload: { oldName, newName } }));
     }
   }
 

@@ -92,12 +92,19 @@ export class QualityGate {
                 
                 // Keep all tool calls and results, but remove the final poor-quality response
                 // We do this logic here to return the clean state for the caller
+                // CRITICAL FIX: Sanitize assistant messages with tool calls to remove hallucinated text instructions
                 const preservedHistory = history.filter(msg =>
                     msg.role === 'system' ||
                     msg.role === 'tool' ||
                     (msg.role === 'assistant' && msg.tool_calls) ||
                     msg.role === 'user'
-                );
+                ).map(msg => {
+                    if (msg.role === 'assistant' && msg.tool_calls) {
+                         // Return a copy with empty content to prevent instruction leakage/hallucination loops
+                         return { ...msg, content: null };
+                    }
+                    return msg;
+                });
                 
                 return {
                     improvedPrompt,

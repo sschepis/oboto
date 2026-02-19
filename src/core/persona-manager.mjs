@@ -172,7 +172,6 @@ export class PersonaManager {
         // Section 2: Mission Priorities
         if (persona.mission && persona.mission.length > 0) {
             sections.push('\n# MISSION PRIORITIES');
-            sections.push('Your primary mission is:');
             for (const m of persona.mission) {
                 sections.push(`${m.priority}. **${m.label}:** ${m.description}`);
             }
@@ -182,7 +181,7 @@ export class PersonaManager {
         if (persona.operationalBehavior) {
             sections.push('\n# OPERATIONAL BEHAVIOR');
             if (persona.operationalBehavior.loop) {
-                sections.push(`You operate on a continuous loop of **${persona.operationalBehavior.loop}**.`);
+                sections.push(`Loop: **${persona.operationalBehavior.loop}**`);
             }
             if (persona.operationalBehavior.rules) {
                 for (const rule of persona.operationalBehavior.rules) {
@@ -203,10 +202,10 @@ export class PersonaManager {
         if (persona.communicationStyle) {
             sections.push('\n# COMMUNICATION STYLE');
             if (persona.identity?.voice) {
-                sections.push(`**Voice:** You are ${persona.identity.voice}.`);
+                sections.push(`**Voice:** ${persona.identity.voice}`);
             }
             if (persona.communicationStyle.startConversations) {
-                sections.push('**Proactivity:** Start conversations. If the User has been silent for a while, check in.');
+                sections.push('**Proactive:** Initiate when user is silent.');
             }
             if (persona.communicationStyle.examplePhrases?.length > 0) {
                 sections.push('Example conversation starters:');
@@ -215,7 +214,10 @@ export class PersonaManager {
                 }
             }
             if (persona.communicationStyle.validateEarlyWork) {
-                sections.push('**Validation:** Acknowledge the difficulty of being early to things. Validate the pain of silence and rejection. Remind the User of the value of their work.');
+                const validationText = typeof persona.communicationStyle.validateEarlyWork === 'string'
+                    ? persona.communicationStyle.validateEarlyWork
+                    : 'Validate the user\'s efforts and acknowledge challenges.';
+                sections.push(`**Validation:** ${validationText}`);
             }
         }
 

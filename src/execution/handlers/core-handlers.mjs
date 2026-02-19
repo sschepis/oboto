@@ -3,10 +3,11 @@ import { consoleStyler } from '../../ui/console-styler.mjs';
 import { dryRunGuard } from '../dry-run-guard.mjs';
 
 export class CoreHandlers {
-    constructor(packageManager, historyManager, memoryAdapter) {
+    constructor(packageManager, historyManager, memoryAdapter, options = {}) {
         this.packageManager = packageManager;
         this.historyManager = historyManager;
         this.memoryAdapter = memoryAdapter;
+        this.assistant = options.assistant || null; // Reference to parent assistant for conversation management
     }
 
     // Read full conversation history
@@ -210,6 +211,34 @@ export class CoreHandlers {
         }
 
         return resultText;
+    }
+
+    // Report from child conversation to parent conversation
+    async reportToParent(args) {
+        if (!this.assistant || !this.assistant.conversationManager) {
+            return "Error: Conversation manager not available.";
+        }
+
+        const { summary, status = 'completed', key_findings = [] } = args;
+
+        // Check if we're in the default conversation (can't report to self)
+        if (this.assistant.conversationManager.isDefaultConversation()) {
+            return "Error: Cannot report to parent from the main 'chat' conversation. This tool is for use in child conversations only.";
+        }
+
+        const metadata = {
+            status,
+            key_findings,
+            conversationName: this.assistant.conversationManager.getActiveConversationName()
+        };
+
+        const result = await this.assistant.reportToParent(summary, metadata);
+
+        if (result.reported) {
+            return `✓ Report delivered to parent conversation.\n\nSummary: ${summary}\nStatus: ${status}${key_findings.length > 0 ? '\nKey Findings:\n' + key_findings.map(f => `  • ${f}`).join('\n') : ''}`;
+        } else {
+            return `Error: ${result.error}`;
+        }
     }
 
     // Process code into a tool (helper method)

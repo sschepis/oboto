@@ -1,4 +1,4 @@
-import React, { useMemo, Suspense, useState, useCallback } from 'react';
+import React, { useMemo, Suspense, useState, useCallback, useEffect } from 'react';
 import { transform } from 'sucrase';
 import { Loader2, RefreshCw, AlertTriangle, Pin, Trash2, LayoutGrid } from 'lucide-react';
 import type { SurfaceData, SurfaceComponent } from '../../hooks/useSurface';
@@ -131,28 +131,53 @@ const surfaceApi = {
   }
 };
 
+/**
+ * Module shim for surface component sandbox.
+ * When the AI generates `import X from 'react'` or similar,
+ * sucrase converts it to `var X = require('react')`.
+ * This shim maps known module names to pre-injected globals.
+ */
+const sandboxModules: Record<string, unknown> = {
+  react: React,
+  React: React,
+};
+
+const sandboxRequire = (moduleName: string): unknown => {
+  const mod = sandboxModules[moduleName];
+  if (mod) return mod;
+  // Return an empty object for unknown modules to avoid hard crashes
+  console.warn(`[Surface] Unknown import: "${moduleName}" — surface components should not use imports. All UI.* and React hooks are globally available.`);
+  return {};
+};
+
 const compileComponent = (source: string, componentName: string): React.ComponentType<unknown> | null => {
   try {
-    const { code } = transform(source, {
-      transforms: ['jsx', 'typescript'],
+    // Strip pure-ESM import lines that can't be transpiled
+    // (e.g. `import './styles.css'` or `import type { X } from 'y'`)
+    const cleanedSource = source.replace(/^\s*import\s+type\s+\{[^}]*\}\s+from\s+['"][^'"]*['"];?\s*$/gm, '');
+
+    const { code } = transform(cleanedSource, {
+      transforms: ['jsx', 'typescript', 'imports'],
       production: true,
     });
 
     // Create module scope
     const moduleFactory = new Function(
       'React', 'useState', 'useEffect', 'useRef', 'useCallback', 'useMemo',
-      'surfaceApi', 'UI', 'exports',
+      'surfaceApi', 'UI', 'exports', 'require', 'module',
       code
     );
 
     const exports: { default?: React.ComponentType<unknown> } = {};
+    const module = { exports };
     
     moduleFactory(
       React, useState, React.useEffect, React.useRef, React.useCallback, useMemo,
-      surfaceApi, UI, exports
+      surfaceApi, UI, exports, sandboxRequire, module
     );
 
-    return exports.default || null;
+    // Support both `export default` (exports.default) and `module.exports`
+    return exports.default || (module.exports as { default?: React.ComponentType<unknown> }).default || null;
   } catch (err) {
     console.error(`Failed to compile component ${componentName}:`, err);
     throw err;
@@ -162,7 +187,8 @@ const compileComponent = (source: string, componentName: string): React.Componen
 const ComponentWrapper: React.FC<{ 
   component: SurfaceComponent; 
   source: string;
-}> = ({ component, source }) => {
+  surfaceId: string;
+}> = ({ component, source, surfaceId }) => {
   const { Component, error } = useMemo(() => {
     if (!source) return { Component: null, error: null };
     try {
@@ -172,6 +198,16 @@ const ComponentWrapper: React.FC<{
       return { Component: null, error: (err as Error).message };
     }
   }, [source, component.name]);
+
+  useEffect(() => {
+    if (error) {
+      wsService.sendMessage('surface-compilation-error', {
+        surfaceId,
+        componentName: component.name,
+        error
+      });
+    }
+  }, [error, component.name, surfaceId]);
 
   if (error) {
     return (
@@ -248,10 +284,11 @@ export const SurfaceRenderer: React.FC<SurfaceRendererProps> = ({
           key={comp.id}
           component={comp}
           source={sources[comp.id]}
+          surfaceId={surfaceId}
         />
       );
     });
-  }, [componentMap, sources]);
+  }, [componentMap, sources, surfaceId]);
 
   /** 
    * For flex-grid layout: collect component names that are NOT placed in any cell.
@@ -360,10 +397,11 @@ export const SurfaceRenderer: React.FC<SurfaceRendererProps> = ({
             <div className="border-t border-zinc-800/40 p-4 flex flex-col gap-4 overflow-y-auto max-h-[200px]">
               <div className="text-[10px] text-zinc-600 uppercase tracking-widest">Unplaced Components</div>
               {unplacedComponents.map(comp => (
-                <ComponentWrapper 
-                  key={comp.id} 
-                  component={comp} 
-                  source={sources[comp.id]} 
+                <ComponentWrapper
+                  key={comp.id}
+                  component={comp}
+                  source={sources[comp.id]}
+                  surfaceId={surfaceId}
                 />
               ))}
             </div>
@@ -380,10 +418,11 @@ export const SurfaceRenderer: React.FC<SurfaceRendererProps> = ({
             <div className="col-span-full" />
           ) : (
             data.components.map(comp => (
-              <ComponentWrapper 
-                key={comp.id} 
-                component={comp} 
-                source={sources[comp.id]} 
+              <ComponentWrapper
+                key={comp.id}
+                component={comp}
+                source={sources[comp.id]}
+                surfaceId={surfaceId}
               />
             ))
           )}

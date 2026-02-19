@@ -123,6 +123,7 @@
   --color-surface-raised: #111111;
   --color-surface-overlay: #191919;
   --color-border: rgba(63,63,70,0.2);
+  --color-border-rgb: 63,63,70;
   --color-text: #e4e4e7;
   --color-text-muted: #a1a1aa;
   --color-selection: rgba(99,102,241,0.3);
@@ -188,7 +189,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(63, 63, 70, 0.3);
+  background: rgba(var(--color-border-rgb), 0.3);
   border-radius: 999px;
   transition: background 0.2s;
 }
@@ -204,7 +205,7 @@ body {
   width: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(63, 63, 70, 0.2);
+  background: rgba(var(--color-border-rgb), 0.2);
   border-radius: 999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
@@ -251,7 +252,7 @@ button:active {
   background: rgba(9, 9, 11, 0.85);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(63, 63, 70, 0.2);
+  border: 1px solid var(--color-border);
 }
 
 .glass-surface-subtle {
@@ -262,14 +263,14 @@ button:active {
 
 .surface-glow {
   box-shadow:
-    0 0 0 1px rgba(63, 63, 70, 0.15),
+    0 0 0 1px rgba(var(--color-border-rgb), 0.15),
     0 1px 3px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .surface-glow-lg {
   box-shadow:
-    0 0 0 1px rgba(63, 63, 70, 0.1),
+    0 0 0 1px rgba(var(--color-border-rgb), 0.1),
     0 4px 16px rgba(0, 0, 0, 0.4),
     0 12px 48px rgba(0, 0, 0, 0.3);
 }
@@ -349,19 +350,137 @@ button:active {
 /* ═══════════════════════════════════════════════════════════════════
    Surface Component Dark Theme Defaults
    Forces dark-theme styling on dynamically rendered surface components.
+   AI-generated components often use light-mode Tailwind classes —
+   these overrides remap them to dark-theme equivalents.
    ═══════════════════════════════════════════════════════════════════ */
 .surface-component-scope {
-  color: #e4e4e7;        /* zinc-200 */
+  color: var(--color-text);
   background: transparent;
 }
 
+/* ── Remap light-mode background Tailwind utilities to dark theme ── */
+.surface-component-scope .bg-white {
+  background-color: var(--color-surface-raised) !important;
+}
+.surface-component-scope .bg-gray-50,
+.surface-component-scope .bg-slate-50,
+.surface-component-scope .bg-neutral-50,
+.surface-component-scope .bg-stone-50 {
+  background-color: var(--color-surface) !important;
+}
+.surface-component-scope .bg-gray-100,
+.surface-component-scope .bg-slate-100,
+.surface-component-scope .bg-neutral-100,
+.surface-component-scope .bg-stone-100 {
+  background-color: color-mix(in srgb, var(--color-surface) 70%, var(--color-surface-raised) 30%) !important;
+}
+.surface-component-scope .bg-gray-200,
+.surface-component-scope .bg-slate-200,
+.surface-component-scope .bg-neutral-200,
+.surface-component-scope .bg-stone-200 {
+  background-color: var(--color-surface-raised) !important;
+}
+.surface-component-scope .bg-gray-300,
+.surface-component-scope .bg-slate-300,
+.surface-component-scope .bg-neutral-300 {
+  background-color: var(--color-surface-overlay) !important;
+}
+.surface-component-scope .bg-gray-800,
+.surface-component-scope .bg-slate-800,
+.surface-component-scope .bg-neutral-800 {
+  background-color: var(--color-surface-raised) !important;
+}
+.surface-component-scope .bg-gray-900,
+.surface-component-scope .bg-slate-900,
+.surface-component-scope .bg-neutral-900 {
+  background-color: var(--color-surface) !important;
+}
+
+/* ── Remap light-mode text colors to dark theme ───────────────── */
+.surface-component-scope .text-gray-900,
+.surface-component-scope .text-slate-900,
+.surface-component-scope .text-neutral-900,
+.surface-component-scope .text-black {
+  color: var(--color-text) !important;
+}
+.surface-component-scope .text-gray-800,
+.surface-component-scope .text-slate-800,
+.surface-component-scope .text-neutral-800 {
+  color: var(--color-text) !important;
+}
+.surface-component-scope .text-gray-700,
+.surface-component-scope .text-slate-700,
+.surface-component-scope .text-neutral-700 {
+  color: color-mix(in srgb, var(--color-text) 80%, var(--color-text-muted) 20%) !important;
+}
+.surface-component-scope .text-gray-600,
+.surface-component-scope .text-slate-600,
+.surface-component-scope .text-neutral-600 {
+  color: color-mix(in srgb, var(--color-text) 60%, var(--color-text-muted) 40%) !important;
+}
+.surface-component-scope .text-gray-500,
+.surface-component-scope .text-slate-500,
+.surface-component-scope .text-neutral-500 {
+  color: var(--color-text-muted) !important;
+}
+.surface-component-scope .text-gray-400,
+.surface-component-scope .text-slate-400,
+.surface-component-scope .text-neutral-400 {
+  color: color-mix(in srgb, var(--color-text-muted) 80%, var(--color-surface-overlay) 20%) !important;
+}
+.surface-component-scope .text-white {
+  color: var(--color-text) !important;
+}
+
+/* ── Remap light-mode border colors ───────────────────────────── */
+.surface-component-scope .border-gray-100,
+.surface-component-scope .border-slate-100,
+.surface-component-scope .border-neutral-100 {
+  border-color: var(--color-border) !important;
+}
+.surface-component-scope .border-gray-200,
+.surface-component-scope .border-slate-200,
+.surface-component-scope .border-neutral-200 {
+  border-color: var(--color-border) !important;
+}
+.surface-component-scope .border-gray-300,
+.surface-component-scope .border-slate-300,
+.surface-component-scope .border-neutral-300 {
+  border-color: color-mix(in srgb, var(--color-border) 80%, var(--color-text-muted) 20%) !important;
+}
+
+/* ── Remap light-mode divide colors ───────────────────────────── */
+.surface-component-scope .divide-gray-100 > * + *,
+.surface-component-scope .divide-gray-200 > * + *,
+.surface-component-scope .divide-slate-100 > * + *,
+.surface-component-scope .divide-slate-200 > * + * {
+  border-color: var(--color-border) !important;
+}
+
+/* ── Remap common shadow utilities to dark-appropriate values ── */
+.surface-component-scope .shadow,
+.surface-component-scope .shadow-md,
+.surface-component-scope .shadow-lg,
+.surface-component-scope .shadow-xl,
+.surface-component-scope .shadow-2xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ── Remap light-mode ring colors ─────────────────────────────── */
+.surface-component-scope .ring-gray-200,
+.surface-component-scope .ring-slate-200,
+.surface-component-scope .ring-neutral-200 {
+  --tw-ring-color: var(--color-border) !important;
+}
+
+/* ── Base HTML element overrides ───────────────────────────────── */
 .surface-component-scope h1,
 .surface-component-scope h2,
 .surface-component-scope h3,
 .surface-component-scope h4,
 .surface-component-scope h5,
 .surface-component-scope h6 {
-  color: #f4f4f5;        /* zinc-100 */
+  color: var(--color-text);
 }
 
 .surface-component-scope p,
@@ -370,7 +489,7 @@ button:active {
 .surface-component-scope td,
 .surface-component-scope th,
 .surface-component-scope label {
-  color: #a1a1aa;        /* zinc-400 */
+  color: var(--color-text-muted);
 }
 
 .surface-component-scope a {
@@ -380,9 +499,9 @@ button:active {
 .surface-component-scope input,
 .surface-component-scope textarea,
 .surface-component-scope select {
-  background: rgba(24, 24, 27, 0.8);  /* zinc-900/80 */
-  border: 1px solid rgba(63, 63, 70, 0.5);
-  color: #e4e4e7;
+  background: color-mix(in srgb, var(--color-surface-raised) 80%, transparent 20%);
+  border: 1px solid rgba(var(--color-border-rgb), 0.5);
+  color: var(--color-text);
   border-radius: 6px;
   padding: 6px 10px;
 }
@@ -395,17 +514,17 @@ button:active {
 }
 
 .surface-component-scope button {
-  background: rgba(39, 39, 42, 0.8);  /* zinc-800/80 */
-  border: 1px solid rgba(63, 63, 70, 0.4);
-  color: #e4e4e7;
+  background: color-mix(in srgb, var(--color-surface-overlay) 80%, transparent 20%);
+  border: 1px solid rgba(var(--color-border-rgb), 0.4);
+  color: var(--color-text);
   border-radius: 6px;
   padding: 6px 14px;
   cursor: pointer;
 }
 
 .surface-component-scope button:hover {
-  background: rgba(63, 63, 70, 0.6);
-  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(var(--color-border-rgb), 0.6);
+  border-color: rgba(var(--color-primary-rgb), 0.3);
 }
 
 .surface-component-scope table {
@@ -414,34 +533,34 @@ button:active {
 }
 
 .surface-component-scope th {
-  border-bottom: 1px solid rgba(63, 63, 70, 0.4);
+  border-bottom: 1px solid rgba(var(--color-border-rgb), 0.4);
   text-align: left;
   padding: 8px 12px;
   font-weight: 600;
-  color: #d4d4d8;        /* zinc-300 */
+  color: color-mix(in srgb, var(--color-text) 75%, var(--color-text-muted) 25%);
 }
 
 .surface-component-scope td {
-  border-bottom: 1px solid rgba(63, 63, 70, 0.15);
+  border-bottom: 1px solid rgba(var(--color-border-rgb), 0.15);
   padding: 8px 12px;
 }
 
 .surface-component-scope hr {
-  border-color: rgba(63, 63, 70, 0.3);
+  border-color: rgba(var(--color-border-rgb), 0.3);
 }
 
 .surface-component-scope code {
-  background: rgba(24, 24, 27, 0.6);
+  background: color-mix(in srgb, var(--color-surface-raised) 60%, transparent 40%);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 0.875em;
-  color: #a78bfa;        /* violet-400 */
+  color: var(--color-accent);
 }
 
 .surface-component-scope pre {
-  background: rgba(9, 9, 11, 0.8);
-  border: 1px solid rgba(63, 63, 70, 0.3);
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent 20%);
+  border: 1px solid rgba(var(--color-border-rgb), 0.3);
   border-radius: 8px;
   padding: 12px 16px;
   overflow-x: auto;
@@ -452,17 +571,17 @@ button:active {
   appearance: none;
   width: 16px;
   height: 16px;
-  border: 1px solid rgba(63, 63, 70, 0.6);
+  border: 1px solid rgba(var(--color-border-rgb), 0.6);
   border-radius: 4px;
-  background: rgba(24, 24, 27, 0.6);
+  background: color-mix(in srgb, var(--color-surface-raised) 60%, transparent 40%);
   cursor: pointer;
   vertical-align: middle;
   position: relative;
 }
 
 .surface-component-scope input[type="checkbox"]:checked {
-  background: rgba(99, 102, 241, 0.6);
-  border-color: rgba(99, 102, 241, 0.8);
+  background: rgba(var(--color-primary-rgb), 0.6);
+  border-color: rgba(var(--color-primary-rgb), 0.8);
 }
 
 .surface-component-scope input[type="checkbox"]:checked::after {

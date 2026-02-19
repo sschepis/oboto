@@ -29,7 +29,7 @@ export const SURFACE_TOOLS = [
         type: "function",
         function: {
             name: "update_surface_component",
-            description: "Add or update a React component on a surface. Write the full JSX source for the component. The component will be compiled and rendered live in the browser. Available globals: React, useState, useEffect, useRef, useCallback, useMemo. Components should use Tailwind CSS classes for styling.",
+            description: "Add or update a React component on a surface. Write the full JSX source for the component. The component will be compiled and rendered live in the browser.\n\nGLOBALS: React, useState, useEffect, useRef, useCallback, useMemo, UI.\n\nCRITICAL: You MUST use the `UI` global for components (e.g. `UI.Button`, `UI.Card`, `UI.Input`, `UI.Table`). Do not use raw HTML elements if a UI component exists.\n\nAvailable UI.*: Card, Button, Input, Select, Table, Badge, Tabs, Dialog, Alert, Progress, Charts (Line/Bar/Pie), Icons (Lucide). Use Tailwind CSS for layout.",
             parameters: {
                 type: "object",
                 properties: {

@@ -1,0 +1,58 @@
+{
+  "name": "robodev-tray",
+  "version": "1.0.0",
+  "description": "RoboDev system tray service — manages the background AI daemon",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --mac --win"
+  },
+  "build": {
+    "appId": "com.robodev.tray",
+    "productName": "RoboDev",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": ["nsis", "portable"]
+    },
+    "files": [
+      "main.js",
+      "lib/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../",
+        "to": "backend",
+        "filter": [
+          "ai.mjs",
+          "src/**/*",
+          "ui/dist/**/*",
+          "themes.json",
+          "package.json",
+          "node_modules/**/*"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

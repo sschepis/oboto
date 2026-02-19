@@ -9,6 +9,10 @@ interface MessageListProps {
   isAgentWorking: boolean;
   messageActions?: MessageActions;
   activityLog?: ActivityLogEntry[];
+  /** Label shown for user messages (defaults to "You") */
+  userLabel?: string;
+  /** Label shown for agent messages (defaults to "Nexus") */
+  agentLabel?: string;
 }
 
 /** Map log levels to icons and colors */
@@ -88,7 +92,7 @@ const ThinkingIndicator: React.FC<{ activityLog?: ActivityLogEntry[] }> = ({ act
   );
 };
 
-const MessageList: React.FC<MessageListProps> = ({ messages, isAgentWorking, messageActions, activityLog }) => {
+const MessageList: React.FC<MessageListProps> = ({ messages, isAgentWorking, messageActions, activityLog, userLabel, agentLabel }) => {
   const scrollRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -111,7 +115,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isAgentWorking, mes
       ) : (
         <div className="max-w-7xl mx-auto space-y-10 w-full">
           {messages.map((msg) => (
-            <MessageItem key={msg.id} message={msg} actions={messageActions} />
+            <MessageItem key={msg.id} message={msg} actions={messageActions} userLabel={userLabel} agentLabel={agentLabel} />
           ))}
         </div>
       )}

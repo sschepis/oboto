@@ -22,6 +22,9 @@ export { PERSONA_TOOLS } from './definitions/persona-tools.mjs';
 export { BROWSER_TOOLS } from './definitions/browser-tools.mjs';
 export { CHROME_EXT_TOOLS } from './definitions/chrome-ext-tools.mjs';
 export { UI_STYLE_TOOLS } from './definitions/ui-style-tools.mjs';
+export { MATH_TOOLS } from './definitions/math-tools.mjs';
+export { IMAGE_TOOLS } from './definitions/image-tools.mjs';
+export { EMBED_TOOLS } from './definitions/embed-tools.mjs';
 
 import { CORE_TOOLS } from './definitions/core-tools.mjs';
 import { WORKFLOW_TOOLS, RECOVERY_TOOLS } from './definitions/workflow-tools.mjs';
@@ -41,6 +44,9 @@ import { SURFACE_TOOLS } from './definitions/surface-tools.mjs';
 import { WORKFLOW_SURFACE_TOOLS } from './definitions/workflow-surface-tools.mjs';
 import { PERSONA_TOOLS } from './definitions/persona-tools.mjs';
 import { UI_STYLE_TOOLS } from './definitions/ui-style-tools.mjs';
+import { MATH_TOOLS } from './definitions/math-tools.mjs';
+import { IMAGE_TOOLS } from './definitions/image-tools.mjs';
+import { EMBED_TOOLS } from './definitions/embed-tools.mjs';
 
 export const TOOLS = [
     ...CORE_TOOLS,
@@ -62,5 +68,8 @@ export const TOOLS = [
     ...SURFACE_TOOLS,
     ...WORKFLOW_SURFACE_TOOLS,
     ...PERSONA_TOOLS,
-    ...UI_STYLE_TOOLS
+    ...UI_STYLE_TOOLS,
+    ...MATH_TOOLS,
+    ...IMAGE_TOOLS,
+    ...EMBED_TOOLS
 ];

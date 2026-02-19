@@ -15,6 +15,7 @@ interface SidebarProps {
   onSurfaceRename?: (surfaceId: string, newName: string) => void;
   onSurfaceDelete?: (surfaceId: string) => void;
   onSurfaceDuplicate?: (surfaceId: string) => void;
+  width?: number;
 }
 
 const COLLAPSE_KEY = 'ai-man:sidebar-collapse-state';
@@ -76,7 +77,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSurfaceClick,
   onSurfaceRename,
   onSurfaceDelete,
-  onSurfaceDuplicate
+  onSurfaceDuplicate,
+  width
 }) => {
   const [showAllSurfaces, setShowAllSurfaces] = useState(true);
   const [contextMenu, setContextMenu] = useState<SurfaceContextMenuState | null>(null);
@@ -121,7 +123,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Show loading skeleton if no project status
   if (!projectStatus) {
     return (
-      <aside className="hidden xl:flex flex-col w-80 bg-[#080808] border-l border-zinc-800/40 p-6 space-y-6 overflow-y-auto custom-scrollbar">
+      <aside
+        className="hidden xl:flex flex-col bg-[#080808] border-r border-zinc-800/40 p-6 space-y-6 overflow-y-auto custom-scrollbar"
+        style={{ width: width || 320 }}
+      >
         <div className="space-y-4">
           <div className="h-20 bg-zinc-900/30 rounded-xl shimmer"></div>
           <div className="space-y-2">
@@ -139,7 +144,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const otherSurfaces = surfaces.filter(s => !s.pinned);
 
   return (
-    <aside className="hidden xl:flex flex-col w-80 bg-[#080808] border-l border-zinc-800/40 overflow-y-auto custom-scrollbar relative">
+    <aside
+      className="hidden xl:flex flex-col bg-[#080808] border-r border-zinc-800/40 overflow-y-auto custom-scrollbar relative"
+      style={{ width: width || 320 }}
+    >
       {/* Subtle top-left gradient accent */}
       <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-indigo-500/[0.03] to-transparent pointer-events-none" />
       

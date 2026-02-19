@@ -10,36 +10,27 @@ export async function runDesign(createAssistant, statusAdapter, task, options = 
 
     statusAdapter.onToolStart('ai_man_design', { task });
 
-    const designPrompt = `You are in DESIGN-ONLY mode. Your job is to produce a comprehensive technical design document for the following task. You must NOT write any implementation code.
+    const designPrompt = `DESIGN-ONLY MODE. Produce a technical design document. NEVER write implementation code.
 
 TASK: ${task}
 
-INSTRUCTIONS:
-1. First, use the \`init_structured_dev\` tool to initialize structured development in the working directory.
-2. Analyze the task requirements thoroughly. Use \`list_files\` and \`read_file\` to understand any existing codebase.
-3. Break the task into discrete features/components. For each feature, identify:
-   - A unique Feature ID (e.g., FEAT-001)
-   - A descriptive name
-   - Dependencies on other features
-   - Priority (High/Medium/Low)
-4. For each feature, write a detailed technical design covering:
-   - Purpose and responsibilities
-   - Public API / interfaces (function signatures, types, props)
-   - Internal architecture and data flow
-   - File locations and naming conventions
-   - Edge cases and error handling strategy
-5. Use \`submit_technical_design\` for each feature to register it in the manifest.
-6. Define the dependency graph showing which features depend on which.
-7. Produce a single comprehensive design document as your final response.
+STEPS:
+1. Run \`init_structured_dev\` to initialize the working directory.
+2. Use \`list_files\` and \`read_file\` to understand the existing codebase.
+3. Break the task into features. Each feature MUST have:
+   - Feature ID (e.g., FEAT-001), name, dependencies, priority (High/Medium/Low)
+4. For each feature, specify:
+   - Purpose, public API (signatures, types), internal architecture, data flow
+   - File paths, naming conventions, edge cases, error handling
+5. Run \`submit_technical_design\` per feature to register in manifest.
+6. Define the dependency graph.
+7. Return the complete design document as your final response.
 
 CONSTRAINTS:
-- Do NOT write any implementation code (no source files, no tests)
-- Do NOT create files other than the SYSTEM_MAP.md manifest
-- Focus entirely on architecture, interfaces, and component design
-- Be specific about file paths, function signatures, and data structures
-- The design must be detailed enough that a separate agent can implement it without further clarification
-
-Your final response must be the complete design document.`;
+- NEVER create source files or test files — design document ONLY
+- ONLY create SYSTEM_MAP.md manifest
+- Include exact file paths, function signatures, and data structures
+- Design MUST be detailed enough for a separate agent to implement without clarification`;
 
     try {
         const document = await designAssistant.run(designPrompt, { signal: options.signal });
@@ -74,35 +65,28 @@ export async function runImplement(createAssistant, statusAdapter, designResult,
 
     statusAdapter.onToolStart('ai_man_implement', { task: designResult.task });
 
-    const implementPrompt = `You are in IMPLEMENTATION mode. A design has already been completed for the following task. Your job is to implement EVERYTHING described in the design document below.
+    const implementPrompt = `IMPLEMENTATION MODE. Implement ALL features from the design document below.
+FOLLOW the design EXACTLY — do not deviate from specified architecture, file paths, or interfaces.
+Implement dependencies BEFORE dependents.
 
-ORIGINAL TASK: ${designResult.task}
+TASK: ${designResult.task}
 
 DESIGN DOCUMENT:
 ${designResult.document}
 
-INSTRUCTIONS:
-1. First, use \`read_manifest\` to review the current SYSTEM_MAP.md and understand all registered features.
-2. For each feature in the design:
-   a. Use \`approve_design\` to approve its design (moving it to Interface phase).
-   b. If interfaces are defined, use \`lock_interfaces\` to lock them.
-   c. Implement the feature by writing all source files using \`write_file\`.
-   d. Write unit tests for the feature.
-   e. Add JSDoc documentation to all public APIs.
-3. After implementing all features:
-   a. Use \`list_files\` to verify all expected files were created.
-   b. Run any validation or tests to confirm correctness.
-   c. Update the SYSTEM_MAP.md to mark features as completed.
-4. Provide a comprehensive summary of everything you implemented.
-
-CONSTRAINTS:
-- Follow the design document precisely — do not deviate from the specified architecture, file paths, or interfaces.
-- Implement ALL features, not just some of them.
-- Every source file must include proper error handling.
-- Write tests for every feature.
-- If a feature depends on another, implement dependencies first.
-
-Your final response must summarize all files created/modified and confirm implementation completeness.`;
+STEPS:
+1. Run \`read_manifest\` to review SYSTEM_MAP.md and all registered features.
+2. For EACH feature (in dependency order):
+   a. \`approve_design\` to move to Interface phase
+   b. IF interfaces defined: \`lock_interfaces\`
+   c. Write all source files via \`write_file\` with proper error handling
+   d. Write unit tests
+   e. Add JSDoc to all public APIs
+3. After ALL features implemented:
+   a. \`list_files\` to verify all expected files exist
+   b. Run tests to confirm correctness
+   c. Update SYSTEM_MAP.md to mark features completed
+4. Return summary of all files created/modified and confirm completeness.`;
 
     try {
         const result = await implAssistant.run(implementPrompt, { signal: options.signal });
@@ -128,20 +112,20 @@ export async function runTest(createAssistant, implementationResult, options = {
 
     const implSummary = typeof implementationResult === 'string' ? implementationResult : implementationResult.result;
 
-    const testPrompt = `You are in TESTING mode. Review the implementation and write comprehensive tests.
+    const testPrompt = `TESTING MODE. Write and run tests for the implementation below.
 
 IMPLEMENTATION SUMMARY:
 ${implSummary}
 
-INSTRUCTIONS:
-1. Use \`list_files\` to see all source files created.
-2. Use \`read_file\` to review each source file.
-3. For each module, write unit tests using the project's test framework (or a standard one like Jest/Mocha/Node native runner).
-4. Use \`write_file\` to create test files.
-5. Use \`run_command\` to execute the test suite.
-6. If tests fail, read the error output and fix the source code (using \`edit_file\` or \`write_file\`).
-7. Repeat until all tests pass.
-8. Report final test results.`;
+STEPS:
+1. \`list_files\` to find all source files.
+2. \`read_file\` to review each source file.
+3. Write unit tests per module using the project's test framework (Jest/Mocha/Node test runner).
+4. \`write_file\` to create test files.
+5. \`run_command\` to execute tests.
+6. IF tests fail: read errors, fix source via \`edit_file\`, re-run.
+7. REPEAT step 6 MAX 3 TIMES. If still failing after 3 attempts, report remaining failures.
+8. Return final test results.`;
 
     // Ensure run_command is available (it is part of standard tools now)
     return await testAssistant.run(testPrompt, { signal: options.signal });
@@ -156,7 +140,7 @@ export async function runReview(createAssistant, designResult, implementationRes
 
     const implSummary = typeof implementationResult === 'string' ? implementationResult : implementationResult.result;
 
-    const reviewPrompt = `You are a CODE REVIEWER. Your job is to review the implementation against the design and find issues.
+    const reviewPrompt = `CODE REVIEW MODE. Compare implementation against design. Find issues.
 
 DESIGN DOCUMENT:
 ${designResult.document}
@@ -164,20 +148,14 @@ ${designResult.document}
 IMPLEMENTATION SUMMARY:
 ${implSummary}
 
-INSTRUCTIONS:
-1. Read all implemented source files using \`list_files\` and \`read_file\`.
+STEPS:
+1. \`list_files\` + \`read_file\` to read all source files.
 2. Compare each file against the design specification.
-3. Check for:
-   - Missing features or incomplete implementations
-   - Deviations from specified interfaces
-   - Missing error handling
-   - Missing tests
-   - Security issues
-   - Performance concerns
-4. Rate each finding as: CRITICAL, HIGH, MEDIUM, or LOW severity.
-5. Return a structured JSON review with this format (use JSON mode):
+3. Check for: missing features, interface deviations, missing error handling, missing tests, security issues, performance concerns.
+4. Rate each finding: CRITICAL | HIGH | MEDIUM | LOW.
+5. Return JSON:
 {
-  "overallScore": 8,
+  "overallScore": 0-10,
   "findings": [
     {"severity": "HIGH", "file": "src/auth.mjs", "line": 42, "issue": "...", "suggestion": "..."}
   ],

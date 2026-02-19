@@ -11,10 +11,10 @@ export class SkillHandlers {
         const skills = this.skillsManager.listSkills();
         
         if (skills.length === 0) {
-            return "No skills found in workspace (.skills directory).";
+            return "No skills found in global (skills) or workspace (.skills) directories.";
         }
 
-        return `Available Skills:\n${skills.map(s => `- ${s.name}: ${s.description}`).join('\n')}`;
+        return `Available Skills:\n${skills.map(s => `- ${s.name} [${s.source}]: ${s.description}`).join('\n')}`;
     }
 
     async readSkill(args) {
@@ -52,21 +52,17 @@ export class SkillHandlers {
             // Initialize tools (this loads custom tools + system prompt)
             await subAgent.initializeCustomTools();
             
-            const prompt = `You are acting as a specialist agent for the '${skill.name}' skill.
+            const prompt = `Execute task using the '${skill.name}' skill.
 
-SKILL DOCUMENTATION:
+SKILL DOCS:
 ${skill.content}
 
-YOUR ASSIGNMENT:
-${task}
+TASK: ${task}
 
-INSTRUCTIONS:
-1. Use the skill documentation above to understand how to perform the task.
-2. Use your available tools (shell, file, etc.) to execute the necessary commands.
-3. If the skill requires running CLI commands, run them.
-4. Report the final outcome clearly.
-
-Begin execution.`;
+STEPS:
+1. Follow skill documentation to perform the task.
+2. Use tools (shell, file) to execute required commands.
+3. Report final outcome.`;
 
             const result = await subAgent.run(prompt);
             return `Skill Execution Result (${skill_name}):\n${result}`;
@@ -74,6 +70,20 @@ Begin execution.`;
         } catch (error) {
             consoleStyler.log('error', `Skill execution failed: ${error.message}`);
             return `Error executing skill '${skill_name}': ${error.message}`;
+        }
+    }
+
+    async addNpmSkill(args) {
+        await this.skillsManager.ensureInitialized();
+        const { packages } = args;
+        
+        try {
+            consoleStyler.log('system', `Adding NPM skills: ${packages.join(', ')}`);
+            const result = await this.skillsManager.addNpmSkills(packages);
+            return result;
+        } catch (error) {
+            consoleStyler.log('error', `Failed to add NPM skills: ${error.message}`);
+            return `Error adding npm skills: ${error.message}`;
         }
     }
 }

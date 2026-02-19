@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { AgentLoopStatus, AgentLoopInvocation } from '../../hooks/useAgentLoop';
+import { Play, Pause, Square, Clock, Activity } from 'lucide-react';
 
 interface AgentLoopControlsProps {
   status: AgentLoopStatus;
@@ -8,6 +9,7 @@ interface AgentLoopControlsProps {
   onPause: () => void;
   onStop: () => void;
   onSetInterval: (intervalMs: number) => void;
+  className?: string;
 }
 
 const INTERVAL_PRESETS = [
@@ -25,159 +27,132 @@ export function AgentLoopControls({
   onPause,
   onStop,
   onSetInterval,
+  className = '',
 }: AgentLoopControlsProps) {
   const [showIntervalPicker, setShowIntervalPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const { state, intervalMs, invocationCount } = status;
+
+  // Close picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowIntervalPicker(false);
+      }
+    };
+    if (showIntervalPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showIntervalPicker]);
 
   const formatInterval = (ms: number) => {
     if (ms < 60000) return `${ms / 1000}s`;
     return `${ms / 60000}m`;
   };
 
-  const stateColor = state === 'playing' ? '#22c55e' : state === 'paused' ? '#f59e0b' : '#6b7280';
-  const stateIcon = state === 'playing' ? '●' : state === 'paused' ? '⏸' : '○';
-  const stateLabel = state === 'playing' ? 'Running' : state === 'paused' ? 'Paused' : 'Stopped';
+  const isPlaying = state === 'playing';
+  const isPaused = state === 'paused';
+  const isStopped = state === 'stopped';
+
+  // Dynamic styles based on state
+  const containerBorder = isPlaying 
+    ? 'border-emerald-500/20 bg-emerald-500/5' 
+    : isPaused 
+      ? 'border-amber-500/20 bg-amber-500/5' 
+      : 'border-zinc-800/40 bg-zinc-900/50';
+
+  const statusColor = isPlaying ? 'text-emerald-400' : isPaused ? 'text-amber-400' : 'text-zinc-500';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '4px 8px',
-        background: '#0d1117',
-        borderRadius: 8,
-        border: `1px solid ${stateColor}33`,
-        fontSize: 12,
-        position: 'relative',
-      }}
-    >
-      {/* State indicator */}
-      <span
-        style={{
-          color: stateColor,
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          minWidth: 70,
-        }}
-        title={`Agent Loop: ${stateLabel}`}
-      >
-        <span style={{ fontSize: 10, animation: state === 'playing' ? 'pulse 2s infinite' : 'none' }}>
-          {stateIcon}
+    <div className={`flex items-center gap-2 px-2 py-1 rounded-lg border text-xs transition-colors duration-300 ${containerBorder} ${className}`}>
+      
+      {/* State Indicator */}
+      <div className={`flex items-center gap-1.5 min-w-[70px] font-semibold ${statusColor}`} title={`Agent Loop: ${state}`}>
+        {isPlaying ? (
+          <Activity size={12} className="animate-pulse" />
+        ) : isPaused ? (
+          <Pause size={12} />
+        ) : (
+          <Square size={12} />
+        )}
+        <span className="uppercase tracking-wider text-[10px]">
+          {state}
         </span>
-        {stateLabel}
-      </span>
+      </div>
 
-      {/* Transport controls */}
-      <div style={{ display: 'flex', gap: 2 }}>
-        {/* Play / Resume button */}
-        {(state === 'stopped' || state === 'paused') && (
+      {/* Divider */}
+      <div className="w-px h-3 bg-zinc-700/30 mx-0.5" />
+
+      {/* Controls */}
+      <div className="flex items-center gap-1">
+        {(isStopped || isPaused) && (
           <button
-            onClick={() => onPlay(state === 'stopped' ? intervalMs : undefined)}
-            style={{
-              padding: '3px 10px',
-              borderRadius: 4,
-              background: '#22c55e22',
-              color: '#22c55e',
-              border: '1px solid #22c55e44',
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-            }}
-            title={state === 'paused' ? 'Resume agent loop' : `Start agent loop (every ${formatInterval(intervalMs)})`}
+            onClick={() => onPlay(isStopped ? intervalMs : undefined)}
+            className="
+              flex items-center gap-1.5 px-2 py-0.5 rounded
+              bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+              hover:bg-emerald-500/20 transition-all cursor-pointer font-medium
+            "
+            title={isPaused ? 'Resume agent loop' : `Start agent loop (every ${formatInterval(intervalMs)})`}
           >
-            ▶ {state === 'paused' ? 'Resume' : 'Play'}
+            <Play size={10} fill="currentColor" />
+            <span>{isPaused ? 'Resume' : 'Play'}</span>
           </button>
         )}
 
-        {/* Pause button */}
-        {state === 'playing' && (
+        {isPlaying && (
           <button
             onClick={onPause}
-            style={{
-              padding: '3px 10px',
-              borderRadius: 4,
-              background: '#f59e0b22',
-              color: '#f59e0b',
-              border: '1px solid #f59e0b44',
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-            }}
+            className="
+              flex items-center gap-1.5 px-2 py-0.5 rounded
+              bg-amber-500/10 text-amber-400 border border-amber-500/20
+              hover:bg-amber-500/20 transition-all cursor-pointer font-medium
+            "
             title="Pause agent loop"
           >
-            ⏸ Pause
+            <Pause size={10} fill="currentColor" />
+            <span>Pause</span>
           </button>
         )}
 
-        {/* Stop button */}
-        {(state === 'playing' || state === 'paused') && (
+        {(isPlaying || isPaused) && (
           <button
             onClick={onStop}
-            style={{
-              padding: '3px 10px',
-              borderRadius: 4,
-              background: '#ef444422',
-              color: '#ef4444',
-              border: '1px solid #ef444444',
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-            }}
+            className="
+              flex items-center gap-1.5 px-2 py-0.5 rounded
+              bg-red-500/10 text-red-400 border border-red-500/20
+              hover:bg-red-500/20 transition-all cursor-pointer font-medium
+            "
             title="Stop agent loop"
           >
-            ⏹ Stop
+            <Square size={10} fill="currentColor" />
+            <span>Stop</span>
           </button>
         )}
       </div>
 
-      {/* Interval selector */}
-      <div style={{ position: 'relative' }}>
+      {/* Interval Picker */}
+      <div className="relative" ref={pickerRef}>
         <button
           onClick={() => setShowIntervalPicker(!showIntervalPicker)}
-          style={{
-            padding: '3px 8px',
-            borderRadius: 4,
-            background: '#1a1a2e',
-            color: '#9ca3af',
-            border: '1px solid #30363d',
-            cursor: 'pointer',
-            fontSize: 11,
-          }}
+          className="
+            flex items-center gap-1 px-1.5 py-0.5 rounded
+            text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50
+            transition-all cursor-pointer
+          "
           title="Set invocation interval"
         >
-          ⏱ {formatInterval(intervalMs)}
+          <Clock size={10} />
+          <span className="font-mono text-[10px]">{formatInterval(intervalMs)}</span>
         </button>
 
         {showIntervalPicker && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '100%',
-              left: 0,
-              marginBottom: 4,
-              background: '#161b22',
-              border: '1px solid #30363d',
-              borderRadius: 6,
-              padding: 4,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              zIndex: 100,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-            }}
-          >
+          <div className="
+            absolute top-full left-1/2 -translate-x-1/2 mt-1 w-32
+            bg-[#111111] border border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden
+            animate-in fade-in zoom-in-95 duration-100
+          ">
             {INTERVAL_PRESETS.map(preset => (
               <button
                 key={preset.ms}
@@ -185,49 +160,32 @@ export function AgentLoopControls({
                   onSetInterval(preset.ms);
                   setShowIntervalPicker(false);
                 }}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 4,
-                  background: preset.ms === intervalMs ? '#22c55e22' : 'transparent',
-                  color: preset.ms === intervalMs ? '#22c55e' : '#9ca3af',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 11,
-                  textAlign: 'left',
-                  whiteSpace: 'nowrap',
-                }}
+                className={`
+                  w-full text-left px-3 py-1.5 text-[10px] flex items-center justify-between
+                  hover:bg-zinc-800/50 transition-colors
+                  ${preset.ms === intervalMs ? 'text-emerald-400 bg-emerald-500/5' : 'text-zinc-400'}
+                `}
               >
-                Every {preset.label} {preset.ms === intervalMs ? '✓' : ''}
+                <span>Every {preset.label}</span>
+                {preset.ms === intervalMs && <span className="text-[9px]">✓</span>}
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Invocation counter */}
+      {/* Invocation Counter */}
       {invocationCount > 0 && (
-        <span
-          style={{
-            padding: '2px 6px',
-            borderRadius: 10,
-            background: '#3b82f622',
-            color: '#3b82f6',
-            fontSize: 10,
-            fontWeight: 600,
-          }}
-          title={lastInvocation ? `Last: ${lastInvocation.timestamp}` : undefined}
-        >
-          #{invocationCount}
-        </span>
+        <>
+          <div className="w-px h-3 bg-zinc-700/30 mx-0.5" />
+          <div 
+            className="text-[9px] font-mono text-zinc-500"
+            title={lastInvocation ? `Last run: ${lastInvocation.timestamp}` : undefined}
+          >
+            #{invocationCount}
+          </div>
+        </>
       )}
-
-      {/* Inline pulse animation */}
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-      `}</style>
     </div>
   );
 }

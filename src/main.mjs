@@ -10,11 +10,14 @@ import { SchedulerService } from './core/scheduler-service.mjs';
 import { AgentLoopController } from './core/agent-loop-controller.mjs';
 import { OpenClawManager } from './integration/openclaw/manager.mjs';
 import { SecretsManager } from './server/secrets-manager.mjs';
+import { WorkspaceContentServer } from './server/workspace-content-server.mjs';
 
 // Main execution function
 async function main() {
     const cli = new CLIInterface();
     const eventBus = new AiManEventBus();
+    const workspaceContentServer = new WorkspaceContentServer();
+    let openClawManager = null; // Lift scope
     
     try {
         // Set up signal handlers for graceful shutdown
@@ -27,6 +30,13 @@ async function main() {
         const secretsManager = new SecretsManager(workingDir);
         await secretsManager.load();
         secretsManager.applyToEnv();
+
+        // Start Workspace Content Server
+        try {
+            await workspaceContentServer.start(workingDir);
+        } catch (e) {
+            consoleStyler.log('warning', `Failed to start workspace content server: ${e.message}`);
+        }
 
         // Display startup information
         cli.displayStartupInfo(workingDir);
@@ -48,7 +58,7 @@ async function main() {
         const taskManager = new TaskManager(eventBus);
 
         // Initialize OpenClaw Manager
-        const openClawManager = new OpenClawManager(secretsManager);
+        openClawManager = new OpenClawManager(secretsManager); // Assign to lifted var
         if (process.env.OPENCLAW_MODE || process.env.OPENCLAW_URL) {
             try {
                 await openClawManager.start(workingDir);
@@ -64,7 +74,8 @@ async function main() {
             statusAdapter,
             eventBus,
             taskManager,
-            openClawManager
+            openClawManager,
+            workspaceContentServer // Pass content server
         });
         
         // Initialize Scheduler Service
@@ -97,8 +108,8 @@ async function main() {
         if (isServer) {
             // Server mode
             const { startServer } = await import('./server/web-server.mjs');
-            // Pass schedulerService, secretsManager, and agentLoopController to startServer
-            await startServer(assistant, workingDir, eventBus, 3000, schedulerService, secretsManager, agentLoopController);
+            // Pass schedulerService, secretsManager, agentLoopController, and workspaceContentServer to startServer
+            await startServer(assistant, workingDir, eventBus, 3000, schedulerService, secretsManager, agentLoopController, workspaceContentServer);
         } else if (isInteractive) {
             // Interactive mode
             await cli.startInteractiveMode(assistant, workingDir);
@@ -111,8 +122,11 @@ async function main() {
         cli.displayError(error);
         process.exit(1);
     } finally {
-        if (openClawManager) {
+        if (typeof openClawManager !== 'undefined' && openClawManager) {
             await openClawManager.stop();
+        }
+        if (workspaceContentServer) {
+            await workspaceContentServer.stop();
         }
         cli.close();
     }

@@ -297,7 +297,7 @@ export class HistoryManager {
                 const messagesToSummarize = this.history.slice(1, -preserveRecent);
                 
                 if (messagesToSummarize.length > 2) {
-                     const summaryPrompt = `Summarize the following conversation exchanges into a concise context memo. Preserve: file paths mentioned, decisions made, errors encountered, and current progress.\n\n${messagesToSummarize.map(m => `[${m.role}]: ${(m.content || '').substring(0, 500)}`).join('\n')}`;
+                     const summaryPrompt = `Summarize these exchanges into a context memo. PRESERVE: file paths, decisions, errors, progress.\n\n${messagesToSummarize.map(m => `[${m.role}]: ${(m.content || '').substring(0, 500)}`).join('\n')}`;
                      
                      try {
                          const summary = await this._summarizer(summaryPrompt);

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, GitBranch } from 'lucide-react';
+import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, GitBranch, Puzzle } from 'lucide-react';
 import type { OpenClawStatus } from '../../types';
 import { PropertyGrid, type PropertyItem } from './settings/PropertyGrid';
 import { AIProviderSettings, type AIProviderConfig } from './settings/AIProviderSettings';
 import { ModelRoutingSettings } from './settings/ModelRoutingSettings';
+import SkillsSettings from './settings/SkillsSettings';
 import type { SecretItem } from '../../hooks/useSecrets';
+import type { SkillInfo, ClawHubSkill } from '../../hooks/useSkills';
 
 interface ModelCapabilities {
   id: string;
@@ -38,9 +40,27 @@ interface SettingsDialogProps {
   secrets?: SecretItem[];
   /** Callback to open the Secrets Vault panel */
   onOpenSecrets?: () => void;
+  /** Callback to launch the setup wizard */
+  onRunSetupWizard?: () => void;
+  /** Skills management props */
+  skills?: {
+    installedSkills: SkillInfo[];
+    clawHubResults: ClawHubSkill[];
+    clawHubAvailable: boolean;
+    isLoading: boolean;
+    isInstalling: boolean;
+    installProgress: string | null;
+    error: string | null;
+    onFetchSkills: () => void;
+    onSearchClawHub: (query: string) => void;
+    onInstallFromClawHub: (slug: string, version?: string) => void;
+    onInstallFromNpm: (packageName: string) => void;
+    onUninstallSkill: (name: string) => void;
+    onClearError: () => void;
+  };
 }
 
-type SettingsTab = 'general' | 'ai' | 'routing' | 'openclaw';
+type SettingsTab = 'general' | 'ai' | 'routing' | 'openclaw' | 'skills';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ 
   isOpen, 
@@ -52,6 +72,8 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
   onDeployOpenClaw,
   secrets,
   onOpenSecrets,
+  onRunSetupWizard,
+  skills: skillsProps,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<AgentSettings>(initialSettings);
@@ -114,6 +136,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
     { id: 'ai', label: 'AI Provider', icon: <Cpu size={15} /> },
     { id: 'routing', label: 'Routing', icon: <GitBranch size={15} /> },
     { id: 'openclaw', label: 'OpenClaw', icon: <Database size={15} /> },
+    { id: 'skills', label: 'Skills', icon: <Puzzle size={15} /> },
   ];
 
   const renderContent = () => {
@@ -125,6 +148,17 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
               <h3 className="text-lg font-semibold text-zinc-100 mb-1">General Settings</h3>
               <p className="text-xs text-zinc-500 mb-5">Core agent behavior configuration.</p>
               <PropertyGrid items={generalItems} />
+              
+              <div className="mt-6 pt-6 border-t border-zinc-800/30">
+                <h4 className="text-sm font-medium text-zinc-300 mb-2">Setup Wizard</h4>
+                <p className="text-xs text-zinc-500 mb-3">Re-run the initial configuration wizard to change provider, workspace, or OpenClaw settings.</p>
+                <button
+                  onClick={() => { onClose(); onRunSetupWizard?.(); }}
+                  className="px-3 py-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 rounded-lg text-xs font-medium border border-zinc-700/50 transition-colors"
+                >
+                  Run Setup Wizard...
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -140,6 +174,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                 onChange={handleAISettingsChange}
                 secrets={secrets}
                 onOpenSecrets={() => { onClose(); onOpenSecrets?.(); }}
+                modelRegistry={settings.modelRegistry || {}}
               />
             </div>
           </div>
@@ -156,6 +191,37 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                 modelRegistry={settings.modelRegistry || {}}
                 onChange={handleRoutingChange}
               />
+            </div>
+          </div>
+        );
+
+      case 'skills':
+        return (
+          <div className="space-y-6 animate-fade-in-up" key="skills">
+            <div>
+              <h3 className="text-lg font-semibold text-zinc-100 mb-1">Skills</h3>
+              <p className="text-xs text-zinc-500 mb-5">Install and manage global skills available across all workspaces.</p>
+              {skillsProps ? (
+                <SkillsSettings
+                  installedSkills={skillsProps.installedSkills}
+                  clawHubResults={skillsProps.clawHubResults}
+                  clawHubAvailable={skillsProps.clawHubAvailable}
+                  isLoading={skillsProps.isLoading}
+                  isInstalling={skillsProps.isInstalling}
+                  installProgress={skillsProps.installProgress}
+                  error={skillsProps.error}
+                  onFetchSkills={skillsProps.onFetchSkills}
+                  onSearchClawHub={skillsProps.onSearchClawHub}
+                  onInstallFromClawHub={skillsProps.onInstallFromClawHub}
+                  onInstallFromNpm={skillsProps.onInstallFromNpm}
+                  onUninstallSkill={skillsProps.onUninstallSkill}
+                  onClearError={skillsProps.onClearError}
+                />
+              ) : (
+                <div className="text-center py-8 text-zinc-600 text-xs">
+                  Skills management not available.
+                </div>
+              )}
             </div>
           </div>
         );
