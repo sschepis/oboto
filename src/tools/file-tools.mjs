@@ -139,6 +139,163 @@ export class FileTools {
         }
     }
 
+    // Read multiple files with safety caps
+    async readManyFiles(args) {
+        const { paths, max_total_bytes = 512 * 1024, max_per_file_bytes = 128 * 1024, encoding = 'utf8', _allowOutside = false } = args;
+
+        if (!Array.isArray(paths) || paths.length === 0) {
+            return JSON.stringify({ error: 'paths must be a non-empty array of file paths' });
+        }
+
+        if (paths.length > 50) {
+            return JSON.stringify({ error: `Too many files requested (${paths.length}). Maximum is 50.` });
+        }
+
+        consoleStyler.log('working', `Reading ${paths.length} files (max total: ${(max_total_bytes / 1024).toFixed(0)}KB)...`);
+
+        const results = [];
+        let totalBytes = 0;
+        let stopped = false;
+
+        for (const filePath of paths) {
+            if (stopped) {
+                results.push({ path: filePath, content: null, error: 'Skipped: total size cap reached', truncated: false });
+                continue;
+            }
+
+            try {
+                const resolvedPath = this.validatePath(filePath, _allowOutside);
+
+                if (!fs.existsSync(resolvedPath)) {
+                    results.push({ path: filePath, content: null, error: 'File not found', truncated: false });
+                    continue;
+                }
+
+                const stat = await fs.promises.stat(resolvedPath);
+
+                // Skip binary files by extension
+                const ext = path.extname(filePath).toLowerCase();
+                const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.mp3', '.mp4', '.wav', '.ogg', '.zip', '.tar', '.gz', '.7z', '.rar', '.exe', '.dll', '.so', '.dylib', '.woff', '.woff2', '.ttf', '.eot', '.pdf'];
+                if (binaryExts.includes(ext)) {
+                    results.push({ path: filePath, content: null, error: `Skipped binary file (${ext})`, truncated: false });
+                    continue;
+                }
+
+                let truncated = false;
+                let readSize = stat.size;
+
+                // Per-file cap
+                if (readSize > max_per_file_bytes) {
+                    readSize = max_per_file_bytes;
+                    truncated = true;
+                }
+
+                // Total cap check
+                if (totalBytes + readSize > max_total_bytes) {
+                    if (totalBytes >= max_total_bytes) {
+                        stopped = true;
+                        results.push({ path: filePath, content: null, error: 'Skipped: total size cap reached', truncated: false });
+                        continue;
+                    }
+                    readSize = max_total_bytes - totalBytes;
+                    truncated = true;
+                }
+
+                // Read the file (potentially partial)
+                if (truncated && readSize < stat.size) {
+                    const fd = await fs.promises.open(resolvedPath, 'r');
+                    const buffer = Buffer.alloc(readSize);
+                    await fd.read(buffer, 0, readSize, 0);
+                    await fd.close();
+                    const content = buffer.toString(encoding) + '\n\n[TRUNCATED — file is ' + stat.size + ' bytes, read ' + readSize + ']';
+                    totalBytes += readSize;
+                    results.push({ path: filePath, content, truncated: true });
+                } else {
+                    const content = await fs.promises.readFile(resolvedPath, encoding);
+                    totalBytes += content.length;
+                    results.push({ path: filePath, content, truncated: false });
+                }
+
+            } catch (error) {
+                results.push({ path: filePath, content: null, error: error.message, truncated: false });
+            }
+        }
+
+        const summary = `Read ${results.filter(r => r.content !== null).length}/${paths.length} files (${(totalBytes / 1024).toFixed(1)}KB total)`;
+        consoleStyler.log('working', `✓ ${summary}`);
+
+        return JSON.stringify({ summary, results });
+    }
+
+    // Write multiple files in a batch
+    async writeManyFiles(args) {
+        const { files, create_dirs = true, dry_run = false, _allowOutside = false } = args;
+
+        if (!Array.isArray(files) || files.length === 0) {
+            return JSON.stringify({ error: 'files must be a non-empty array of { path, content } objects' });
+        }
+
+        if (files.length > 30) {
+            return JSON.stringify({ error: `Too many files (${files.length}). Maximum is 30 per call.` });
+        }
+
+        consoleStyler.log('working', `Writing ${files.length} files${dry_run ? ' (DRY RUN)' : ''}...`);
+
+        const results = [];
+
+        for (const file of files) {
+            const { path: filePath, content, encoding = 'utf8' } = file;
+
+            if (!filePath) {
+                results.push({ path: '(missing)', success: false, message: 'No path specified' });
+                continue;
+            }
+
+            if (content === undefined || content === null) {
+                results.push({ path: filePath, success: false, message: 'No content specified' });
+                continue;
+            }
+
+            try {
+                const resolvedPath = this.validatePath(filePath, _allowOutside);
+
+                // Extension check
+                if (config.tools.allowedFileExtensions && config.tools.allowedFileExtensions.length > 0) {
+                    const ext = path.extname(filePath);
+                    if (!config.tools.allowedFileExtensions.includes(ext) && !config.tools.enableUnsafeTools) {
+                        results.push({ path: filePath, success: false, message: `Extension '${ext}' not allowed` });
+                        continue;
+                    }
+                }
+
+                if (dry_run) {
+                    results.push({ path: filePath, success: true, message: `Would write ${content.length} chars`, dryRun: true });
+                    continue;
+                }
+
+                // Create directories if needed
+                if (create_dirs) {
+                    const dirPath = path.dirname(resolvedPath);
+                    if (!fs.existsSync(dirPath)) {
+                        await fs.promises.mkdir(dirPath, { recursive: true });
+                    }
+                }
+
+                await fs.promises.writeFile(resolvedPath, content, encoding);
+                results.push({ path: filePath, success: true, message: `Wrote ${content.length} chars` });
+
+            } catch (error) {
+                results.push({ path: filePath, success: false, message: error.message });
+            }
+        }
+
+        const succeeded = results.filter(r => r.success).length;
+        const summary = `Wrote ${succeeded}/${files.length} files${dry_run ? ' (dry run)' : ''}`;
+        consoleStyler.log('working', `✓ ${summary}`);
+
+        return JSON.stringify({ summary, results });
+    }
+
     async editFile(args) {
         const { path: filePath, edits, _allowOutside = false } = args;
         

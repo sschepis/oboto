@@ -7,6 +7,51 @@ const math = create(all, {
     precision: 64
 });
 
+// Map common unit abbreviations to mathjs-compatible names.
+// mathjs uses SI-style names (e.g. "degC" not "C" for Celsius).
+const UNIT_ALIASES = {
+    // Temperature
+    'C':          'degC',
+    'c':          'degC',
+    'celsius':    'degC',
+    'Celsius':    'degC',
+    'F':          'degF',
+    'f':          'degF',
+    'fahrenheit': 'degF',
+    'Fahrenheit': 'degF',
+    // Length
+    'miles':      'mile',
+    'yards':      'yard',
+    'feet':       'foot',
+    'inches':     'inch',
+    'meters':     'meter',
+    'metres':     'meter',
+    'kilometers': 'km',
+    'kilometres': 'km',
+    'centimeters':'cm',
+    'centimetres':'cm',
+    'millimeters':'mm',
+    'millimetres':'mm',
+    // Mass
+    'pounds':     'lbs',
+    'ounces':     'oz',
+    'kilograms':  'kg',
+    'grams':      'g',
+    // Volume
+    'liters':     'liter',
+    'litres':     'liter',
+    'gallons':    'gallon',
+};
+
+/**
+ * Normalize a unit string by resolving common aliases to
+ * the canonical name that mathjs recognises.
+ */
+function normalizeUnit(unit) {
+    const trimmed = unit.trim();
+    return UNIT_ALIASES[trimmed] ?? trimmed;
+}
+
 export class MathHandlers {
     constructor() {
         this.scope = {};
@@ -38,10 +83,12 @@ export class MathHandlers {
 
     async unitConversion(args) {
         const { value, from_unit, to_unit } = args;
-        
+        const srcUnit = normalizeUnit(from_unit);
+        const dstUnit = normalizeUnit(to_unit);
+
         try {
-            consoleStyler.log('math', `Converting ${value} ${from_unit} to ${to_unit}`);
-            const result = math.unit(value, from_unit).to(to_unit);
+            consoleStyler.log('math', `Converting ${value} ${srcUnit} to ${dstUnit}`);
+            const result = math.unit(value, srcUnit).to(dstUnit);
             return result.toString();
         } catch (error) {
             consoleStyler.log('error', `Unit conversion error: ${error.message}`);

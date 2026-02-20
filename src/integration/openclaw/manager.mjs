@@ -9,10 +9,15 @@ import { OpenClawClient } from './client.mjs';
  * Handles configuration, process management (integrated mode), and client connection.
  */
 export class OpenClawManager {
+  /** Minimum interval (ms) between successive restart() calls. */
+  static RESTART_DEBOUNCE_MS = 3000;
+
   constructor(secretsManager = null) {
     this.secretsManager = secretsManager;
     this.client = null;
     this.process = null;
+    /** @type {number} Timestamp (ms) of the last accepted restart call. */
+    this._lastRestartAt = 0;
     this.config = {
       mode: process.env.OPENCLAW_MODE || 'external',
       url: process.env.OPENCLAW_URL || 'ws://127.0.0.1:18789',
@@ -530,6 +535,14 @@ export class OpenClawManager {
    * @param {string} [workspaceDir] - Optional workspace directory for context
    */
   async restart(workspaceDir = null) {
+    // Debounce: ignore rapid-fire restarts (e.g. from duplicate set-cwd messages).
+    const now = Date.now();
+    if (now - this._lastRestartAt < OpenClawManager.RESTART_DEBOUNCE_MS) {
+      console.log('[OpenClawManager] Restart debounced — skipping (too soon after last restart)');
+      return;
+    }
+    this._lastRestartAt = now;
+
     console.log('[OpenClawManager] Restarting...');
     await this.stop();
     await this.start(workspaceDir);

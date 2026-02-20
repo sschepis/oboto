@@ -25,42 +25,26 @@ let daemon = null;
 
 // ── Icon helpers ─────────────────────────────────────────────────────────
 
-function getIconPath(color) {
-    // On macOS, use Template images for dark/light menu bar support
-    const suffix = process.platform === 'darwin' ? 'Template' : '';
-    const filename = `tray-icon-${color}${suffix}.png`;
-    return path.join(__dirname, 'assets', filename);
-}
-
-function createTrayIcon(color) {
-    const iconPath = getIconPath(color);
+function createTrayIcon() {
+    // Use the actual bot icon for the tray (not Template, so it shows in full colour)
+    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
     try {
         const icon = nativeImage.createFromPath(iconPath);
         if (icon.isEmpty()) {
-            // Fallback: create a simple coloured dot programmatically
-            return createFallbackIcon(color);
+            return createFallbackIcon();
         }
-        // Resize for system tray (16x16 logical)
-        return icon.resize({ width: 16, height: 16 });
+        // Resize to 18x18 logical pixels for crisp menu-bar display
+        return icon.resize({ width: 18, height: 18 });
     } catch {
-        return createFallbackIcon(color);
+        return createFallbackIcon();
     }
 }
 
-function createFallbackIcon(color) {
-    // Create a simple 16x16 icon as a data URL
-    const colors = {
-        green: '#22c55e',
-        yellow: '#eab308',
-        red: '#ef4444',
-    };
-    const hex = colors[color] || colors.yellow;
-
-    // Use a simple PNG buffer (16x16 coloured square)
-    // For simplicity, create from a tiny data URL
+function createFallbackIcon() {
+    // Fallback: create a simple 16x16 icon as a data URL
     const size = 16;
     const canvas = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
-        <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="${hex}"/>
+        <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="#22c55e"/>
     </svg>`;
     const dataUrl = `data:image/svg+xml;base64,${Buffer.from(canvas).toString('base64')}`;
     return nativeImage.createFromDataURL(dataUrl);
@@ -157,7 +141,8 @@ function refreshMenu() {
 
 function setTrayStatus(color, tooltip) {
     if (!tray) return;
-    tray.setImage(createTrayIcon(color));
+    // Icon is always the bot icon; status is communicated via tooltip
+    tray.setImage(createTrayIcon());
     tray.setToolTip(tooltip || 'Oboto');
 }
 
@@ -279,7 +264,7 @@ app.whenReady().then(async () => {
     });
 
     // Create the system tray
-    tray = new Tray(createTrayIcon('yellow'));
+    tray = new Tray(createTrayIcon());
     tray.setToolTip('Oboto — Initialising...');
     tray.setContextMenu(buildContextMenu());
 

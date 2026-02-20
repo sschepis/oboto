@@ -87,7 +87,139 @@ The frontend supports standard HTML/React elements and a comprehensive set of bu
 *   `UI.Tooltip`
 *   `UI.DropdownMenu`, `UI.DropdownMenuItem`
 
-## 4. Workflow Example
+## 4. Surface API (`surfaceApi`)
+
+The `surfaceApi` global is available to all surface components at runtime. It provides workspace access, agent interaction, state management, and lifecycle hooks.
+
+### Workspace File Operations
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `surfaceApi.readFile(path)` | `Promise<string>` | Read a workspace file (256KB cap) |
+| `surfaceApi.writeFile(path, content)` | `Promise<{success, message}>` | Write a workspace file |
+| `surfaceApi.listFiles(path?, recursive?)` | `Promise<string[]>` | List workspace files/dirs |
+| `surfaceApi.readManyFiles(paths)` | `Promise<{summary, results}>` | Batch-read files (size-capped) |
+| `surfaceApi.getConfig(key?)` | `Promise<object>` | Get workspace config (package.json, env vars, etc.) |
+
+### Agent Interaction
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `surfaceApi.callAgent(prompt)` | `Promise<string>` | Send a prompt, get free-text response |
+| `surfaceApi.defineHandler(def)` | `void` | Register a typed handler with input/output schemas |
+| `surfaceApi.invoke(name, args?)` | `Promise<T>` | Invoke a handler, get typed JSON response |
+| `surfaceApi.callTool(toolName, args?)` | `Promise<T>` | Call a whitelisted server tool directly |
+
+### State & Messaging
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `surfaceApi.getState(key)` | `Promise<T>` | Get persisted surface state |
+| `surfaceApi.setState(key, value)` | `void` | Set persisted surface state |
+| `surfaceApi.sendMessage(type, payload)` | `void` | Send a raw WebSocket message |
+
+### Allowed Tools for `callTool`
+
+`read_file`, `write_file`, `list_files`, `edit_file`, `read_many_files`, `write_many_files`, `search_web`, `list_surfaces`, `list_skills`, `evaluate_math`, `unit_conversion`, `get_image_info`
+
+## 5. Surface Lifecycle
+
+Components can react to surface visibility changes using the `useSurfaceLifecycle()` hook (globally available):
+
+```jsx
+export default function MyComponent() {
+  const lifecycle = useSurfaceLifecycle();
+  
+  useEffect(() => {
+    if (lifecycle.isFocused) {
+      // Start polling, animations, etc.
+    }
+  }, [lifecycle.isFocused]);
+  
+  useEffect(() => {
+    const cleanup = lifecycle.onFocus(() => {
+      console.log('Surface tab became visible');
+    });
+    return cleanup;
+  }, []);
+  
+  useEffect(() => {
+    const cleanup = lifecycle.onBlur(() => {
+      console.log('Surface tab hidden');
+    });
+    return cleanup;
+  }, []);
+  
+  return <div>Focused: {lifecycle.isFocused ? 'Yes' : 'No'}</div>;
+}
+```
+
+**Lifecycle events:**
+- `onFocus` — tab switched TO this surface
+- `onBlur` — tab switched AWAY from this surface
+- `onMount` — surface first rendered
+- `onUnmount` — surface being destroyed
+- `isFocused` — reactive boolean
+
+## 6. Action Buttons (Agent Self-Invocation)
+
+Surface components can include buttons that call the AI assistant:
+
+### Simple (unstructured response)
+```jsx
+export default function AnalyzeButton() {
+  const [result, setResult] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  return (
+    <UI.Card>
+      <UI.CardContent>
+        <UI.Button onClick={async () => {
+          setLoading(true);
+          const response = await surfaceApi.callAgent("Analyze the project structure");
+          setResult(response);
+          setLoading(false);
+        }} disabled={loading}>
+          {loading ? 'Analyzing...' : 'Analyze Project'}
+        </UI.Button>
+        {result && <pre className="mt-4 text-sm">{result}</pre>}
+      </UI.CardContent>
+    </UI.Card>
+  );
+}
+```
+
+### Typed (structured JSON response)
+```jsx
+export default function StatsWidget() {
+  const [stats, setStats] = useState(null);
+  
+  useEffect(() => {
+    surfaceApi.defineHandler({
+      name: 'getProjectStats',
+      description: 'Count files, lines of code, and dependencies',
+      type: 'query',
+      outputSchema: {
+        type: 'object',
+        properties: {
+          totalFiles: { type: 'number' },
+          linesOfCode: { type: 'number' },
+          dependencies: { type: 'number' }
+        }
+      }
+    });
+  }, []);
+  
+  return (
+    <UI.Button onClick={async () => {
+      const data = await surfaceApi.invoke('getProjectStats');
+      setStats(data);
+    }}>Get Stats</UI.Button>
+  );
+}
+```
+
+## 7. Workflow Example
 
 1.  **User**: "Show me the current project status."
 2.  **Agent**:

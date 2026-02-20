@@ -1,5 +1,6 @@
+import path from 'node:path';
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { getRegistrySnapshot, fetchRemoteModels } from '../../core/model-registry.mjs';
+import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
 import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
 
@@ -7,18 +8,102 @@ import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
  */
 
-async function handleGetSettings(data, ctx) {
-    const { ws, assistant } = ctx;
-    ws.send(JSON.stringify({
-        type: 'settings',
-        payload: {
+/**
+ * Build the canonical settings payload for sending to the UI.
+ * Wrapped in try/catch — always returns a valid payload even on error.
+ */
+function buildSettingsPayload(assistant, ctx) {
+    try {
+        // Build secrets status map for API key display in UI
+        const secretsStatus = {};
+        if (ctx && ctx.secretsManager) {
+            try {
+                const secretsList = ctx.secretsManager.list();
+                for (const s of secretsList) {
+                    if (s && s.name) {
+                        secretsStatus[s.name] = { isConfigured: !!s.isConfigured, source: s.source || 'none' };
+                    }
+                }
+            } catch (e) {
+                consoleStyler.log('warning', `Failed to list secrets for settings: ${e.message}`);
+            }
+        }
+
+        // Build providers map with auto-detection from live API keys
+        const providers = {};
+        if (config.ai.providers) {
+            for (const [key, val] of Object.entries(config.ai.providers)) {
+                providers[key] = { ...val };
+            }
+        }
+        // Auto-enable providers that have API keys configured
+        if (secretsStatus.OPENAI_API_KEY?.isConfigured && providers.openai && !providers.openai.enabled) {
+            providers.openai = { ...providers.openai, enabled: true };
+        }
+        if (secretsStatus.GOOGLE_API_KEY?.isConfigured && providers.gemini && !providers.gemini.enabled) {
+            providers.gemini = { ...providers.gemini, enabled: true };
+        }
+        if (secretsStatus.ANTHROPIC_API_KEY?.isConfigured && providers.anthropic && !providers.anthropic.enabled) {
+            providers.anthropic = { ...providers.anthropic, enabled: true };
+        }
+
+        // Build routing with defaults
+        let routing = {};
+        try {
+            routing = assistant.promptRouter ? assistant.promptRouter.getRoutes() : { ...config.routing };
+        } catch (e) {
+            routing = { ...config.routing };
+        }
+        const primaryModel = config.ai.model || '';
+        for (const role of ['agentic', 'reasoning_high', 'reasoning_medium', 'reasoning_low', 'summarizer', 'code_completion']) {
+            if (!routing[role]) {
+                routing[role] = primaryModel;
+            }
+        }
+
+        return {
             maxTurns: assistant.maxTurns,
             maxSubagents: assistant.maxSubagents,
+            ai: { ...config.ai, providers },
+            routing,
+            modelRegistry: getRegistrySnapshot(),
+            secretsStatus,
+        };
+    } catch (err) {
+        // Fallback — always return a valid payload
+        consoleStyler.log('warning', `buildSettingsPayload error: ${err.message}`);
+        return {
+            maxTurns: assistant.maxTurns || 100,
+            maxSubagents: assistant.maxSubagents || 1,
             ai: config.ai,
-            routing: assistant.promptRouter ? assistant.promptRouter.getRoutes() : config.routing,
-            modelRegistry: getRegistrySnapshot()
-        }
-    }));
+            routing: config.routing,
+            modelRegistry: getRegistrySnapshot(),
+            secretsStatus: {},
+        };
+    }
+}
+
+async function handleGetSettings(data, ctx) {
+    const { ws, assistant } = ctx;
+    try {
+        ws.send(JSON.stringify({
+            type: 'settings',
+            payload: buildSettingsPayload(assistant, ctx)
+        }));
+    } catch (err) {
+        consoleStyler.log('error', `handleGetSettings failed: ${err.message}`);
+        // Send minimal valid settings so UI doesn't hang
+        ws.send(JSON.stringify({
+            type: 'settings',
+            payload: {
+                maxTurns: assistant.maxTurns || 100,
+                maxSubagents: assistant.maxSubagents || 1,
+                ai: config.ai,
+                routing: config.routing,
+                modelRegistry: {},
+            }
+        }));
+    }
 }
 
 async function handleUpdateSettings(data, ctx) {
@@ -29,7 +114,7 @@ async function handleUpdateSettings(data, ctx) {
 
     // Persist AI provider config to process.env + live config
     if (settings.ai) {
-        const { provider, model, endpoint } = settings.ai;
+        const { provider, model, endpoint, providers } = settings.ai;
         if (provider) {
             process.env.AI_PROVIDER = provider;
             config.ai.provider = provider;
@@ -43,17 +128,22 @@ async function handleUpdateSettings(data, ctx) {
             config.ai.endpoint = endpoint;
         }
 
+        // Persist per-provider configuration
+        if (providers && typeof providers === 'object') {
+            for (const [prov, pCfg] of Object.entries(providers)) {
+                if (config.ai.providers && config.ai.providers[prov]) {
+                    config.ai.providers[prov] = { ...config.ai.providers[prov], ...pCfg };
+                }
+            }
+        }
+
         // Trigger model refresh since AI config changed
         fetchRemoteModels().then(() => {
-            // Broadcast the updated registry
-            const newPayload = {
-                maxTurns: assistant.maxTurns,
-                maxSubagents: assistant.maxSubagents,
-                ai: config.ai,
-                routing: assistant.promptRouter ? assistant.promptRouter.getRoutes() : config.routing,
-                modelRegistry: getRegistrySnapshot()
-            };
-            broadcast('settings', newPayload);
+            try {
+                broadcast('settings', buildSettingsPayload(assistant, ctx));
+            } catch (e) {
+                consoleStyler.log('warning', `Failed to broadcast settings after model refresh: ${e.message}`);
+            }
         }).catch(err => {
             consoleStyler.log('warning', `Failed to refresh models after settings update: ${err.message}`);
         });
@@ -80,16 +170,10 @@ async function handleUpdateSettings(data, ctx) {
         payload: 'Settings updated'
     }));
     
-    // Broadcast new settings back (include AI config)
+    // Broadcast new settings back
     ws.send(JSON.stringify({
         type: 'settings',
-        payload: {
-            maxTurns: assistant.maxTurns,
-            maxSubagents: assistant.maxSubagents,
-            ai: config.ai,
-            routing: assistant.promptRouter ? assistant.promptRouter.getRoutes() : config.routing,
-            modelRegistry: getRegistrySnapshot()
-        }
+        payload: buildSettingsPayload(assistant, ctx)
     }));
 }
 
@@ -107,43 +191,58 @@ async function handleSetCwd(data, ctx) {
     const { ws, assistant, broadcast, schedulerService } = ctx;
     try {
         const newPath = data.payload;
+
+        const resolvedNew = path.resolve(newPath);
+        if (assistant.workingDir && path.resolve(assistant.workingDir) === resolvedNew) {
+            consoleStyler.log('system', `set-cwd skipped — already in ${resolvedNew}`);
+            // Still send back status, file tree, and surfaces so the UI isn't left hanging
+            // (happens on browser reload when localStorage has the saved CWD)
+            try {
+                const info = await getProjectInfo(resolvedNew);
+                ws.send(JSON.stringify({ type: 'status-update', payload: info }));
+                const tree = await getDirectoryTree(resolvedNew, 2);
+                ws.send(JSON.stringify({ type: 'file-tree', payload: tree }));
+                // Send surfaces for this workspace
+                if (assistant.toolExecutor?.surfaceManager) {
+                    try {
+                        const surfaces = await assistant.toolExecutor.surfaceManager.listSurfaces();
+                        ws.send(JSON.stringify({ type: 'surface-list', payload: surfaces }));
+                    } catch { ws.send(JSON.stringify({ type: 'surface-list', payload: [] })); }
+                }
+            } catch (e) {
+                // Non-fatal — the UI will just show what it has
+            }
+            return;
+        }
+
         const actualPath = await assistant.changeWorkingDirectory(newPath);
         ws.send(JSON.stringify({ type: 'status', payload: `Changed working directory to ${actualPath}` }));
         
-        // Push new status update immediately
         const info = await getProjectInfo(actualPath);
         ws.send(JSON.stringify({ type: 'status-update', payload: info }));
 
-        // Push updated file tree for the new workspace
         const tree = await getDirectoryTree(actualPath, 2);
         ws.send(JSON.stringify({ type: 'file-tree', payload: tree }));
 
-        // Switch scheduler to new workspace and restore its schedules
         if (schedulerService) {
             await schedulerService.switchWorkspace(actualPath);
             const schedules = schedulerService.listSchedules();
             broadcast('schedule-list', schedules);
         }
 
-        // Refresh surfaces for the new workspace
         if (assistant.toolExecutor?.surfaceManager) {
             try {
                 const surfaces = await assistant.toolExecutor.surfaceManager.listSurfaces();
                 ws.send(JSON.stringify({ type: 'surface-list', payload: surfaces }));
             } catch (e) {
-                // New workspace may not have a .surfaces/ dir yet — send empty list
                 ws.send(JSON.stringify({ type: 'surface-list', payload: [] }));
             }
         } else {
-            // No surface manager — send empty list to clear stale state
             ws.send(JSON.stringify({ type: 'surface-list', payload: [] }));
         }
 
-        // Update OpenClaw config for new workspace
         if (assistant.openClawManager) {
              await assistant.openClawManager.restart(actualPath);
-             
-             // Send updated OpenClaw status
              ws.send(JSON.stringify({
                 type: 'openclaw-status',
                 payload: {
@@ -166,17 +265,25 @@ async function handleRefreshModels(data, ctx) {
     const { ws, assistant, broadcast } = ctx;
     try {
         await fetchRemoteModels();
-        // Broadcast updated settings with new model registry to all clients
-        const settingsPayload = {
-            maxTurns: assistant.maxTurns,
-            maxSubagents: assistant.maxSubagents,
-            ai: config.ai,
-            routing: assistant.promptRouter ? assistant.promptRouter.getRoutes() : config.routing,
-            modelRegistry: getRegistrySnapshot()
-        };
-        broadcast('settings', settingsPayload);
+        broadcast('settings', buildSettingsPayload(assistant, ctx));
     } catch (err) {
         ws.send(JSON.stringify({ type: 'error', payload: `Failed to refresh models: ${err.message}` }));
+    }
+}
+
+async function handleRefreshProviderModels(data, ctx) {
+    const { ws, assistant, broadcast } = ctx;
+    const provider = data.payload?.provider;
+    if (!provider) {
+        ws.send(JSON.stringify({ type: 'error', payload: 'Missing provider in refresh-provider-models request' }));
+        return;
+    }
+
+    try {
+        await fetchModelsForProvider(provider);
+        broadcast('settings', buildSettingsPayload(assistant, ctx));
+    } catch (err) {
+        ws.send(JSON.stringify({ type: 'error', payload: `Failed to refresh ${provider} models: ${err.message}` }));
     }
 }
 
@@ -185,5 +292,6 @@ export const handlers = {
     'update-settings': handleUpdateSettings,
     'get-status': handleGetStatus,
     'set-cwd': handleSetCwd,
-    'refresh-models': handleRefreshModels
+    'refresh-models': handleRefreshModels,
+    'refresh-provider-models': handleRefreshProviderModels
 };

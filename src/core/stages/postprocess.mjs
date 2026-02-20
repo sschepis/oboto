@@ -31,28 +31,14 @@ export async function postprocess(ctx, services, next) {
         }
     }
 
-    // 2. Store response in holographic memory
-    if (consciousness && ctx.finalResponse) {
-        try {
-            await consciousness.storeToHolographicMemory(
-                ctx.originalInput,
-                ctx.finalResponse
-            );
-        } catch (err) {
-            consoleStyler.log('error', `Memory storage error: ${err.message}`);
-        }
-    }
-
-    // 3. Generate symbolic continuity signature
+    // 2. Generate symbolic continuity signature
     if (symbolicContinuity && ctx.finalResponse) {
         try {
-            const stats = historyManager.getStats();
-            await symbolicContinuity.generateSignature({
-                userInput: ctx.originalInput,
-                response: ctx.finalResponse,
-                model: ctx.model,
-                stats: stats
-            });
+            await symbolicContinuity.generateSignature(
+                ctx.originalInput,
+                ctx.finalResponse,
+                ctx.toolCallCount || 0
+            );
         } catch (err) {
             consoleStyler.log('error', `Symbolic continuity error: ${err.message}`);
         }

@@ -64,5 +64,14 @@ export async function preprocess(ctx, services, next) {
         }
     }
 
+    // Dynamic maxTurns — cap simple requests to avoid runaway tool-call chains.
+    // Only lower the limit; never raise it above the configured default.
+    const inputLen = ctx.userInput.trim().length;
+    if (inputLen < 60 && ctx.maxTurns > 15) {
+        ctx.maxTurns = 15;
+    } else if (inputLen < 200 && ctx.maxTurns > 30) {
+        ctx.maxTurns = 30;
+    }
+
     await next();
 }

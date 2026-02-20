@@ -1,8 +1,8 @@
 import React from 'react';
-import { AlertTriangle, Cpu, Zap, Brain, FileText, Code } from 'lucide-react';
+import { AlertTriangle, Cpu, Zap, Brain, FileText, Code, Lock } from 'lucide-react';
+import type { ProviderConfig, AIProviderType } from './AIProviderSettings';
 
 interface ModelCapabilities {
-  id: string;
   provider: string;
   contextWindow: number;
   maxOutputTokens: number;
@@ -11,12 +11,15 @@ interface ModelCapabilities {
   supportsReasoningEffort: boolean;
   costTier: 'cheap' | 'medium' | 'expensive';
   reasoningCapability: 'low' | 'medium' | 'high';
+  displayName?: string;
 }
 
 interface ModelRoutingSettingsProps {
   routing: Record<string, string>;
   modelRegistry: Record<string, ModelCapabilities>;
   onChange: (routing: Record<string, string>) => void;
+  /** Per-provider config (enabled state + default model) */
+  providers?: Record<AIProviderType, ProviderConfig>;
 }
 
 type RoleDefinition = {
@@ -35,9 +38,14 @@ const ROLES: Record<string, RoleDefinition> = {
   code_completion: { label: 'Code Completion', icon: <Code size={14} />, desc: 'Inline ghost text.' },
 };
 
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  anthropic: 'Anthropic',
+  lmstudio: 'LMStudio',
+};
+
 const ContextBar: React.FC<{ model: ModelCapabilities }> = ({ model }) => {
-  // Log scale visualization for context window
-  // 128k = ~50%, 1M = ~80%, 2M = 100%
   const width = Math.min(100, Math.max(10, Math.log10(model.contextWindow) * 15));
   
   return (
@@ -55,8 +63,36 @@ const ContextBar: React.FC<{ model: ModelCapabilities }> = ({ model }) => {
   );
 };
 
-export const ModelRoutingSettings: React.FC<ModelRoutingSettingsProps> = ({ routing, modelRegistry, onChange }) => {
-  const models = Object.values(modelRegistry);
+export const ModelRoutingSettings: React.FC<ModelRoutingSettingsProps> = ({ routing, modelRegistry, onChange, providers }) => {
+  // Determine which providers are enabled
+  const enabledProviders = providers
+    ? (Object.entries(providers) as [AIProviderType, ProviderConfig][])
+        .filter(([, cfg]) => cfg.enabled)
+        .map(([key]) => key)
+    : [];
+
+  const hasEnabledProviders = enabledProviders.length > 0;
+
+  // Get models only from enabled providers
+  const availableModels = Object.entries(modelRegistry)
+    .filter(([, caps]) => {
+      if (!hasEnabledProviders) return true; // Show all if no provider info
+      return enabledProviders.includes(caps.provider as AIProviderType);
+    })
+    .map(([id, caps]) => ({ id, ...caps }))
+    .sort((a, b) => {
+      // Sort by provider, then by name
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.id.localeCompare(b.id);
+    });
+
+  // Group models by provider for the dropdown
+  const modelsByProvider = new Map<string, typeof availableModels>();
+  for (const m of availableModels) {
+    const group = modelsByProvider.get(m.provider) || [];
+    group.push(m);
+    modelsByProvider.set(m.provider, group);
+  }
 
   const handleChange = (role: string, modelId: string) => {
     onChange({ ...routing, [role]: modelId });
@@ -64,7 +100,19 @@ export const ModelRoutingSettings: React.FC<ModelRoutingSettingsProps> = ({ rout
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="bg-zinc-900/20 rounded-xl border border-zinc-800/40 overflow-hidden">
+      {!hasEnabledProviders && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/15">
+          <Lock size={16} className="text-amber-400" />
+          <div>
+            <p className="text-xs font-medium text-amber-300">No providers enabled</p>
+            <p className="text-[10px] text-amber-200/60 mt-0.5">
+              Enable at least one AI provider in the Configuration tab to configure model routing.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className={`bg-zinc-900/20 rounded-xl border border-zinc-800/40 overflow-hidden ${!hasEnabledProviders ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="p-4 border-b border-zinc-800/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Cpu size={14} className="text-violet-500" />
@@ -73,14 +121,14 @@ export const ModelRoutingSettings: React.FC<ModelRoutingSettingsProps> = ({ rout
             </span>
           </div>
           <span className="text-[10px] text-zinc-600">
-            Map task types to specific models
+            {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} from {modelsByProvider.size} provider{modelsByProvider.size !== 1 ? 's' : ''}
           </span>
         </div>
 
         <div className="divide-y divide-zinc-800/30">
           {Object.entries(ROLES).map(([role, meta]) => {
             const currentModelId = routing[role] || '';
-            const currentModel = modelRegistry[currentModelId];
+            const currentModel = modelRegistry[currentModelId] as ModelCapabilities | undefined;
             
             // Validation
             const missingTools = meta.required?.includes('supportsToolCalling') && currentModel && !currentModel.supportsToolCalling;
@@ -108,16 +156,22 @@ export const ModelRoutingSettings: React.FC<ModelRoutingSettingsProps> = ({ rout
                 <select
                   value={currentModelId}
                   onChange={(e) => handleChange(role, e.target.value)}
+                  disabled={!hasEnabledProviders}
                   className="
                     bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-300 
-                    focus:border-indigo-500/50 outline-none w-48 font-mono
+                    focus:border-indigo-500/50 outline-none w-52 font-mono
+                    disabled:opacity-40 disabled:cursor-not-allowed
                   "
                 >
                   <option value="" disabled>Select Model...</option>
-                  {models.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
+                  {Array.from(modelsByProvider.entries()).map(([provider, models]) => (
+                    <optgroup key={provider} label={`── ${PROVIDER_LABELS[provider] || provider} ──`}>
+                      {models.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.displayName || m.id}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

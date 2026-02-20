@@ -1,22 +1,125 @@
-import React from 'react';
-import { Server, Zap, Cpu, Key, Globe, Box, ShieldCheck, ShieldAlert, ExternalLink } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Server, Zap, Cpu, Globe, Box, ShieldCheck, ShieldAlert, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
 import type { SecretItem } from '../../../hooks/useSecrets';
 import { Select, SelectItem } from '../../../surface-kit/primitives/Select';
+import { Switch } from '../../../surface-kit/primitives/Switch';
+import { wsService } from '../../../services/wsService';
 
 export type AIProviderType = 'openai' | 'gemini' | 'anthropic' | 'lmstudio';
+
+export interface ProviderConfig {
+  enabled: boolean;
+  model: string;
+  endpoint?: string;
+}
 
 export interface AIProviderConfig {
   provider: AIProviderType;
   endpoint?: string;
   model: string;
+  providers?: Record<AIProviderType, ProviderConfig>;
 }
 
 /** Maps provider type → secret name used for its API key */
 const PROVIDER_SECRET_MAP: Record<AIProviderType, string | null> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GOOGLE_API_KEY',
-  anthropic: null, // Uses Google Cloud ADC
+  anthropic: 'ANTHROPIC_API_KEY',
   lmstudio: null, // no key needed
+};
+
+/** Default models for each provider */
+const DEFAULT_MODELS: Record<AIProviderType, string> = {
+  openai: 'gpt-4o',
+  gemini: 'gemini-2.5-flash',
+  anthropic: 'claude-sonnet-4-20250514',
+  lmstudio: '',
+};
+
+/** Recommended models to highlight */
+const RECOMMENDED_MODELS: Record<string, string[]> = {
+  openai: ['gpt-4o', 'o1-preview', 'o3', 'o4-mini'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  anthropic: ['claude-sonnet-4', 'claude-opus-4', 'claude-3-7-sonnet'],
+  lmstudio: [],
+};
+
+interface ProviderMeta {
+  key: AIProviderType;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  colorClass: string;
+  iconColor: string;
+  needsKey: boolean;
+  authNote?: string;
+}
+
+const PROVIDERS: ProviderMeta[] = [
+  {
+    key: 'openai',
+    label: 'OpenAI',
+    description: 'GPT-4o, o1, o3, o4 models',
+    icon: <Zap size={16} />,
+    colorClass: 'emerald',
+    iconColor: 'text-emerald-400',
+    needsKey: true,
+  },
+  {
+    key: 'gemini',
+    label: 'Google Gemini',
+    description: 'Gemini Pro & Flash models',
+    icon: <Cpu size={16} />,
+    colorClass: 'blue',
+    iconColor: 'text-blue-400',
+    needsKey: true,
+  },
+  {
+    key: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude via Vertex AI',
+    icon: <Box size={16} />,
+    colorClass: 'violet',
+    iconColor: 'text-violet-400',
+    needsKey: false,
+    authNote: 'Uses Google Cloud ADC. Run: gcloud auth application-default login',
+  },
+  {
+    key: 'lmstudio',
+    label: 'LM Studio',
+    description: 'Local LLMs via LM Studio',
+    icon: <Server size={16} />,
+    colorClass: 'amber',
+    iconColor: 'text-amber-400',
+    needsKey: false,
+  },
+];
+
+const colorMap: Record<string, { bg: string; border: string; iconBg: string; dot: string }> = {
+  emerald: {
+    bg: 'bg-emerald-500/5',
+    border: 'border-emerald-500/20',
+    iconBg: 'bg-emerald-500/15 border-emerald-500/15',
+    dot: 'bg-emerald-500',
+  },
+  blue: {
+    bg: 'bg-blue-500/5',
+    border: 'border-blue-500/20',
+    iconBg: 'bg-blue-500/15 border-blue-500/15',
+    dot: 'bg-blue-500',
+  },
+  violet: {
+    bg: 'bg-violet-500/5',
+    border: 'border-violet-500/20',
+    iconBg: 'bg-violet-500/15 border-violet-500/15',
+    dot: 'bg-violet-500',
+  },
+  amber: {
+    bg: 'bg-amber-500/5',
+    border: 'border-amber-500/20',
+    iconBg: 'bg-amber-500/15 border-amber-500/15',
+    dot: 'bg-amber-500',
+  },
 };
 
 interface AIProviderSettingsProps {
@@ -24,6 +127,8 @@ interface AIProviderSettingsProps {
   onChange: (config: AIProviderConfig) => void;
   /** Current secrets list from the vault (used to show key status) */
   secrets?: SecretItem[];
+  /** Secrets status map from the settings payload (preferred over secrets array) */
+  secretsStatus?: Record<string, { isConfigured: boolean; source: string }>;
   /** Callback to open the Secrets Vault panel */
   onOpenSecrets?: () => void;
   modelRegistry?: Record<string, {
@@ -34,278 +139,315 @@ interface AIProviderSettingsProps {
   }>;
 }
 
-const colorStyles = {
-  emerald: {
-    active: 'bg-zinc-900/60 border-emerald-500/40 shadow-lg shadow-emerald-500/5',
-    icon: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/15',
-    dot: 'text-emerald-500'
-  },
-  blue: {
-    active: 'bg-zinc-900/60 border-blue-500/40 shadow-lg shadow-blue-500/5',
-    icon: 'bg-blue-500/15 text-blue-400 border border-blue-500/15',
-    dot: 'text-blue-500'
-  },
-  violet: {
-    active: 'bg-zinc-900/60 border-violet-500/40 shadow-lg shadow-violet-500/5',
-    icon: 'bg-violet-500/15 text-violet-400 border border-violet-500/15',
-    dot: 'text-violet-500'
-  },
-  amber: {
-    active: 'bg-zinc-900/60 border-amber-500/40 shadow-lg shadow-amber-500/5',
-    icon: 'bg-amber-500/15 text-amber-400 border border-amber-500/15',
-    dot: 'text-amber-500'
-  }
-};
+export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
+  config,
+  onChange,
+  secrets,
+  secretsStatus,
+  onOpenSecrets,
+  modelRegistry = {},
+}) => {
+  const [refreshingProvider, setRefreshingProvider] = useState<string | null>(null);
 
-type ColorKey = keyof typeof colorStyles;
+  // Get the providers config, falling back to defaults
+  const providers: Record<AIProviderType, ProviderConfig> = config.providers || {
+    openai: { enabled: config.provider === 'openai', model: config.provider === 'openai' ? config.model : DEFAULT_MODELS.openai },
+    gemini: { enabled: config.provider === 'gemini', model: config.provider === 'gemini' ? config.model : DEFAULT_MODELS.gemini },
+    anthropic: { enabled: config.provider === 'anthropic', model: config.provider === 'anthropic' ? config.model : DEFAULT_MODELS.anthropic },
+    lmstudio: { enabled: config.provider === 'lmstudio', model: config.provider === 'lmstudio' ? config.model : DEFAULT_MODELS.lmstudio },
+  };
 
-const ProviderCard: React.FC<{
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-  colorClass: ColorKey;
-}> = ({ label, description, icon, active, onClick, colorClass }) => {
-  const styles = colorStyles[colorClass];
-  
+  // Subscribe to WS 'settings' event to detect when models arrive
+  useEffect(() => {
+    const unsub = wsService.on('settings', () => {
+      setRefreshingProvider(null);
+    });
+    return unsub;
+  }, []);
+
+  const handleRefreshModels = useCallback((providerKey: string) => {
+    setRefreshingProvider(providerKey);
+    wsService.refreshProviderModels(providerKey);
+  }, []);
+
+  const updateProvider = (providerKey: AIProviderType, updates: Partial<ProviderConfig>) => {
+    const newProviders = { ...providers };
+    newProviders[providerKey] = { ...newProviders[providerKey], ...updates };
+
+    // If this provider is being enabled or its model is changing, and it's the primary provider,
+    // also update the top-level config
+    const newConfig = { ...config, providers: newProviders };
+
+    // If the currently active provider is being updated, sync top-level fields
+    if (providerKey === config.provider) {
+      if (updates.model !== undefined) newConfig.model = updates.model;
+      if (updates.endpoint !== undefined) newConfig.endpoint = updates.endpoint;
+    }
+
+    // If we're enabling a provider and no provider is currently set, make it the primary
+    if (updates.enabled && !config.provider) {
+      newConfig.provider = providerKey;
+      newConfig.model = newProviders[providerKey].model;
+    }
+
+    // If we're disabling the current primary provider, switch to first enabled one
+    if (updates.enabled === false && providerKey === config.provider) {
+      const firstEnabled = (Object.entries(newProviders) as [AIProviderType, ProviderConfig][])
+        .find(([k, v]) => v.enabled && k !== providerKey);
+      if (firstEnabled) {
+        newConfig.provider = firstEnabled[0];
+        newConfig.model = firstEnabled[1].model;
+      } else {
+        newConfig.provider = '' as AIProviderType;
+        newConfig.model = '';
+      }
+    }
+
+    onChange(newConfig);
+  };
+
+  const setAsPrimary = (providerKey: AIProviderType) => {
+    if (!providers[providerKey]?.enabled) return;
+    onChange({
+      ...config,
+      provider: providerKey,
+      model: providers[providerKey].model,
+      endpoint: providers[providerKey].endpoint,
+    });
+  };
+
+  /** Check if a provider's API key is configured */
+  const isKeyConfigured = (providerKey: AIProviderType): { configured: boolean; source: string } => {
+    const secretName = PROVIDER_SECRET_MAP[providerKey];
+    if (!secretName) return { configured: true, source: 'n/a' }; // No key needed
+
+    // Prefer secretsStatus from settings (always up-to-date)
+    if (secretsStatus && secretsStatus[secretName]) {
+      return {
+        configured: secretsStatus[secretName].isConfigured,
+        source: secretsStatus[secretName].source,
+      };
+    }
+
+    // Fallback to secrets array
+    if (secrets) {
+      const entry = secrets.find(s => s.name === secretName);
+      if (entry) return { configured: entry.isConfigured, source: entry.source };
+    }
+
+    return { configured: false, source: 'none' };
+  };
+
+  /** Get available models for a specific provider */
+  const getModelsForProvider = (providerKey: string) => {
+    return Object.entries(modelRegistry)
+      .filter(([, caps]) => caps.provider === providerKey)
+      .sort((a, b) => {
+        const aRec = isRecommended(providerKey, a[0]);
+        const bRec = isRecommended(providerKey, b[0]);
+        if (aRec && !bRec) return -1;
+        if (!aRec && bRec) return 1;
+        return a[0].localeCompare(b[0]);
+      });
+  };
+
+  const isRecommended = (providerKey: string, modelId: string) => {
+    const list = RECOMMENDED_MODELS[providerKey] || [];
+    return list.some(r => modelId.includes(r));
+  };
+
   return (
-    <button
-      onClick={onClick}
-      className={`relative group flex flex-col items-start p-4 rounded-xl border transition-all duration-300 w-full text-left active:scale-[0.98] ${
-        active 
-          ? styles.active
-          : 'bg-zinc-950/20 border-zinc-800/40 hover:bg-zinc-900/30 hover:border-zinc-700/40'
-      }`}
-    >
-      <div className={`p-2 rounded-lg mb-3 transition-all duration-200 ${
-        active ? styles.icon : 'bg-zinc-900/60 text-zinc-500 group-hover:text-zinc-400 border border-zinc-800/30'
-      }`}>
-        {icon}
-      </div>
-      <div className="space-y-1">
-        <h3 className={`font-semibold text-sm transition-colors duration-200 ${
-          active ? 'text-zinc-100' : 'text-zinc-400 group-hover:text-zinc-200'
-        }`}>
-          {label}
-        </h3>
-        <p className="text-[10px] text-zinc-500 leading-tight">
-          {description}
-        </p>
-      </div>
-      {active && (
-        <div className={`absolute top-3 right-3 ${styles.dot} animate-scale-in`}>
-          <div className="w-2 h-2 rounded-full bg-current shadow-[0_0_6px_currentColor]" />
-        </div>
-      )}
-    </button>
-  );
-};
+    <div className="space-y-3 animate-fade-in">
+      {PROVIDERS.map(meta => {
+        const pConfig = providers[meta.key];
+        const isPrimary = config.provider === meta.key;
+        const keyStatus = isKeyConfigured(meta.key);
+        const models = getModelsForProvider(meta.key);
+        const isRefreshing = refreshingProvider === meta.key;
+        const colors = colorMap[meta.colorClass];
+        const canConfigure = meta.needsKey ? keyStatus.configured : true;
 
-export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({ config, onChange, secrets, onOpenSecrets, modelRegistry = {} }) => {
-  const updateConfig = (updates: Partial<AIProviderConfig>) => {
-    onChange({ ...config, ...updates });
-  };
+        return (
+          <div
+            key={meta.key}
+            className={`rounded-xl border overflow-hidden transition-all duration-300 ${
+              pConfig.enabled
+                ? `${colors.bg} ${colors.border}`
+                : 'bg-zinc-950/20 border-zinc-800/30 opacity-70'
+            }`}
+          >
+            {/* Provider Header */}
+            <div className="flex items-center gap-3 p-4">
+              <div className={`p-2 rounded-lg border transition-all ${
+                pConfig.enabled ? `${colors.iconBg} ${meta.iconColor}` : 'bg-zinc-900/60 text-zinc-600 border-zinc-800/30'
+              }`}>
+                {meta.icon}
+              </div>
 
-  // Determine API key status from secrets vault
-  const secretName = PROVIDER_SECRET_MAP[config.provider];
-  const secretEntry = secretName && secrets
-    ? secrets.find(s => s.name === secretName)
-    : null;
-  const isKeyConfigured = secretEntry?.isConfigured ?? false;
-  const keySource = secretEntry?.source ?? 'none';
-
-  // Filter models by provider
-  const availableModels = Object.entries(modelRegistry)
-    .filter(([, caps]) => caps.provider === config.provider)
-    .sort((a, b) => a[0].localeCompare(b[0]));
-
-  // Define recommended models for each provider
-  const RECOMMENDED_MODELS: Record<string, string[]> = {
-    openai: ['gpt-4o', 'o1-preview'],
-    gemini: ['gemini-1.5-pro', 'gemini-2.0-flash'],
-    anthropic: ['claude-3-5-sonnet-v2@20241022'],
-    lmstudio: ['llama-3.2-1b-instruct', 'mistral-7b-instruct'] // Examples
-  };
-
-  const isRecommended = (id: string) => {
-    const list = RECOMMENDED_MODELS[config.provider] || [];
-    return list.some(r => id.includes(r));
-  };
-
-  // Split into recommended and others for display order
-  const recommendedList = availableModels.filter(([id]) => isRecommended(id));
-  const otherList = availableModels.filter(([id]) => !isRecommended(id));
-  const sortedModels = [...recommendedList, ...otherList];
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ProviderCard
-          label="OpenAI"
-          description="GPT-4o / o1 models."
-          icon={<Zap size={18} />}
-          active={config.provider === 'openai'}
-          onClick={() => updateConfig({ provider: 'openai', model: 'gpt-4o' })}
-          colorClass="emerald"
-        />
-        <ProviderCard
-          label="Gemini"
-          description="Google's multimodal models."
-          icon={<Cpu size={18} />}
-          active={config.provider === 'gemini'}
-          onClick={() => updateConfig({ provider: 'gemini', model: 'gemini-1.5-pro' })}
-          colorClass="blue"
-        />
-        <ProviderCard
-          label="Anthropic"
-          description="Claude 3 via Vertex AI."
-          icon={<Box size={18} />}
-          active={config.provider === 'anthropic'}
-          onClick={() => updateConfig({ provider: 'anthropic', model: 'claude-3-5-sonnet-v2@20241022' })}
-          colorClass="violet"
-        />
-        <ProviderCard
-          label="LMStudio"
-          description="Local LLMs via LM Studio."
-          icon={<Server size={18} />}
-          active={config.provider === 'lmstudio'}
-          onClick={() => updateConfig({ provider: 'lmstudio', model: 'llama-3.2-1b-instruct' })}
-          colorClass="amber"
-        />
-      </div>
-
-      <div className="bg-zinc-900/20 rounded-xl border border-zinc-800/40 overflow-hidden animate-fade-in" key={config.provider}>
-        <div className="p-4 border-b border-zinc-800/30 flex items-center gap-2">
-          {config.provider === 'openai' && <Zap size={14} className="text-emerald-500" />}
-          {config.provider === 'gemini' && <Cpu size={14} className="text-blue-500" />}
-          {config.provider === 'anthropic' && <Box size={14} className="text-violet-500" />}
-          {config.provider === 'lmstudio' && <Server size={14} className="text-amber-500" />}
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.15em]">
-            {config.provider === 'lmstudio' ? 'Endpoint Configuration' : 'Provider Configuration'}
-          </span>
-        </div>
-        
-        <div className="p-4 space-y-4">
-          {/* Model Selection */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-400 flex items-center gap-2">
-              <Box size={11} /> Model Identifier
-            </label>
-            
-            {sortedModels.length > 0 ? (
-              <Select
-                value={config.model}
-                onValueChange={(val) => updateConfig({ model: val })}
-                placeholder="Select a model..."
-              >
-                {sortedModels.map(([id, caps]) => {
-                  const recommended = isRecommended(id);
-                  return (
-                    <SelectItem key={id} value={id}>
-                      <span className={recommended ? "font-bold text-indigo-300" : "text-zinc-200"}>
-                        {caps.displayName || id}
-                        {recommended && <span className="ml-2 text-[10px] bg-indigo-500/20 text-indigo-300 px-1 rounded">Recommended</span>}
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </Select>
-            ) : (
-              <input 
-                type="text" 
-                value={config.model}
-                onChange={(e) => updateConfig({ model: e.target.value })}
-                className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
-                placeholder={config.provider === 'openai' ? 'gpt-4o' : config.provider === 'gemini' ? 'gemini-1.5-pro' : config.provider === 'anthropic' ? 'claude-3-5-sonnet-v2@20241022' : 'llama-3.2-1b-instruct'}
-              />
-            )}
-            
-            {sortedModels.length === 0 && (
-                <p className="text-[10px] text-zinc-500">
-                    {config.provider === 'lmstudio' 
-                        ? "Ensure LM Studio is running and 'Start Server' is enabled."
-                        : "No models found. Check API Key configuration."}
-                </p>
-            )}
-          </div>
-
-          {/* Provider Specific Fields */}
-          {config.provider === 'lmstudio' ? (
-            <div className="space-y-2 animate-fade-in">
-              <label className="text-xs font-medium text-zinc-400 flex items-center gap-2">
-                <Globe size={11} /> Endpoint URL
-              </label>
-              <input
-                type="text"
-                value={config.endpoint || ''}
-                onChange={(e) => updateConfig({ endpoint: e.target.value })}
-                className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
-                placeholder="http://localhost:1234/v1/chat/completions"
-              />
-              <p className="text-[10px] text-zinc-600 leading-relaxed">
-                Use OpenAI-compatible endpoint for tool support (e.g. /v1/chat/completions).
-              </p>
-            </div>
-          ) : config.provider === 'anthropic' ? (
-            <div className="space-y-2 animate-fade-in">
-               <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ShieldCheck size={14} className="text-violet-400" />
-                    <span className="text-xs font-bold text-violet-300">Google Cloud Auth</span>
-                  </div>
-                  <p className="text-[10px] text-violet-200/70 leading-relaxed">
-                    Anthropic models are accessed via Vertex AI. Authentication is handled automatically using Google Application Default Credentials (ADC).
-                  </p>
-                  <p className="text-[10px] text-zinc-500 mt-2 font-mono">
-                    Ensure <code>gcloud auth application-default login</code> is run on the host.
-                  </p>
-               </div>
-            </div>
-          ) : (
-            <div className="space-y-2 animate-fade-in">
-              <label className="text-xs font-medium text-zinc-400 flex items-center gap-2">
-                <Key size={11} /> API Key
-              </label>
-              {/* Vault status badge + link to Secrets panel */}
-              <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-800/50 bg-zinc-950/40">
-                <div className="flex items-center gap-2.5">
-                  {isKeyConfigured ? (
-                    <>
-                      <ShieldCheck size={14} className="text-emerald-400" />
-                      <span className="text-xs text-emerald-400 font-medium">
-                        Configured
-                      </span>
-                      <span className="text-[10px] text-zinc-600 bg-zinc-900/60 px-1.5 py-0.5 rounded border border-zinc-800/30">
-                        {keySource === 'vault' ? 'Secrets Vault' : '.env file'}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <ShieldAlert size={14} className="text-amber-400 animate-pulse" />
-                      <span className="text-xs text-amber-400 font-medium">
-                        Not configured
-                      </span>
-                      <span className="text-[10px] text-zinc-600">
-                        {secretName}
-                      </span>
-                    </>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className={`text-sm font-semibold ${pConfig.enabled ? 'text-zinc-100' : 'text-zinc-500'}`}>
+                    {meta.label}
+                  </h3>
+                  {isPrimary && pConfig.enabled && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/20">
+                      Primary
+                    </span>
                   )}
                 </div>
-                <button
-                  onClick={onOpenSecrets}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all duration-150 active:scale-95"
-                >
-                  {isKeyConfigured ? 'Manage' : 'Set Key'} <ExternalLink size={10} />
-                </button>
+                <p className="text-[10px] text-zinc-500 mt-0.5">{meta.description}</p>
               </div>
-              <p className="text-[10px] text-zinc-600 leading-relaxed">
-                API keys are stored securely in the encrypted Secrets Vault — never in settings.
-              </p>
+
+              {/* Primary button */}
+              {pConfig.enabled && !isPrimary && (
+                <button
+                  onClick={() => setAsPrimary(meta.key)}
+                  className="text-[10px] font-medium text-zinc-500 hover:text-indigo-400 px-2 py-1 rounded-md hover:bg-indigo-500/10 transition-all"
+                  title="Set as primary provider"
+                >
+                  Set Primary
+                </button>
+              )}
+
+              {/* Enable toggle */}
+              <Switch
+                checked={pConfig.enabled}
+                onCheckedChange={(checked) => updateProvider(meta.key, { enabled: checked })}
+              />
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Provider Details (shown when enabled) */}
+            {pConfig.enabled && (
+              <div className="px-4 pb-4 space-y-3 border-t border-zinc-800/20 pt-3 animate-fade-in">
+                {/* API Key Status */}
+                {meta.needsKey && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-800/40 bg-zinc-950/30">
+                    <div className="flex items-center gap-2">
+                      {keyStatus.configured ? (
+                        <>
+                          <ShieldCheck size={13} className="text-emerald-400" />
+                          <span className="text-[11px] text-emerald-400 font-medium">API Key Configured</span>
+                          <span className="text-[9px] text-zinc-600 bg-zinc-900/60 px-1.5 py-0.5 rounded border border-zinc-800/30">
+                            {keyStatus.source === 'vault' ? 'Secrets Vault' : keyStatus.source === 'env' ? '.env file' : 'Unknown'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldAlert size={13} className="text-amber-400 animate-pulse" />
+                          <span className="text-[11px] text-amber-400 font-medium">API Key Required</span>
+                          <span className="text-[9px] text-zinc-600">{PROVIDER_SECRET_MAP[meta.key]}</span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={onOpenSecrets}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all active:scale-95"
+                    >
+                      {keyStatus.configured ? 'Manage' : 'Set Key'} <ExternalLink size={9} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Auth note for providers that don't need API keys */}
+                {meta.authNote && (
+                  <div className="p-2.5 rounded-lg bg-violet-500/8 border border-violet-500/15">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={13} className="text-violet-400" />
+                      <span className="text-[11px] text-violet-300 font-medium">Google Cloud Auth</span>
+                    </div>
+                    <p className="text-[10px] text-violet-200/60 mt-1 leading-relaxed font-mono">{meta.authNote}</p>
+                  </div>
+                )}
+
+                {/* LM Studio Endpoint */}
+                {meta.key === 'lmstudio' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
+                      <Globe size={10} /> Endpoint URL
+                    </label>
+                    <input
+                      type="text"
+                      value={pConfig.endpoint || ''}
+                      onChange={(e) => updateProvider('lmstudio', { endpoint: e.target.value })}
+                      className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
+                      placeholder="http://localhost:1234/v1/chat/completions"
+                    />
+                  </div>
+                )}
+
+                {/* Model Selection */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
+                      <Box size={10} /> Default Model
+                    </label>
+                    <button
+                      onClick={() => handleRefreshModels(meta.key)}
+                      disabled={isRefreshing || !canConfigure}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                      title="Refresh model list from provider"
+                    >
+                      {isRefreshing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                      {isRefreshing ? 'Fetching...' : 'Refresh'}
+                    </button>
+                  </div>
+
+                  {isRefreshing ? (
+                    <div className="flex items-center gap-2 py-2.5 px-3 bg-zinc-950/40 border border-zinc-800/50 rounded-lg">
+                      <Loader2 size={12} className="animate-spin text-indigo-400" />
+                      <span className="text-[11px] text-zinc-400">Fetching models from {meta.label}...</span>
+                    </div>
+                  ) : models.length > 0 ? (
+                    <Select
+                      value={pConfig.model}
+                      onValueChange={(val) => updateProvider(meta.key, { model: val })}
+                      placeholder="Select a model..."
+                    >
+                      {models.map(([id, caps]) => {
+                        const rec = isRecommended(meta.key, id);
+                        return (
+                          <SelectItem key={id} value={id}>
+                            <span className={rec ? "font-bold text-indigo-300" : "text-zinc-200"}>
+                              {caps.displayName || id}
+                              {rec && <span className="ml-2 text-[9px] bg-indigo-500/20 text-indigo-300 px-1 rounded">★</span>}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </Select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={pConfig.model}
+                      onChange={(e) => updateProvider(meta.key, { model: e.target.value })}
+                      className="w-full bg-zinc-950/40 border border-zinc-800/50 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500/40 focus:shadow-[0_0_0_1px_rgba(99,102,241,0.15)] outline-none transition-all duration-200 font-mono"
+                      placeholder={DEFAULT_MODELS[meta.key] || 'model-name'}
+                    />
+                  )}
+
+                  {!isRefreshing && models.length === 0 && canConfigure && (
+                    <p className="text-[10px] text-zinc-600">
+                      {meta.key === 'lmstudio'
+                        ? "Ensure LM Studio is running with 'Start Server' enabled, then click Refresh."
+                        : "Click Refresh to fetch available models."}
+                    </p>
+                  )}
+                  {!isRefreshing && !canConfigure && (
+                    <p className="text-[10px] text-amber-500/70">
+                      Configure the API key first, then models will be fetched automatically.
+                    </p>
+                  )}
+                  {!isRefreshing && models.length > 0 && (
+                    <p className="text-[10px] text-zinc-600">
+                      {models.length} model{models.length !== 1 ? 's' : ''} available
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -1,17 +1,22 @@
 import React, { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import HtmlSandbox from '../features/HtmlSandbox';
+import { ChartBlock } from './ChartBlock';
 import { Copy, Check } from 'lucide-react';
 import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 
 /**
  * Renders markdown content with:
  * - GFM (tables, strikethrough, autolinks, task lists)
+ * - Math support (LaTeX via KaTeX)
  * - Syntax-highlighted code blocks via react-syntax-highlighter
  * - HTML code blocks rendered inline as HtmlSandbox previews
+ * - Chart blocks rendered via Recharts
  * - Styled prose for headings, lists, links, etc.
  */
 
@@ -49,11 +54,12 @@ function CopyButton({ text }: { text: string }) {
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({ content }) => {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         // Code blocks
         code({ className, children, ...props }) {
-          const match = /language-(\w+)/.exec(className || '');
+          const match = /language-([\w:]+)/.exec(className || '');
           const lang = match ? match[1] : '';
           const codeString = String(children).replace(/\n$/, '');
           const isInline = !className && !codeString.includes('\n');
@@ -80,6 +86,11 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({ content }) => 
                 <HtmlSandbox code={codeString} />
               </div>
             );
+          }
+
+          // Chart blocks
+          if (lang === 'json:chart' || lang === 'chart') {
+             return <ChartBlock code={codeString} />;
           }
 
           return (

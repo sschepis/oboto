@@ -192,7 +192,7 @@ Add a `--auto-activate` flag or config option:
 
 ```javascript
 // In startServer(), after all initialization:
-if (process.env.ROBODEV_AUTO_ACTIVATE === 'true') {
+if (process.env.OBOTO_AUTO_ACTIVATE === 'true') {
   agentLoopController.play();
   consoleStyler.log('system', '🤖 Auto-activated agent loop for headless service mode');
 }
@@ -319,7 +319,7 @@ ai-man/
 ### Phase 1: Server-Side Workspace Management
 1. Add `workspace:switch` WebSocket handler to server
 2. Add `service:status` WebSocket handler
-3. Add auto-activation support via `ROBODEV_AUTO_ACTIVATE` env var
+3. Add auto-activation support via `OBOTO_AUTO_ACTIVATE` env var
 4. Add workspace switch function to `main.mjs` that re-initializes assistant, scheduler, and agent loop
 5. Broadcast `workspace:status` on connect and on switch
 

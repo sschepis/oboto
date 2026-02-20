@@ -82,7 +82,7 @@ async function handleWorkspaceSwitch(data, ctx) {
         }
 
         // 6. Auto-activate agent loop if env says so
-        if (process.env.ROBODEV_AUTO_ACTIVATE === 'true' && agentLoopController) {
+        if (process.env.OBOTO_AUTO_ACTIVATE === 'true' && agentLoopController) {
             agentLoopController.play();
         }
 

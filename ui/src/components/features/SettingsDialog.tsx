@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, GitBranch, Puzzle } from 'lucide-react';
+import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, Puzzle } from 'lucide-react';
 import type { OpenClawStatus } from '../../types';
 import { PropertyGrid, type PropertyItem } from './settings/PropertyGrid';
-import { AIProviderSettings, type AIProviderConfig } from './settings/AIProviderSettings';
+import { AIProviderSettings, type AIProviderConfig, type ProviderConfig, type AIProviderType } from './settings/AIProviderSettings';
 import { ModelRoutingSettings } from './settings/ModelRoutingSettings';
 import SkillsSettings from './settings/SkillsSettings';
 import type { SecretItem } from '../../hooks/useSecrets';
@@ -26,6 +26,7 @@ export interface AgentSettings {
   ai?: AIProviderConfig;
   routing?: Record<string, string>;
   modelRegistry?: Record<string, ModelCapabilities>;
+  secretsStatus?: Record<string, { isConfigured: boolean; source: string }>;
 }
 
 interface SettingsDialogProps {
@@ -60,7 +61,8 @@ interface SettingsDialogProps {
   };
 }
 
-type SettingsTab = 'general' | 'ai' | 'routing' | 'openclaw' | 'skills';
+type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills';
+type AISubTab = 'config' | 'routing';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ 
   isOpen, 
@@ -76,6 +78,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
   skills: skillsProps,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [aiSubTab, setAISubTab] = useState<AISubTab>('config');
   const [settings, setSettings] = useState<AgentSettings>(initialSettings);
   
   // Local state for OpenClaw that isn't part of the main AgentSettings object yet
@@ -133,8 +136,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'General', icon: <LayoutGrid size={15} /> },
-    { id: 'ai', label: 'AI Provider', icon: <Cpu size={15} /> },
-    { id: 'routing', label: 'Routing', icon: <GitBranch size={15} /> },
+    { id: 'ai', label: 'AI Providers', icon: <Cpu size={15} /> },
     { id: 'openclaw', label: 'OpenClaw', icon: <Database size={15} /> },
     { id: 'skills', label: 'Skills', icon: <Puzzle size={15} /> },
   ];
@@ -165,32 +167,52 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
       
       case 'ai':
         return (
-          <div className="space-y-6 animate-fade-in-up" key="ai">
+          <div className="space-y-5 animate-fade-in-up" key="ai">
             <div>
-              <h3 className="text-lg font-semibold text-zinc-100 mb-1">AI Provider</h3>
-              <p className="text-xs text-zinc-500 mb-5">Configure the default intelligence engine.</p>
-              <AIProviderSettings 
-                config={settings.ai || { provider: 'openai', model: 'gpt-4o' }} 
-                onChange={handleAISettingsChange}
-                secrets={secrets}
-                onOpenSecrets={() => { onClose(); onOpenSecrets?.(); }}
-                modelRegistry={settings.modelRegistry || {}}
-              />
-            </div>
-          </div>
-        );
+              <h3 className="text-lg font-semibold text-zinc-100 mb-1">AI Providers</h3>
+              <p className="text-xs text-zinc-500 mb-4">Configure AI providers and model routing.</p>
+              
+              {/* Sub-tab navigation */}
+              <div className="flex bg-zinc-900/40 rounded-lg p-1 border border-zinc-800/30 mb-5">
+                <button
+                  onClick={() => setAISubTab('config')}
+                  className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
+                    aiSubTab === 'config'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  Configuration
+                </button>
+                <button
+                  onClick={() => setAISubTab('routing')}
+                  className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
+                    aiSubTab === 'routing'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  Model Routing
+                </button>
+              </div>
 
-      case 'routing':
-        return (
-          <div className="space-y-6 animate-fade-in-up" key="routing">
-            <div>
-              <h3 className="text-lg font-semibold text-zinc-100 mb-1">Model Routing</h3>
-              <p className="text-xs text-zinc-500 mb-5">Assign specific models to different agent capabilities.</p>
-              <ModelRoutingSettings 
-                routing={settings.routing || {}} 
-                modelRegistry={settings.modelRegistry || {}}
-                onChange={handleRoutingChange}
-              />
+              {aiSubTab === 'config' ? (
+                <AIProviderSettings 
+                  config={settings.ai || { provider: 'openai', model: 'gpt-4o' }} 
+                  onChange={handleAISettingsChange}
+                  secrets={secrets}
+                  secretsStatus={settings.secretsStatus}
+                  onOpenSecrets={() => { onClose(); onOpenSecrets?.(); }}
+                  modelRegistry={settings.modelRegistry || {}}
+                />
+              ) : (
+                <ModelRoutingSettings 
+                  routing={settings.routing || {}} 
+                  modelRegistry={settings.modelRegistry || {}}
+                  onChange={handleRoutingChange}
+                  providers={settings.ai?.providers as Record<AIProviderType, ProviderConfig> | undefined}
+                />
+              )}
             </div>
           </div>
         );
@@ -361,13 +383,13 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
         onClick={onClose}
       />
 
-      {/* Dialog */}
-      <div className="relative w-full max-w-4xl h-[600px] bg-[#09090b]/95 border border-zinc-800/40 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex animate-scale-in"
+      {/* Dialog — made larger */}
+      <div className="relative w-full max-w-5xl h-[720px] bg-[#09090b]/95 border border-zinc-800/40 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex animate-scale-in"
         style={{ backdropFilter: 'blur(20px)' }}
       >
         
         {/* Sidebar */}
-        <div className="w-60 bg-zinc-900/20 border-r border-zinc-800/30 flex flex-col">
+        <div className="w-56 bg-zinc-900/20 border-r border-zinc-800/30 flex flex-col">
           <div className="p-5 pb-4 border-b border-zinc-800/20">
             <div className="flex items-center gap-3 text-zinc-100">
               <div className="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/15 text-indigo-400">

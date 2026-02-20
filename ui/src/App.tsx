@@ -255,11 +255,6 @@ function App() {
         onClose={() => ui.setShowTaskManager(false)}
       />
 
-      <TaskSidebar
-        isOpen={ui.showTaskSidebar}
-        onToggle={() => ui.setShowTaskSidebar(prev => !prev)}
-      />
-
       <SecretsPanel
         isOpen={ui.showSecrets}
         onClose={() => ui.setShowSecrets(false)}
@@ -363,17 +358,18 @@ function App() {
             onDeleteConversation={deleteConversation}
           />
 
-          <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
-            <div className={`flex-1 flex flex-col min-h-0 ${isChat ? '' : 'hidden'}`}>
-              <MessageList 
-                messages={messages} 
-                isAgentWorking={isWorking} 
-                messageActions={messageActions} 
-                activityLog={activityLog} 
-                userLabel={userLabel} 
-                agentLabel={agentLabel} 
-              />
-            </div>
+          <div className="flex-1 flex min-h-0 min-w-0 relative">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0">
+              <div className={`flex-1 flex flex-col min-h-0 ${isChat ? '' : 'hidden'}`}>
+                <MessageList
+                  messages={messages}
+                  isAgentWorking={isWorking}
+                  messageActions={messageActions}
+                  activityLog={activityLog}
+                  userLabel={userLabel}
+                  agentLabel={agentLabel}
+                />
+              </div>
 
             {tabManager.tabs.filter(t => t.type === 'file').map(tab => (
               <div
@@ -442,16 +438,25 @@ function App() {
               </div>
             ))}
 
-            <InputArea
-              isAgentWorking={isWorking}
-              onSend={handleSend}
-              onStop={stop}
-              commands={inlineCommands}
-              suggestions={nextSteps}
-              inputRef={chatInputRef}
-              availableModels={settings?.modelRegistry || {}}
-              selectedModel={selectedModel}
-              onSelectModel={setSelectedModel}
+              <InputArea
+                isAgentWorking={isWorking}
+                onSend={handleSend}
+                onStop={stop}
+                commands={inlineCommands}
+                suggestions={nextSteps}
+                inputRef={chatInputRef}
+                availableModels={settings?.modelRegistry || {}}
+                selectedModel={selectedModel}
+                onSelectModel={setSelectedModel}
+                activityLog={activityLog}
+                queueCount={queueCount}
+              />
+            </div>
+
+            {/* Task panel inline within conversation area */}
+            <TaskSidebar
+              isOpen={ui.showTaskSidebar}
+              onToggle={() => ui.setShowTaskSidebar(prev => !prev)}
             />
           </div>
         </main>
@@ -465,7 +470,12 @@ function App() {
           projectStatus={projectStatus}
           selectedModel={selectedModel ?? undefined}
           availableModels={settings?.modelRegistry || {}}
-          onSelectModel={setSelectedModel}
+          onSelectModel={(model) => {
+            setSelectedModel(model);
+            // Persist the agentic model route to settings
+            const newRouting = { ...(settings?.routing || {}), agentic: model };
+            updateSettings({ ...settings, routing: newRouting });
+          }}
           activeConversation={activeConversation}
           onSettingsClick={() => ui.setShowSettings(true)}
           onTerminalClick={() => ui.setShowTerminal(p => !p)}

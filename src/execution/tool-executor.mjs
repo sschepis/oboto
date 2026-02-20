@@ -48,6 +48,8 @@ const TOOL_TIMEOUTS = {
     write_file: 30_000,
     edit_file: 30_000,
     list_files: 15_000,
+    read_many_files: 30_000,
+    write_many_files: 60_000,
     execute_javascript: 60_000,
     execute_npm_function: 60_000,
     search_web: 30_000,
@@ -334,6 +336,8 @@ export class ToolExecutor {
         this.registerTool('write_file', this.writeFileWithValidation.bind(this));
         this.registerTool('list_files', this.fileTools.listFiles.bind(this.fileTools));
         this.registerTool('edit_file', this.fileTools.editFile.bind(this.fileTools));
+        this.registerTool('read_many_files', this.fileTools.readManyFiles.bind(this.fileTools));
+        this.registerTool('write_many_files', this.writeManyFilesWithValidation.bind(this));
         this.registerTool('run_command', this.runCommandWithDryRun.bind(this));
 
         // Desktop Tools
@@ -690,6 +694,23 @@ export class ToolExecutor {
         }
 
         return writeResult;
+    }
+
+    // Write many files wrapper with dry-run support
+    async writeManyFilesWithValidation(args) {
+        if (this.dryRun) {
+            const files = args.files || [];
+            for (const file of files) {
+                this._plannedChanges.push({
+                    type: 'write',
+                    path: file.path,
+                    contentLength: file.content?.length || 0,
+                    preview: (file.content || '').substring(0, 80) + ((file.content || '').length > 80 ? '...' : '')
+                });
+            }
+            return JSON.stringify({ summary: `Dry run: ${files.length} files planned`, results: files.map(f => ({ path: f.path, success: true, message: 'Planned (dry run)', dryRun: true })) });
+        }
+        return await this.fileTools.writeManyFiles(args);
     }
 
     // Run command wrapper

@@ -43,7 +43,18 @@ export async function agentLoop(ctx, services, next) {
         const loopDecision = await handleResponse(ctx, services, responseMessage);
 
         if (loopDecision === 'continue') {
-            // Tool calls were executed, loop back for next turn
+            // If a single direct-answer tool already resolved the request
+            // (e.g. speak_text, evaluate_math), give the LLM one more turn
+            // to produce a textual summary and then stop.  This prevents
+            // the scope-violation pattern where the model invents follow-up
+            // tasks that were never requested.
+            if (ctx.metadata.directAnswerGiven && ctx.turnNumber >= 2) {
+                consoleStyler.log('system', 'Direct-answer tool completed — stopping agent loop');
+                if (!ctx.finalResponse) {
+                    ctx.finalResponse = 'Done.';
+                }
+                break;
+            }
             continue;
         }
 

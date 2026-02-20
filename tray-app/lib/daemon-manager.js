@@ -82,7 +82,7 @@ class DaemonManager extends EventEmitter {
         const env = {
             ...process.env,
             PORT: String(this.port),
-            ROBODEV_AUTO_ACTIVATE: this.preferences.get('autoActivateOnStart') ? 'true' : 'false',
+            OBOTO_AUTO_ACTIVATE: this.preferences.get('autoActivateOnStart') ? 'true' : 'false',
         };
 
         try {

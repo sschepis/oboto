@@ -104,5 +104,78 @@ export const FILE_TOOLS = [
                 required: ["path", "edits"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "read_many_files",
+            description: "Read multiple files in a single call. Safe: enforces per-file (128KB) and total (512KB) size caps, skips binary files, and truncates oversized content. Returns a JSON object with a summary and per-file results.",
+            parameters: {
+                type: "object",
+                properties: {
+                    paths: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Array of relative file paths to read (max 50)"
+                    },
+                    max_total_bytes: {
+                        type: "number",
+                        description: "Maximum total bytes across all files (default: 524288 = 512KB)"
+                    },
+                    max_per_file_bytes: {
+                        type: "number",
+                        description: "Maximum bytes per individual file (default: 131072 = 128KB)"
+                    },
+                    encoding: {
+                        type: "string",
+                        description: "File encoding (default: utf8)"
+                    }
+                },
+                required: ["paths"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "write_many_files",
+            description: "Write multiple files in a single call. Supports mixed encodings, auto-creates directories, and returns per-file success/failure results. Use dry_run to preview without writing.",
+            parameters: {
+                type: "object",
+                properties: {
+                    files: {
+                        type: "array",
+                        description: "Array of file objects to write (max 30)",
+                        items: {
+                            type: "object",
+                            properties: {
+                                path: {
+                                    type: "string",
+                                    description: "Relative path to the file"
+                                },
+                                content: {
+                                    type: "string",
+                                    description: "Content to write"
+                                },
+                                encoding: {
+                                    type: "string",
+                                    description: "File encoding (default: utf8)"
+                                }
+                            },
+                            required: ["path", "content"]
+                        }
+                    },
+                    create_dirs: {
+                        type: "boolean",
+                        description: "Automatically create parent directories (default: true)"
+                    },
+                    dry_run: {
+                        type: "boolean",
+                        description: "If true, reports what would be written without actually writing (default: false)"
+                    }
+                },
+                required: ["files"]
+            }
+        }
     }
 ];

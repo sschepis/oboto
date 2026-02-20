@@ -77,6 +77,98 @@ const FALLBACK_MODELS = {
     },
 };
 
+/**
+ * Well-known Anthropic models available via Vertex AI.
+ * Anthropic has no public model listing API, so these are curated.
+ * Updated periodically as new models become available.
+ */
+const ANTHROPIC_KNOWN_MODELS = {
+    'claude-opus-4-20250514': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 32000,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'expensive',
+        reasoningCapability: 'high',
+        displayName: 'Claude Opus 4',
+        _fromAPI: true,
+    },
+    'claude-sonnet-4-20250514': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 64000,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'medium',
+        reasoningCapability: 'high',
+        displayName: 'Claude Sonnet 4',
+        _fromAPI: true,
+    },
+    'claude-3-7-sonnet-20250219': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 64000,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: true,
+        costTier: 'medium',
+        reasoningCapability: 'high',
+        displayName: 'Claude 3.7 Sonnet',
+        _fromAPI: true,
+    },
+    'claude-3-5-sonnet-v2@20241022': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 8192,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'medium',
+        reasoningCapability: 'high',
+        displayName: 'Claude 3.5 Sonnet v2',
+        _fromAPI: true,
+    },
+    'claude-3-5-haiku@20241022': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 8192,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'cheap',
+        reasoningCapability: 'medium',
+        displayName: 'Claude 3.5 Haiku',
+        _fromAPI: true,
+    },
+    'claude-3-opus@20240229': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 4096,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'expensive',
+        reasoningCapability: 'high',
+        displayName: 'Claude 3 Opus',
+        _fromAPI: true,
+    },
+    'claude-3-haiku@20240307': {
+        provider: 'anthropic',
+        contextWindow: 200000,
+        maxOutputTokens: 4096,
+        supportsToolCalling: true,
+        supportsStreaming: true,
+        supportsReasoningEffort: false,
+        costTier: 'cheap',
+        reasoningCapability: 'medium',
+        displayName: 'Claude 3 Haiku',
+        _fromAPI: true,
+    },
+};
+
 // Models fetched from live provider APIs
 let _remoteModels = {};
 
@@ -85,6 +177,10 @@ const _customModels = {};
 
 // Whether remote models have been fetched at least once
 let _remoteFetched = false;
+
+// Debounce tracker for per-provider fetches (prevents spam from UI re-renders)
+const _providerFetchTimestamps = {};
+const PROVIDER_FETCH_DEBOUNCE_MS = 10_000; // 10 seconds minimum between fetches for same provider
 
 // ─── OpenAI Model Prefixes We Care About ─────────────────────────────────
 // Filter out embeddings, tts, dall-e, whisper, moderation, etc.
@@ -265,7 +361,12 @@ export async function fetchRemoteModels() {
         fetchLMStudioModels(),
     ]);
 
-    _remoteModels = { ...openai, ...gemini, ...lmstudio };
+    // Anthropic has no list API — always include the curated known models
+    const anthropicCount = Object.keys(ANTHROPIC_KNOWN_MODELS).length;
+    if (anthropicCount > 0) {
+        console.log(`[model-registry] Included ${anthropicCount} curated Anthropic models (no list API)`);
+    }
+    _remoteModels = { ...ANTHROPIC_KNOWN_MODELS, ...openai, ...gemini, ...lmstudio };
     _remoteFetched = true;
 
     const total = Object.keys(_remoteModels).length;
@@ -274,6 +375,63 @@ export async function fetchRemoteModels() {
     } else {
         console.log(`[model-registry] No remote models fetched — using fallback list`);
     }
+}
+
+/**
+ * Fetch models for a specific provider only.
+ * Useful for refreshing a single provider's model list without re-fetching all.
+ * @param {string} provider - Provider key: 'openai' | 'gemini' | 'anthropic' | 'lmstudio'
+ * @returns {Promise<Object>} Map of modelId → capabilities for that provider
+ */
+export async function fetchModelsForProvider(provider) {
+    // Debounce: skip if we fetched this provider recently
+    const now = Date.now();
+    const lastFetch = _providerFetchTimestamps[provider] || 0;
+    if (now - lastFetch < PROVIDER_FETCH_DEBOUNCE_MS) {
+        // Return existing models for this provider silently
+        const existing = {};
+        for (const [id, caps] of Object.entries(_remoteModels)) {
+            if (caps.provider === provider) existing[id] = caps;
+        }
+        return existing;
+    }
+    _providerFetchTimestamps[provider] = now;
+
+    let fetched = {};
+
+    switch (provider) {
+        case 'openai':
+            fetched = await fetchOpenAIModels();
+            break;
+        case 'gemini':
+            fetched = await fetchGeminiModels();
+            break;
+        case 'lmstudio':
+            fetched = await fetchLMStudioModels();
+            break;
+        case 'anthropic':
+            // Anthropic has no list API — return the curated known models
+            fetched = { ...ANTHROPIC_KNOWN_MODELS };
+            break;
+        default:
+            console.warn(`[model-registry] Unknown provider: ${provider}`);
+            return {};
+    }
+
+    // Merge into _remoteModels (replace models for this provider, keep others)
+    // First remove existing models from this provider
+    for (const [id, caps] of Object.entries(_remoteModels)) {
+        if (caps.provider === provider) {
+            delete _remoteModels[id];
+        }
+    }
+    // Then add the newly fetched ones
+    Object.assign(_remoteModels, fetched);
+    _remoteFetched = true;
+
+    const count = Object.keys(fetched).length;
+    console.log(`[model-registry] Refreshed ${count} models for provider: ${provider}`);
+    return fetched;
 }
 
 /**
@@ -302,15 +460,11 @@ export function inferModelProvider(modelId) {
  */
 function _getBuiltInModels() {
     if (_remoteFetched && Object.keys(_remoteModels).length > 0) {
-        // Merge: remote models take priority, but include Anthropic fallbacks
-        // since Anthropic has no public list API
-        const anthropicFallbacks = {};
-        for (const [id, caps] of Object.entries(FALLBACK_MODELS)) {
-            if (caps.provider === 'anthropic') anthropicFallbacks[id] = caps;
-        }
-        return { ...anthropicFallbacks, ..._remoteModels };
+        // Remote models already include ANTHROPIC_KNOWN_MODELS (merged in fetchRemoteModels)
+        return { ..._remoteModels };
     }
-    return FALLBACK_MODELS;
+    // Before any remote fetch, include Anthropic known models with the fallbacks
+    return { ...FALLBACK_MODELS, ...ANTHROPIC_KNOWN_MODELS };
 }
 
 /**

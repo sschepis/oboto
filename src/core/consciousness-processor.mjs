@@ -201,8 +201,12 @@ export class ConsciousnessProcessor {
             hints.reason = 'Somatic: high exploration drive — biasing toward higher reasoning';
         }
 
-        // High semantic entropy
-        if (result.collapseResult?.entropy > 0.6) {
+        // High semantic entropy — only flag when genuinely near-maximum.
+        // The hash-based embedding produces ~0.96 entropy for typical inputs,
+        // so a lower threshold (e.g. 0.6) fires on every request without
+        // providing useful signal.  Use 0.95 to suppress noise while still
+        // catching truly maximally-ambiguous inputs.
+        if (result.collapseResult?.entropy > 0.95) {
             hints.shouldEscalate = true;
             hints.reason = `Semantic: high entropy (${result.collapseResult.entropy.toFixed(2)}) — ambiguous input`;
         }

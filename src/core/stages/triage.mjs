@@ -26,18 +26,31 @@ export async function triage(ctx, services, next) {
     try {
         const modelConfig = promptRouter.resolveModel(TASK_ROLES.TRIAGE);
         const fullHistory = historyManager.getHistory();
-        const recentHistory = fullHistory.slice(-5);
+        // Strip tool-related messages (assistant+tool_calls, tool responses) to
+        // avoid Gemini's strict functionCall→functionResponse ordering constraint.
+        // Triage only needs conversational context, not tool execution history.
+        const conversationalHistory = fullHistory.filter(m =>
+            m.role !== 'tool' && !(m.role === 'assistant' && m.tool_calls)
+        );
+        const recentHistory = conversationalHistory.slice(-5);
 
         const systemPrompt = `Classify the user request into exactly one category.
 
 **COMPLETED** — Simple query you can answer immediately without tools or files.
 Examples: greetings, general knowledge, short code snippets.
+IMPORTANT: Do NOT classify as COMPLETED if the user is asking about or requesting
+a capability that requires tools. The assistant HAS tools for: text-to-speech
+(speak_text), browser automation, file operations, web search, image generation,
+desktop automation, code execution, and many more. If the user asks about any of
+these capabilities (e.g., "can you speak aloud?", "can you browse the web?"),
+classify as READY so the agent loop can use the appropriate tool.
 
 **MISSING_INFO** — Too vague to act on. Critical details missing.
 Examples: "Fix the bug" (which?), "Update the file" (which?).
 
 **READY** — Requires tools, file access, project context, or deep reasoning.
-Examples: "Refactor ai-assistant.mjs", "Check the logs".
+Examples: "Refactor ai-assistant.mjs", "Check the logs", "Speak this aloud",
+"Can you read this to me?", "Browse to example.com".
 
 Return JSON:
 {

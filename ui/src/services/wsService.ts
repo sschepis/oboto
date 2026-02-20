@@ -27,6 +27,15 @@ class WSService {
   }
 
   connect() {
+    // Guard: skip if a connection is already open or in progress.
+    // React StrictMode double-mounts useEffect, which calls connect() twice —
+    // this prevents duplicate WebSocket connections (and the resulting
+    // duplicate set-cwd → OpenClaw restart cascade).
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      console.log('WS connect() skipped — already connected or connecting');
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
       ? 'localhost:3000' 
@@ -320,7 +329,7 @@ class WSService {
     }
   }
 
-  updateSettings(settings: { maxTurns: number; maxSubagents: number; ai?: { provider: string; model: string; endpoint?: string } }) {
+  updateSettings(settings: { maxTurns: number; maxSubagents: number; ai?: { provider: string; model: string; endpoint?: string; providers?: Record<string, { enabled: boolean; model: string; endpoint?: string }> }; routing?: Record<string, string> }) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'update-settings', payload: settings }));
     }
@@ -329,6 +338,12 @@ class WSService {
   refreshModels() {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'refresh-models' }));
+    }
+  }
+
+  refreshProviderModels(provider: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'refresh-provider-models', payload: { provider } }));
     }
   }
 

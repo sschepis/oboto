@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Wifi,
   WifiOff,
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
+  Check,
 } from 'lucide-react';
 import type { ProjectStatusData } from '../features/ProjectStatus';
 
@@ -45,6 +46,31 @@ const StatusBar: React.FC<StatusBarProps> = ({
   const projectType = projectStatus?.projectType;
   const fileCount = projectStatus?.fileCount;
 
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const selectorRef = useRef<HTMLDivElement>(null);
+
+  // Close selector on outside click
+  useEffect(() => {
+    if (!showModelSelector) return;
+    const handleClick = (e: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setShowModelSelector(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showModelSelector]);
+
+  // Close selector on Escape
+  useEffect(() => {
+    if (!showModelSelector) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModelSelector(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [showModelSelector]);
+
   const groupedModels = useMemo(() => {
     const groups: Record<string, string[]> = {};
     Object.entries(availableModels).forEach(([id, info]) => {
@@ -60,14 +86,24 @@ const StatusBar: React.FC<StatusBarProps> = ({
     return availableModels[selectedModel].provider;
   }, [selectedModel, availableModels]);
 
+  const displayLabel = useMemo(() => {
+    if (!selectedModel) return null;
+    return currentProvider ? `${currentProvider}/${selectedModel}` : selectedModel;
+  }, [selectedModel, currentProvider]);
+
+  const handleSelectModel = (modelId: string) => {
+    onSelectModel?.(modelId);
+    setShowModelSelector(false);
+  };
+
   return (
     <footer
       className={`
         h-6 flex items-center justify-between px-2.5 text-[10px] select-none shrink-0 z-40
         border-t transition-colors duration-300
         ${isConnected
-          ? 'bg-[#007acc] border-[#007acc] text-white/90'
-          : 'bg-red-700 border-red-700 text-white/90'}
+          ? 'bg-[var(--color-surface-overlay)] border-[var(--color-border)] text-[var(--color-text-muted)]'
+          : 'bg-red-900/40 border-red-800/50 text-red-200/90'}
       `}
     >
       {/* Left side */}
@@ -146,43 +182,59 @@ const StatusBar: React.FC<StatusBarProps> = ({
           </div>
         )}
 
-        {/* Selected model */}
-        {selectedModel && (
-          <div className="relative group flex items-center">
+        {/* Selected model with custom dropdown */}
+        {displayLabel && (
+          <div className="relative" ref={selectorRef}>
             {Object.keys(groupedModels).length > 0 && onSelectModel ? (
               <>
-                 <select
-                  value={selectedModel}
-                  onChange={(e) => onSelectModel(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  title={`Model: ${currentProvider ? `${currentProvider}/${selectedModel}` : selectedModel}`}
-                >
-                  {Object.entries(groupedModels).map(([provider, models]) => (
-                    <optgroup key={provider} label={provider.toUpperCase()}>
-                      {models.map(m => (
-                        <option key={m} value={m} className="text-black">{m}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                <div
+                <button
+                  onClick={() => setShowModelSelector(prev => !prev)}
                   className="flex items-center gap-1 hover:bg-white/10 px-1 py-0.5 rounded transition-colors cursor-pointer"
+                  title={`Model: ${displayLabel}`}
                 >
                   <Cpu size={11} />
-                  <span className="truncate max-w-[200px]">
-                    {currentProvider ? `${currentProvider}/${selectedModel}` : selectedModel}
-                  </span>
+                  <span className="truncate max-w-[200px]">{displayLabel}</span>
                   <ChevronDown size={10} className="opacity-50" />
-                </div>
+                </button>
+
+                {showModelSelector && (
+                  <div className="absolute bottom-full right-0 mb-1 w-72 max-h-80 overflow-y-auto bg-zinc-900 border border-zinc-700/60 rounded-lg shadow-2xl shadow-black/60 z-[60] py-1">
+                    {Object.entries(groupedModels).map(([provider, models]) => (
+                      <div key={provider}>
+                        <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-500 bg-zinc-800/40 sticky top-0">
+                          {provider}
+                        </div>
+                        {models.map(m => {
+                          const isActive = m === selectedModel;
+                          return (
+                            <button
+                              key={m}
+                              onClick={() => handleSelectModel(m)}
+                              className={`
+                                w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors
+                                ${isActive
+                                  ? 'bg-indigo-500/15 text-indigo-300'
+                                  : 'text-zinc-300 hover:bg-white/5 hover:text-white'}
+                              `}
+                            >
+                              <span className="flex-1 truncate">{provider}/{m}</span>
+                              {isActive && <Check size={12} className="text-indigo-400 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
               <button
                 onClick={onSettingsClick}
                 className="flex items-center gap-1 hover:bg-white/10 px-1 py-0.5 rounded transition-colors cursor-pointer"
-                title={`Model: ${selectedModel}`}
+                title={`Model: ${displayLabel}`}
               >
                 <Cpu size={11} />
-                <span className="truncate max-w-[140px]">{selectedModel}</span>
+                <span className="truncate max-w-[140px]">{displayLabel}</span>
               </button>
             )}
           </div>

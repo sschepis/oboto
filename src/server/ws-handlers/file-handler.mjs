@@ -27,8 +27,14 @@ async function handleReadFile(data, ctx) {
         const content = await fs.promises.readFile(fullPath, 'utf8');
         ws.send(JSON.stringify({ type: 'file-content', payload: { path: filePath, content } }));
     } catch (err) {
-        consoleStyler.log('error', `Failed to read file: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to read file: ${err.message}` }));
+        if (err.code === 'ENOENT') {
+            // ENOENT is expected for optional config files — log as debug, not error.
+            // Still send `error` event for backward compat (UI may listen for it).
+            ws.send(JSON.stringify({ type: 'file-not-found', payload: { path: data.payload } }));
+        } else {
+            consoleStyler.log('error', `Failed to read file: ${err.message}`);
+            ws.send(JSON.stringify({ type: 'error', payload: `Failed to read file: ${err.message}` }));
+        }
     }
 }
 

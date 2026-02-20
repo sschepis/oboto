@@ -303,10 +303,10 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     const dispatcher = buildDispatcher();
 
     // ── Auto-activate agent loop for headless / service mode ────────────
-    if (process.env.ROBODEV_AUTO_ACTIVATE === 'true' && agentLoopController) {
-        const autoActivateDelay = parseInt(process.env.ROBODEV_AUTO_ACTIVATE_DELAY || '3000', 10);
+    if (process.env.OBOTO_AUTO_ACTIVATE === 'true' && agentLoopController) {
+        const autoActivateDelay = parseInt(process.env.OBOTO_AUTO_ACTIVATE_DELAY || '3000', 10);
         setTimeout(() => {
-            consoleStyler.log('system', '🤖 Auto-activating agent loop (ROBODEV_AUTO_ACTIVATE=true)');
+            consoleStyler.log('system', '🤖 Auto-activating agent loop (OBOTO_AUTO_ACTIVATE=true)');
             agentLoopController.play().catch(err => {
                 consoleStyler.log('error', `Auto-activate agent loop failed: ${err.message}`);
             });

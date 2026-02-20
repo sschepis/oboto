@@ -42,6 +42,46 @@ export class QualityGate {
     }
 
     /**
+     * Evaluate response quality without triggering a retry.
+     * Used on retry attempts so we log the score but never recurse.
+     * @param {string} userInput
+     * @param {string} finalResponse
+     * @returns {Promise<{rating: number, reasoning: string}|null>}
+     */
+    async evaluateOnly(userInput, finalResponse) {
+        const history = this.historyManager.getHistory();
+
+        if (this._shouldSkipEvaluation(userInput, finalResponse, history)) {
+            return null;
+        }
+
+        consoleStyler.log('quality', 'Evaluating retry response quality (no further retry)...', { timestamp: true });
+
+        const toolCallsSummary = this.qualityEvaluator.extractToolCallsSummary(history);
+        const toolResults = this.qualityEvaluator.extractToolResults(history);
+
+        const qualityResult = await this.qualityEvaluator.evaluateResponse(
+            userInput,
+            finalResponse,
+            toolCallsSummary,
+            toolResults,
+            createSystemPrompt,
+            this.workingDir,
+            this.workspaceManager.getCurrentWorkspace()
+        );
+
+        if (qualityResult) {
+            const rating = qualityResult.rating !== undefined ? qualityResult.rating : 0;
+            consoleStyler.log('quality', `Retry quality: ${rating}/10`);
+            if (rating < 5) {
+                consoleStyler.log('quality', `⚠ Retry quality still low (${rating}/10) — no further retries`, { box: true });
+            }
+            return qualityResult;
+        }
+        return null;
+    }
+
+    /**
      * Evaluates the quality of a response and determines if a retry is needed.
      * @param {string} userInput - The original user input
      * @param {string} finalResponse - The assistant's final response

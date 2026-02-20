@@ -12,6 +12,7 @@ import { emitStatus } from '../status-reporter.mjs';
  */
 export async function finalize(ctx, services, next) {
     const historyManager = services.get('historyManager');
+    const conversationManager = services.optional('conversationManager');
     const statusAdapter = services.optional('statusAdapter');
     const eventBus = services.optional('eventBus');
 
@@ -23,9 +24,11 @@ export async function finalize(ctx, services, next) {
         });
     }
 
-    // 2. Save conversation to disk
+    // 2. Save conversation to disk via ConversationManager (which knows the file path)
     try {
-        await historyManager.save();
+        if (conversationManager) {
+            await conversationManager.saveActive();
+        }
     } catch (err) {
         consoleStyler.log('error', `Failed to save conversation: ${err.message}`);
     }

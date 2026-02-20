@@ -25,4 +25,9 @@ export class ServerStatusAdapter extends ConsoleStatusAdapter {
         super.onToolEnd(toolName, result);
         this.eventBus.emitTyped('server:tool-end', { toolName, result });
     }
+
+    onComplete(response) {
+        super.onComplete(response);
+        this.eventBus.emitTyped('server:complete', { response });
+    }
 }

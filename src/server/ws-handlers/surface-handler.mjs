@@ -295,16 +295,79 @@ CRITICAL RULES:
 }
 
 async function handleSurfaceCompilationError(data, ctx) {
-    const { assistant } = ctx;
+    // Legacy handler — now handled by surface-auto-fix. Kept for backwards compatibility.
     const { surfaceId, componentName, error } = data.payload;
     consoleStyler.log('error', `Surface Compilation Error (${componentName}): ${error}`);
-    
-    // Add to history so the agent sees it next time
-    assistant.historyManager.addMessage({
-        role: 'system',
-        content: `[UI Error] Component "${componentName}" (Surface: ${surfaceId}) failed to compile/render:\n${error}`
-    });
-    await assistant.saveConversation();
+}
+
+/**
+ * Auto-fix handler: receives a surface error (compilation or runtime) with the
+ * broken source code, asks the AI agent to fix it, and pushes the corrected
+ * component back to the surface.
+ */
+const _autoFixInProgress = new Set(); // Prevent concurrent fixes for the same component
+
+async function handleSurfaceAutoFix(data, ctx) {
+    const { ws, assistant, eventBus } = ctx;
+    const { surfaceId, componentName, errorType, error, source, attempt } = data.payload;
+
+    const fixKey = `${surfaceId}:${componentName}`;
+    if (_autoFixInProgress.has(fixKey)) {
+        consoleStyler.log('warning', `Auto-fix already in progress for ${componentName}, skipping`);
+        return;
+    }
+
+    consoleStyler.log('system', `🔧 Auto-fixing ${componentName} (${errorType} error, attempt ${attempt})`);
+    _autoFixInProgress.add(fixKey);
+
+    try {
+        const surfaceManager = assistant.toolExecutor?.surfaceManager;
+        if (!surfaceManager) throw new Error('SurfaceManager not available');
+
+        // Build the fix prompt
+        const fixPrompt = `[Surface Auto-Fix Request]
+Surface ID: ${surfaceId}
+Component: ${componentName}
+Error Type: ${errorType}
+Attempt: ${attempt}/3
+
+ERROR:
+${error}
+
+BROKEN SOURCE CODE:
+\`\`\`jsx
+${source || '(source unavailable)'}
+\`\`\`
+
+INSTRUCTIONS:
+Fix the ${errorType} error in this surface component. You MUST call the \`update_surface_component\` tool with:
+- surface_id: "${surfaceId}"
+- component_name: "${componentName}"
+- jsx_source: the COMPLETE fixed source code
+
+Rules:
+1. Fix ONLY the error — preserve all existing functionality.
+2. Do NOT add imports — all React hooks and UI.* components are globally available.
+3. Export a default function component.
+4. Use Tailwind CSS for styling.
+5. If the error is in data handling, add null checks and fallbacks.
+6. Call \`update_surface_component\` with the fixed code.`;
+
+        // Run the assistant to fix it
+        await assistant.run(fixPrompt, { isRetry: false });
+
+        consoleStyler.log('system', `✅ Auto-fix completed for ${componentName}`);
+    } catch (err) {
+        consoleStyler.log('error', `Auto-fix failed for ${componentName}: ${err.message}`);
+        
+        // Notify the UI that the fix attempt failed
+        ws.send(JSON.stringify({
+            type: 'surface-auto-fix-failed',
+            payload: { surfaceId, componentName, attempt, error: err.message }
+        }));
+    } finally {
+        _autoFixInProgress.delete(fixKey);
+    }
 }
 
 async function handleSurfaceGetState(data, ctx) {
@@ -359,6 +422,200 @@ async function handleScreenshotCaptured(data, ctx) {
     }
 }
 
+// ─── Surface File/Config/Tool Access Handlers ───
+
+async function handleSurfaceReadFile(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, path: filePath } = data.payload;
+    try {
+        const fileTools = assistant.toolExecutor?.fileTools;
+        if (!fileTools) throw new Error('FileTools not available');
+        
+        const content = await fileTools.readFile({ path: filePath });
+        // Safety cap: 256KB max for surface reads
+        const MAX_SIZE = 256 * 1024;
+        let truncated = false;
+        let result = content;
+        if (typeof content === 'string' && content.length > MAX_SIZE) {
+            result = content.substring(0, MAX_SIZE) + '\n\n[TRUNCATED — file exceeds 256KB surface read limit]';
+            truncated = true;
+        }
+        ws.send(JSON.stringify({
+            type: 'surface-file-result',
+            payload: { requestId, success: true, content: result, truncated, error: null }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-file-result',
+            payload: { requestId, success: false, content: null, truncated: false, error: err.message }
+        }));
+    }
+}
+
+async function handleSurfaceWriteFile(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, path: filePath, content } = data.payload;
+    try {
+        const fileTools = assistant.toolExecutor?.fileTools;
+        if (!fileTools) throw new Error('FileTools not available');
+        
+        const result = await fileTools.writeFile({ path: filePath, content });
+        const success = !result.startsWith('Error');
+        ws.send(JSON.stringify({
+            type: 'surface-file-write-result',
+            payload: { requestId, success, message: result, error: success ? null : result }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-file-write-result',
+            payload: { requestId, success: false, message: null, error: err.message }
+        }));
+    }
+}
+
+async function handleSurfaceListFiles(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, path: dirPath, recursive } = data.payload;
+    try {
+        const fileTools = assistant.toolExecutor?.fileTools;
+        if (!fileTools) throw new Error('FileTools not available');
+        
+        const result = await fileTools.listFiles({ path: dirPath || '.', recursive: !!recursive });
+        const files = typeof result === 'string' ? result.split('\n').filter(Boolean) : [];
+        ws.send(JSON.stringify({
+            type: 'surface-file-list-result',
+            payload: { requestId, success: true, files, error: null }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-file-list-result',
+            payload: { requestId, success: false, files: [], error: err.message }
+        }));
+    }
+}
+
+async function handleSurfaceReadManyFiles(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, paths } = data.payload;
+    try {
+        const fileTools = assistant.toolExecutor?.fileTools;
+        if (!fileTools) throw new Error('FileTools not available');
+        
+        const resultStr = await fileTools.readManyFiles({ paths, max_total_bytes: 256 * 1024, max_per_file_bytes: 64 * 1024 });
+        const result = JSON.parse(resultStr);
+        ws.send(JSON.stringify({
+            type: 'surface-read-many-result',
+            payload: { requestId, success: true, ...result, error: null }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-read-many-result',
+            payload: { requestId, success: false, summary: null, results: [], error: err.message }
+        }));
+    }
+}
+
+async function handleSurfaceGetConfig(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, key } = data.payload;
+    try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const workspaceRoot = assistant.toolExecutor?.fileTools?.workspaceRoot || process.cwd();
+        
+        const config = {};
+        
+        // Read package.json
+        const pkgPath = path.default.join(workspaceRoot, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+            try {
+                config.packageJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            } catch (_) { config.packageJson = null; }
+        }
+        
+        // Read .env (parsed, not raw — hide secrets by default)
+        const envPath = path.default.join(workspaceRoot, '.env');
+        if (fs.existsSync(envPath)) {
+            try {
+                const envContent = fs.readFileSync(envPath, 'utf8');
+                const envVars = {};
+                for (const line of envContent.split('\n')) {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed.startsWith('#')) continue;
+                    const eqIdx = trimmed.indexOf('=');
+                    if (eqIdx > 0) {
+                        const k = trimmed.substring(0, eqIdx).trim();
+                        // Mask values that look like secrets
+                        const v = trimmed.substring(eqIdx + 1).trim();
+                        const isSecret = /key|secret|token|password|auth/i.test(k);
+                        envVars[k] = isSecret ? '***' : v;
+                    }
+                }
+                config.env = envVars;
+            } catch (_) { config.env = null; }
+        }
+        
+        // Basic workspace info
+        config.workspaceRoot = workspaceRoot;
+        config.workspaceName = path.default.basename(workspaceRoot);
+        
+        // If a specific key is requested, return just that
+        const result = key ? (config[key] ?? null) : config;
+        
+        ws.send(JSON.stringify({
+            type: 'surface-config-result',
+            payload: { requestId, success: true, config: result, error: null }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-config-result',
+            payload: { requestId, success: false, config: null, error: err.message }
+        }));
+    }
+}
+
+async function handleSurfaceCallTool(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { requestId, toolName, args } = data.payload;
+    try {
+        const toolExecutor = assistant.toolExecutor;
+        if (!toolExecutor) throw new Error('ToolExecutor not available');
+        
+        // Only allow a whitelist of safe tools from surfaces
+        const allowedTools = [
+            'read_file', 'write_file', 'list_files', 'edit_file',
+            'read_many_files', 'write_many_files',
+            'search_web', 'list_surfaces', 'list_skills',
+            'evaluate_math', 'unit_conversion',
+            'get_image_info'
+        ];
+        
+        if (!allowedTools.includes(toolName)) {
+            throw new Error(`Tool "${toolName}" is not allowed from surface context. Allowed: ${allowedTools.join(', ')}`);
+        }
+        
+        // Build a synthetic tool call object
+        const toolCall = {
+            id: requestId,
+            function: {
+                name: toolName,
+                arguments: JSON.stringify(args || {})
+            }
+        };
+        
+        const result = await toolExecutor.executeTool(toolCall);
+        ws.send(JSON.stringify({
+            type: 'surface-tool-result',
+            payload: { requestId, success: true, result: result.content, error: null }
+        }));
+    } catch (err) {
+        ws.send(JSON.stringify({
+            type: 'surface-tool-result',
+            payload: { requestId, success: false, result: null, error: err.message }
+        }));
+    }
+}
+
 export const handlers = {
     'get-surfaces': handleGetSurfaces,
     'get-surface': handleGetSurface,
@@ -375,5 +632,12 @@ export const handlers = {
     'surface-compilation-error': handleSurfaceCompilationError,
     'surface-get-state': handleSurfaceGetState,
     'surface-set-state': handleSurfaceSetState,
-    'screenshot-captured': handleScreenshotCaptured
+    'screenshot-captured': handleScreenshotCaptured,
+    'surface-read-file': handleSurfaceReadFile,
+    'surface-write-file': handleSurfaceWriteFile,
+    'surface-list-files': handleSurfaceListFiles,
+    'surface-read-many-files': handleSurfaceReadManyFiles,
+    'surface-get-config': handleSurfaceGetConfig,
+    'surface-call-tool': handleSurfaceCallTool,
+    'surface-auto-fix': handleSurfaceAutoFix
 };

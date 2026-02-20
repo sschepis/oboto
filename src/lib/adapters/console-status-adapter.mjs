@@ -45,4 +45,12 @@ export class ConsoleStatusAdapter {
   onToolEnd(toolName, result) {
     // consoleStyler.log('tools', `✓ Tool completed: ${toolName}`);
   }
+
+  /**
+   * Called when the pipeline finishes processing a request
+   * @param {string} response - The final response text
+   */
+  onComplete(response) {
+    // Default: no-op. Subclasses can override to emit events etc.
+  }
 }

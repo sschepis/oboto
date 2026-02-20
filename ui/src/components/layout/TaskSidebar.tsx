@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Server, Loader2, CheckCircle2, XCircle, AlertCircle,
   Trash2, RefreshCw, Play, Pause, Calendar, Clock,
-  Terminal, ChevronRight, Copy, Zap, ChevronLeft, X
+  Terminal, ChevronRight, Copy, Zap, X
 } from 'lucide-react';
 import { useTaskManager, type TaskRecord, type ScheduleRecord } from '../../hooks/useTaskManager';
 
@@ -31,59 +31,18 @@ const TaskSidebar: React.FC<TaskSidebarProps> = ({ isOpen, onToggle }) => {
   const activeScheduleCount = schedules.filter(s => s.status === 'active').length;
   const totalActive = runningCount + queuedCount + activeScheduleCount;
 
-  return (
-    <>
-      {/* Pull Tab - always visible on the right edge */}
-      <button
-        onClick={onToggle}
-        className={`
-          fixed right-0 top-1/2 -translate-y-1/2 z-40
-          flex items-center gap-1.5
-          px-1.5 py-3 rounded-l-lg
-          border border-r-0 border-zinc-700/50
-          bg-zinc-900/95 backdrop-blur-sm
-          text-zinc-400 hover:text-zinc-200
-          hover:bg-zinc-800/90
-          transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
-          shadow-lg shadow-black/30
-          group
-          ${isOpen ? 'translate-x-0 opacity-0 pointer-events-none' : 'translate-x-0'}
-        `}
-        title="Toggle Task Manager"
-      >
-        <div className="flex flex-col items-center gap-2">
-          <ChevronLeft size={14} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
-          <div className="flex flex-col items-center gap-1">
-            <Server size={14} className="text-indigo-400" />
-            {totalActive > 0 && (
-              <span className="
-                w-5 h-5 flex items-center justify-center
-                text-[9px] font-bold rounded-full tabular-nums
-                bg-amber-500/20 text-amber-400 border border-amber-500/30
-                animate-pulse
-              ">
-                {totalActive}
-              </span>
-            )}
-          </div>
-          <span className="text-[9px] font-bold uppercase tracking-wider [writing-mode:vertical-lr] rotate-180">
-            Tasks
-          </span>
-        </div>
-      </button>
+  if (!isOpen) return null;
 
-      {/* Sidebar Panel */}
-      <div
-        className={`
-          fixed top-0 right-0 h-full z-50
-          w-[380px] max-w-[90vw]
-          bg-[#0a0a0a] border-l border-zinc-800/60
-          shadow-2xl shadow-black/50
-          flex flex-col
-          transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
-          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-        `}
-      >
+  return (
+    <div
+      className="
+        w-[340px] min-w-[280px] max-w-[400px]
+        bg-[#0a0a0a] border-l border-zinc-800/60
+        flex flex-col
+        h-full
+        shrink-0
+      "
+    >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/40 bg-zinc-900/20 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -180,16 +139,7 @@ const TaskSidebar: React.FC<TaskSidebarProps> = ({ isOpen, onToggle }) => {
             />
           )}
         </div>
-      </div>
-
-      {/* Backdrop overlay when open */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] animate-fade-in"
-          onClick={onToggle}
-        />
-      )}
-    </>
+    </div>
   );
 };
 

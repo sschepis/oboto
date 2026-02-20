@@ -63,22 +63,19 @@ export class BrowserHandlers {
             
             return await this.captureState(url, { action: { type: 'open', url } });
         } catch (error) {
-            consoleStyler.log('error', `Browse failed: ${error.message}`);
-            // Try to capture state even on failure if page exists
-            if (this.page) {
+            consoleStyler.log('warning', `Browse failed: ${error.message}`);
+            
+            // Check if the page is still usable (attached) before trying to capture
+            const pageAttached = this.page && !this.page.isClosed();
+            if (pageAttached) {
                 return await this.captureState(url, { error: error.message, action: { type: 'open', url } });
             }
-            // Return a JSON error state if we can't capture the page
-            return JSON.stringify({
-                _type: 'browser_preview',
-                url,
-                title: 'Error',
-                logs: [],
-                networkLogs: [],
-                screenshot: null,
-                error: error.message,
-                lastAction: { type: 'open', url }
-            });
+            
+            // Clean up dead browser session so subsequent tools get clear error
+            await this.cleanupBrowser();
+            
+            // Return error-prefixed message so sequential tool short-circuit detects it
+            return `Error: Failed to open ${url} — ${error.message}. The browser session has been cleaned up.`;
         }
     }
 
@@ -149,7 +146,22 @@ export class BrowserHandlers {
         if (!this.browser || !this.page) {
             return "Error: No active browser session. Use 'browse_open' first.";
         }
+        // Verify page is still attached before attempting screenshot
+        if (this.page.isClosed()) {
+            await this.cleanupBrowser();
+            return "Error: Browser page is closed. Use 'browse_open' to start a new session.";
+        }
         return await this.captureState(this.page.url(), { fullPage: args.full_page, action: { type: 'screenshot' } });
+    }
+
+    async cleanupBrowser() {
+        try {
+            if (this.browser) await this.browser.close();
+        } catch { /* ignore cleanup errors */ }
+        this.browser = null;
+        this.page = null;
+        this.logs = [];
+        this.networkLogs = [];
     }
 
     async browseClose() {

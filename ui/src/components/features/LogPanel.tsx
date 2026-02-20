@@ -92,7 +92,7 @@ const LogPanel: React.FC<LogPanelProps> = ({ logs, isOpen, onClose, onClear }) =
   return (
     <div
       ref={panelRef}
-      className="fixed bottom-0 left-0 right-0 z-50 flex flex-col border-t border-zinc-700/50 shadow-2xl shadow-black/50 animate-slide-in-up"
+      className="fixed bottom-6 left-0 right-0 z-50 flex flex-col border-t border-zinc-700/50 shadow-2xl shadow-black/50 animate-slide-in-up"
       style={{ height: panelHeight }}
     >
       {/* Resize handle */}

@@ -10,8 +10,18 @@ import { consoleStyler } from '../../ui/console-styler.mjs';
  * @param {Function} next
  */
 export async function qualityGateStage(ctx, services, next) {
-    // Skip quality gate on retries to avoid infinite retry loops
+    // On retries: evaluate quality for observability, but never trigger
+    // another retry (which would risk infinite recursion).
     if (ctx.isRetry) {
+        const qualityGate = services.optional('qualityGate');
+        if (qualityGate && ctx.finalResponse) {
+            try {
+                await qualityGate.evaluateOnly(ctx.originalInput, ctx.finalResponse);
+            } catch (e) {
+                // Non-critical — log and move on
+                consoleStyler.log('quality', `Retry evaluation failed: ${e.message}`);
+            }
+        }
         await next();
         return;
     }
@@ -39,7 +49,7 @@ export async function qualityGateStage(ctx, services, next) {
             // Create a retry context and re-execute the pipeline
             const pipeline = services.get('pipeline');
             const retryCtx = ctx.createRetryContext(retryConfig.improvedPrompt);
-            ctx.finalResponse = await pipeline.execute(retryCtx);
+            ctx.finalResponse = await pipeline.execute(retryCtx, services);
 
             // Skip remaining stages — the retry pipeline already ran finalize
             return;

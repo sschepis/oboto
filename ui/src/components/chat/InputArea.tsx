@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Image as ImageIcon, X, FileText, Zap, Activity, Trash2, Download, GitBranch, Folder, BookOpen, FlaskConical, Code2, Mic, MicOff, Square, Play, Bot, ChevronDown } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import VoiceWaveform from '../features/VoiceWaveform';
+import AgentActivityPanel from './AgentActivityPanel';
 import { wsService } from '../../services/wsService';
 import type { Command } from '../../types';
+import type { ActivityLogEntry } from '../../hooks/useChat';
 
 interface Attachment {
   id: string;
@@ -26,6 +28,10 @@ interface InputAreaProps {
   availableModels?: Record<string, { provider: string }>;
   selectedModel?: string | null;
   onSelectModel?: (model: string) => void;
+  /** Activity log entries for the agent activity panel */
+  activityLog?: ActivityLogEntry[];
+  /** Number of queued messages */
+  queueCount?: number;
 }
 
 const getIcon = (iconName: string | React.ReactNode) => {
@@ -82,7 +88,9 @@ const InputArea: React.FC<InputAreaProps> = ({
   inputRef: externalInputRef,
   availableModels = {},
   selectedModel,
-  onSelectModel
+  onSelectModel,
+  activityLog,
+  queueCount
 }) => {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -326,6 +334,13 @@ const InputArea: React.FC<InputAreaProps> = ({
 
       <div className="w-full relative">
         
+        {/* Agent activity panel — always visible above input when working */}
+        <AgentActivityPanel
+          isAgentWorking={isAgentWorking}
+          activityLog={activityLog}
+          queueCount={queueCount}
+        />
+
         {showInlineMenu && filteredInline.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#0d0d0d]/95 border border-zinc-800/50 rounded-xl shadow-2xl shadow-black/40 overflow-hidden p-1 mx-3 max-w-xl animate-slide-in-up"
             style={{ backdropFilter: 'blur(16px)' }}
@@ -486,7 +501,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               placeholder={isAgentWorking ? "Queue a message..." : "Message Oboto..."}
               className="
                 w-full bg-transparent border-none focus:ring-0
-                text-[13px] text-zinc-100 placeholder:text-zinc-600
+                text-[13px] text-white placeholder:text-zinc-400
                 resize-none max-h-32 min-h-[28px] py-1 outline-none leading-relaxed
                 transition-colors duration-200
               "
