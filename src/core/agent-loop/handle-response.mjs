@@ -120,8 +120,10 @@ export async function handleResponse(ctx, services, responseMessage) {
                 }
                 
                 consoleStyler.log('working', `Executing tool: ${toolName}`);
+                if (statusAdapter) statusAdapter.onToolStart(toolName, toolCall.function.arguments);
 
                 const toolResult = await toolExecutor.executeTool(toolCall, { signal: ctx.signal });
+                if (statusAdapter) statusAdapter.onToolEnd(toolName, toolResult);
 
                 const success = !toolResult.content.startsWith('Error:');
                 if (success) {

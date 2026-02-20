@@ -38,6 +38,11 @@ import { ConversationLock } from './conversation-lock.mjs';
 import { AssistantPipeline } from './assistant-pipeline.mjs';
 import { RequestContext } from './request-context.mjs';
 
+// Controllers
+import { ConversationController } from './controllers/conversation-controller.mjs';
+import { SessionController } from './controllers/session-controller.mjs';
+import { AssistantInitializer } from './assistant-setup/assistant-initializer.mjs';
+
 export class AssistantFacade {
     constructor(workingDir, options = {}) {
         // ── Core Configuration ──
@@ -109,20 +114,7 @@ export class AssistantFacade {
         );
 
         // Set up history summarizer
-        this.historyManager.setSummarizer(async (prompt) => {
-            try {
-                const modelConfig = this.promptRouter.resolveModel(TASK_ROLES.SUMMARIZER);
-                const result = await this.llmAdapter.generateContent({
-                    model: modelConfig.modelId,
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: 0.3
-                });
-                return result.choices[0].message.content;
-            } catch (error) {
-                consoleStyler.log('warning', `Summarizer failed: ${error.message}`);
-                throw error;
-            }
-        });
+        this._setupSummarizer();
 
         // Initial tool list
         this.allTools = [...TOOLS, ...MCP_TOOLS];
@@ -138,58 +130,38 @@ export class AssistantFacade {
         this._conversationLock = new ConversationLock();
         this._pipeline = new AssistantPipeline();
 
+        // Initialize AssistantInitializer BEFORE registering services (it owns registerServices())
+        this.initializer = new AssistantInitializer(this);
+
         // Register all services into the registry
         this._registerServices();
+
+        // Initialize Controllers
+        this.conversationController = new ConversationController(this);
+        this.sessionController = new SessionController(this);
+    }
+
+    _setupSummarizer() {
+        this.historyManager.setSummarizer(async (prompt) => {
+            try {
+                const modelConfig = this.promptRouter.resolveModel(TASK_ROLES.SUMMARIZER);
+                const result = await this.llmAdapter.generateContent({
+                    model: modelConfig.modelId,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.3
+                });
+                return result.choices[0].message.content;
+            } catch (error) {
+                consoleStyler.log('warning', `Summarizer failed: ${error.message}`);
+                throw error;
+            }
+        });
     }
 
     // ─── Service Registration ───────────────────────────────────────────
 
     _registerServices() {
-        const s = this._services;
-        s.register('historyManager', this.historyManager);
-        s.register('conversationManager', this.conversationManager);
-        s.register('toolExecutor', this.toolExecutor);
-        s.register('promptRouter', this.promptRouter);
-        s.register('llmAdapter', this.llmAdapter);
-        s.register('reasoningSystem', this.reasoningSystem);
-        s.register('workspaceManager', this.workspaceManager);
-        s.register('qualityEvaluator', this.qualityEvaluator);
-        s.register('qualityGate', this.qualityGate);
-        s.register('pipeline', this._pipeline);
-
-        // Optional services — use services.optional() in stages
-        s.register('consciousness', this.consciousness);
-        s.register('symbolicContinuity', this.symbolicContinuity);
-        s.register('memoryAdapter', this.memoryAdapter);
-        s.register('taskManager', this.taskManager);
-        s.register('schedulerService', this.schedulerService);
-        s.register('statusAdapter', this.statusAdapter);
-        s.register('eventBus', this.eventBus);
-        s.register('middleware', this.middleware);
-        s.register('personaManager', this.personaManager);
-        s.register('resoLangService', this.resoLangService);
-        s.register('openClawManager', this.openClawManager);
-        s.register('mcpClientManager', this.mcpClientManager);
-
-        // Tool loader service for lazy initialization
-        s.register('toolLoader', {
-            ensureLoaded: () => this.initializeCustomTools(),
-            getTools: () => this.allTools
-        });
-
-        // Transcript logger service
-        s.register('transcriptLogger', {
-            log: (type, model, data) => this._logTranscript(type, model, data)
-        });
-
-        // Config values
-        s.register('config', {
-            maxTurns: this.maxTurns,
-            maxSubagents: this.maxSubagents,
-            temperature: this.temperature,
-            dryRun: this.dryRun,
-            workingDir: this.workingDir
-        });
+        this.initializer.registerServices(this._services);
     }
 
     // ─── Tool Executor Initialisation ───────────────────────────────────
@@ -245,7 +217,7 @@ export class AssistantFacade {
         this.toolExecutor.setDryRun(dryRun);
 
         // Refresh service references that may have changed (e.g. after conversation switch)
-        this._refreshServices();
+        this.refreshServices();
 
         // Build the request context
         const ctx = new RequestContext({
@@ -279,7 +251,7 @@ export class AssistantFacade {
         await this.initializeCustomTools();
 
         // Refresh service references
-        this._refreshServices();
+        this.refreshServices();
 
         const ctx = new RequestContext({
             userInput,
@@ -302,143 +274,37 @@ export class AssistantFacade {
 
     /**
      * Refresh mutable service references in the registry.
-     * Called before each pipeline execution to ensure stages see
-     * the current historyManager (which changes on conversation switch).
      */
-    _refreshServices() {
-        this._services.register('historyManager', this.historyManager);
-        this._services.register('toolExecutor', this.toolExecutor);
-        this._services.register('qualityGate', this.qualityGate);
-        this._services.register('config', {
-            maxTurns: this.maxTurns,
-            maxSubagents: this.maxSubagents,
-            temperature: this.temperature,
-            dryRun: this.dryRun,
-            workingDir: this.workingDir
-        });
-        this._services.register('toolLoader', {
-            ensureLoaded: () => this.initializeCustomTools(),
-            getTools: () => this.allTools
-        });
+    refreshServices() {
+        this.initializer.registerServices(this._services);
+        
+        // Update Component References
+        if (this.toolExecutor) {
+            this.toolExecutor.historyManager = this.historyManager;
+            if (this.toolExecutor.coreHandlers) {
+                this.toolExecutor.coreHandlers.historyManager = this.historyManager;
+            }
+        }
+
+        if (this.qualityGate) {
+            this.qualityGate.historyManager = this.historyManager;
+        }
+
+        this._setupSummarizer();
     }
 
     // ─── Custom Tools / System Prompt ───────────────────────────────────
 
     async initializeCustomTools() {
-        // Initialize ResoLang
-        if (this.resoLangService) {
-            await this.resoLangService.initialize();
-        }
-
-        // Initialize Consciousness Processor
-        await this.consciousness.initialize();
-
-        // Initialize Persona Manager
-        if (this.personaManager) {
-            await this.personaManager.initialize();
-        }
-
-        // Initialize MCP Client Manager
-        if (this.mcpClientManager) {
-            await this.mcpClientManager.initialize();
-        }
-
-        // Update system prompt if dirty
-        if (this._systemPromptDirty !== false) {
-            await this.updateSystemPrompt();
-            this._systemPromptDirty = false;
-        }
-
-        // Bootstrap persona (once)
-        if (this.personaManager && !this._personaBootstrapped) {
-            await this._bootstrapPersona();
-            this._personaBootstrapped = true;
-        }
-
-        // Rebuild tool list
-        this.allTools = [...TOOLS, ...MCP_TOOLS];
-        if (this.openClawManager) this.allTools.push(...OPENCLAW_TOOLS);
-
-        // Load custom tools (cached)
-        if (!this._cachedCustomTools) {
-            this._cachedCustomTools = await this.customToolsManager.loadCustomTools();
-        }
-        this.allTools.push(...this._cachedCustomTools);
-
-        // Load MCP tools
-        if (this.mcpClientManager) {
-            this.allTools.push(...this.mcpClientManager.getAllTools());
-        }
-
-        this.customToolsLoaded = true;
-    }
-
-    async _bootstrapPersona() {
-        const bootstrap = this.personaManager.getBootstrapConfig();
-        if (!bootstrap) return;
-
-        if (bootstrap.morningBriefing?.enabled && this.schedulerService) {
-            try {
-                const existing = this.schedulerService.listSchedules('all');
-                const alreadyExists = existing.some(s => s.name === (bootstrap.morningBriefing.name || 'Morning Briefing'));
-
-                if (!alreadyExists) {
-                    await this.schedulerService.createSchedule({
-                        name: bootstrap.morningBriefing.name || 'Morning Briefing',
-                        description: bootstrap.morningBriefing.description || 'Daily persona briefing',
-                        query: bootstrap.morningBriefing.query,
-                        intervalMs: (bootstrap.morningBriefing.intervalMinutes || 1440) * 60 * 1000,
-                        maxRuns: null,
-                        skipIfRunning: true,
-                        tags: ['persona', 'briefing']
-                    });
-                    consoleStyler.log('system', `🎭 Persona bootstrap: Morning Briefing schedule created (every ${bootstrap.morningBriefing.intervalMinutes || 1440} min)`);
-                } else {
-                    consoleStyler.log('system', '🎭 Persona bootstrap: Morning Briefing schedule already exists');
-                }
-            } catch (e) {
-                consoleStyler.log('warning', `Failed to set up Morning Briefing: ${e.message}`);
-            }
-        }
+        return await this.initializer.initializeCustomTools();
     }
 
     markSystemPromptDirty() {
-        this._systemPromptDirty = true;
+        this.initializer.markSystemPromptDirty();
     }
 
     async updateSystemPrompt() {
-        let manifestContent = null;
-        if (this.manifestManager && this.manifestManager.hasManifest()) {
-            manifestContent = await this.manifestManager.readManifest();
-        }
-
-        this.openclawAvailable = !!(this.openClawManager && this.openClawManager.client && this.openClawManager.client.isConnected);
-
-        let skillsSummary = "";
-        if (this.toolExecutor && this.toolExecutor.skillsManager) {
-            await this.toolExecutor.skillsManager.ensureInitialized();
-            skillsSummary = this.toolExecutor.skillsManager.getSkillsSummary();
-        }
-
-        let personaContent = "";
-        if (this.personaManager) {
-            personaContent = this.personaManager.renderPersonaPrompt();
-        }
-
-        this.historyManager.updateSystemPrompt(
-            createSystemPrompt(
-                this.workingDir,
-                this.workspaceManager.getCurrentWorkspace(),
-                manifestContent,
-                {
-                    openclawAvailable: this.openclawAvailable,
-                    skillsSummary,
-                    personaContent,
-                    symbolicContinuityEnabled: this.symbolicContinuity?.enabled || false,
-                    chineseRoomMode: this.symbolicContinuity?.chineseRoomEnabled || false
-                }
-            )
-        );
+        return await this.initializer.updateSystemPrompt();
     }
 
     // ─── Workspace Management ───────────────────────────────────────────
@@ -490,42 +356,11 @@ export class AssistantFacade {
     // ─── Session Management ─────────────────────────────────────────────
 
     async saveSession(sessionPath) {
-        try {
-            consoleStyler.log('system', `Saving session to ${sessionPath}...`);
-            const historySaved = await this.historyManager.save(`${sessionPath}.history.json`);
-
-            if (this.workspaceManager.isWorkspaceActive()) {
-                await this.workspaceManager.save(`${sessionPath}.workspace.json`);
-            }
-
-            if (historySaved) {
-                consoleStyler.log('system', '✓ Session saved successfully');
-                return true;
-            }
-            return false;
-        } catch (error) {
-            consoleStyler.log('error', `Failed to save session: ${error.message}`);
-            return false;
-        }
+        return await this.sessionController.saveSession(sessionPath);
     }
 
     async loadSession(sessionPath) {
-        try {
-            consoleStyler.log('system', `Loading session from ${sessionPath}...`);
-            const historyLoaded = await this.historyManager.load(`${sessionPath}.history.json`);
-
-            await this.workspaceManager.load(`${sessionPath}.workspace.json`);
-
-            if (historyLoaded) {
-                consoleStyler.log('system', `✓ Session loaded successfully (${this.historyManager.getHistory().length} messages)`);
-                this.updateSystemPrompt();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            consoleStyler.log('error', `Failed to load session: ${error.message}`);
-            return false;
-        }
+        return await this.sessionController.loadSession(sessionPath);
     }
 
     deleteHistoryExchanges(count) {
@@ -539,16 +374,14 @@ export class AssistantFacade {
     // ─── Conversation Management ────────────────────────────────────────
 
     async saveConversation() {
-        try {
-            await this.conversationManager.saveActive();
-            return true;
-        } catch (error) {
-            consoleStyler.log('error', `Failed to save conversation: ${error.message}`);
-            return false;
-        }
+        return await this.conversationManager.saveActive();
     }
 
     async loadConversation() {
+        // Initialize logic for ConversationController if needed, 
+        // but for now we'll just replicate the loading logic here or expose it
+        // Actually, loadConversation is complex init logic.
+        // Let's keep it here for now as it sets up the initial state of the facade.
         try {
             await this.conversationManager.initialize();
             await this.conversationManager.migrateFromLegacy();
@@ -575,7 +408,7 @@ export class AssistantFacade {
             }
 
             this.historyManager = activeHm;
-            this._syncHistoryManagerRefs();
+            this.refreshServices();
 
             await this.symbolicContinuity.initialize(
                 this.conversationManager.getActiveConversationName()
@@ -596,132 +429,31 @@ export class AssistantFacade {
     }
 
     async listConversations() {
-        return await this.conversationManager.listConversations();
+        return await this.conversationController.listConversations();
     }
 
     async createConversation(name) {
-        const personaContent = this.personaManager ? this.personaManager.renderPersonaPrompt() : '';
-        this.openclawAvailable = !!(this.openClawManager && this.openClawManager.client && this.openClawManager.client.isConnected);
-        const systemPrompt = createSystemPrompt(
-            this.workingDir,
-            this.workspaceManager.getCurrentWorkspace(),
-            null,
-            { openclawAvailable: this.openclawAvailable, personaContent }
-        );
-
-        const result = await this.conversationManager.createConversation(name, systemPrompt);
-
-        if (result.created && this.eventBus) {
-            const conversations = await this.conversationManager.listConversations();
-            this.eventBus.emit('server:conversation-list', conversations);
-        }
-
-        return result;
+        return await this.conversationController.createConversation(name);
     }
 
     async switchConversation(name) {
-        const result = await this.conversationManager.switchConversation(name);
-
-        if (result.switched) {
-            this.historyManager = this.conversationManager.getActiveHistoryManager();
-            this._syncHistoryManagerRefs();
-            await this.updateSystemPrompt();
-
-            await this.symbolicContinuity.initialize(
-                this.conversationManager.getActiveConversationName()
-            );
-
-            if (this.eventBus) {
-                this.eventBus.emit('server:history-loaded', this.historyManager.getHistory());
-                this.eventBus.emit('server:conversation-switched', {
-                    name: this.conversationManager.getActiveConversationName(),
-                    isDefault: this.conversationManager.isDefaultConversation()
-                });
-            }
-        }
-
-        return result;
+        return await this.conversationController.switchConversation(name);
     }
 
     async deleteConversation(name) {
-        const result = await this.conversationManager.deleteConversation(name);
-
-        if (result.deleted) {
-            this.historyManager = this.conversationManager.getActiveHistoryManager();
-            this._syncHistoryManagerRefs();
-
-            if (this.eventBus) {
-                const conversations = await this.conversationManager.listConversations();
-                this.eventBus.emit('server:conversation-list', conversations);
-                this.eventBus.emit('server:history-loaded', this.historyManager.getHistory());
-                this.eventBus.emit('server:conversation-switched', {
-                    name: this.conversationManager.getActiveConversationName(),
-                    isDefault: this.conversationManager.isDefaultConversation()
-                });
-            }
-        }
-
-        return result;
+        return await this.conversationController.deleteConversation(name);
     }
 
     async renameConversation(oldName, newName) {
-        const result = await this.conversationManager.renameConversation(oldName, newName);
-
-        if (result.success) {
-            if (this._activeConversation !== this.conversationManager.getActiveConversationName()) {
-                this.historyManager = this.conversationManager.getActiveHistoryManager();
-                this._syncHistoryManagerRefs();
-            }
-
-            if (this.eventBus) {
-                const conversations = await this.conversationManager.listConversations();
-                this.eventBus.emit('server:conversation-list', conversations);
-                this.eventBus.emit('server:conversation-renamed', {
-                    oldName: result.oldName,
-                    newName: result.newName
-                });
-            }
-        }
-
-        return result;
+        return await this.conversationController.renameConversation(oldName, newName);
     }
 
     async reportToParent(summary, metadata = {}) {
-        const childName = this.conversationManager.getActiveConversationName();
-        return await this.conversationManager.reportToParent(childName, summary, metadata);
+        return await this.conversationController.reportToParent(summary, metadata);
     }
 
     getActiveConversationName() {
-        return this.conversationManager.getActiveConversationName();
-    }
-
-    _syncHistoryManagerRefs() {
-        if (this.toolExecutor) {
-            this.toolExecutor.historyManager = this.historyManager;
-            if (this.toolExecutor.coreHandlers) {
-                this.toolExecutor.coreHandlers.historyManager = this.historyManager;
-            }
-        }
-
-        if (this.qualityGate) {
-            this.qualityGate.historyManager = this.historyManager;
-        }
-
-        // Set up summarizer on new HistoryManager
-        this.historyManager.setSummarizer(async (prompt) => {
-            try {
-                const modelConfig = this.promptRouter.resolveModel(TASK_ROLES.SUMMARIZER);
-                const result = await this.llmAdapter.generateContent({
-                    model: modelConfig.modelId,
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: 0.3
-                });
-                return result.choices[0].message.content;
-            } catch (error) {
-                consoleStyler.log('warning', `Summarizer failed: ${error.message}`);
-                throw error;
-            }
-        });
+        return this.conversationController.getActiveConversationName();
     }
 
     // ─── Context & Diagnostics ──────────────────────────────────────────
@@ -739,34 +471,7 @@ export class AssistantFacade {
     }
 
     displaySessionMemory() {
-        const history = this.historyManager.getHistory();
-        const sessionSummary = {
-            totalMessages: history.length,
-            messageTypes: {
-                system: history.filter(m => m.role === 'system').length,
-                user: history.filter(m => m.role === 'user').length,
-                assistant: history.filter(m => m.role === 'assistant').length,
-                tool: history.filter(m => m.role === 'tool').length
-            },
-            toolResults: history.filter(m => m.role === 'tool').map(m => ({
-                name: m.name,
-                contentLength: m.content.length
-            })),
-            assistantWithToolCalls: history.filter(m => m.role === 'assistant' && m.tool_calls).length
-        };
-
-        consoleStyler.log('system', 'Session Memory State:', { box: true });
-        consoleStyler.log('system', `Total messages: ${sessionSummary.totalMessages}`, { indent: true });
-        consoleStyler.log('system', `Message breakdown: ${JSON.stringify(sessionSummary.messageTypes)}`, { indent: true });
-        consoleStyler.log('system', `Tool results: ${sessionSummary.toolResults.length} preserved`, { indent: true });
-
-        if (sessionSummary.toolResults.length > 0) {
-            sessionSummary.toolResults.forEach((tool, i) => {
-                consoleStyler.log('system', `  ${i + 1}. ${tool.name} (${tool.contentLength} chars)`, { indent: true });
-            });
-        }
-
-        return sessionSummary;
+        return this.sessionController.displaySessionMemory();
     }
 
     // ─── Code Completion ────────────────────────────────────────────────

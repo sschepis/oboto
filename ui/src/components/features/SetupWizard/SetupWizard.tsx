@@ -3,6 +3,7 @@ import { useSetupWizard } from '../../../hooks/useSetupWizard';
 import type { WizardConfig } from '../../../hooks/useSetupWizard';
 import WelcomeStep from './WelcomeStep';
 import ProviderStep from './ProviderStep';
+import CloudStep from './CloudStep';
 import ApiKeyStep from './ApiKeyStep';
 import WorkspaceStep from './WorkspaceStep';
 import OpenClawStep from './OpenClawStep';
@@ -33,7 +34,7 @@ export default function SetupWizard({ onComplete, onSkip, initialStep = 0, confi
 
   const { completeSetup, validateApiKey } = useSetupWizard();
 
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const nextStep = () => setStep(prev => Math.min(prev + 1, totalSteps - 1));
   const prevStep = () => setStep(prev => Math.max(prev - 1, 0));
@@ -54,10 +55,11 @@ export default function SetupWizard({ onComplete, onSkip, initialStep = 0, confi
     switch (step) {
       case 0: return <WelcomeStep onNext={nextStep} onSkip={onSkip} />;
       case 1: return <ProviderStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
-      case 2: return <ApiKeyStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} validateApiKey={validateApiKey} />;
-      case 3: return <WorkspaceStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
-      case 4: return <OpenClawStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
-      case 5: return <ReviewStep config={config} onFinish={handleFinish} onBack={prevStep} />;
+      case 2: return <CloudStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
+      case 3: return <ApiKeyStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} validateApiKey={validateApiKey} />;
+      case 4: return <WorkspaceStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
+      case 5: return <OpenClawStep config={config} onChange={updateConfig} onNext={nextStep} onBack={prevStep} />;
+      case 6: return <ReviewStep config={config} onFinish={handleFinish} onBack={prevStep} />;
       default: return null;
     }
   };

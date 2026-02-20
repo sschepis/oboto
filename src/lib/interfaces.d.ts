@@ -372,7 +372,7 @@ export declare class AiMan {
 
 export { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 export { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
-export { MiniAIAssistant } from '../core/ai-assistant.mjs';
+export { MiniAIAssistant } from '../core/assistant-facade.mjs';
 export { config } from '../config.mjs';
 export { consoleStyler } from '../ui/console-styler.mjs';
 export { AiManEventBus } from './event-bus.mjs';

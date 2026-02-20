@@ -12,6 +12,8 @@ Learn about the internal design of Oboto.
 *   [**Structured Development**](architecture/structured-dev.md): The manifest-driven development workflow (`SYSTEM_MAP.md`).
 *   [**Integrations**](architecture/integrations.md): Architecture for OpenClaw and Model Context Protocol (MCP).
 *   [**Skills System**](architecture/skills.md): Extending the agent with modular skills (`SKILL.md`).
+*   [**Cloud Integration**](architecture/cloud-integration-design.md): How the desktop app connects to Oboto Cloud (optional sync, collaboration, AI proxy).
+*   [**Cloud Implementation Plan**](architecture/cloud-implementation-plan.md): Phased implementation plan for cloud features.
 
 ### 🚀 Guides & Usage
 Practical guides for setting up and using Oboto.

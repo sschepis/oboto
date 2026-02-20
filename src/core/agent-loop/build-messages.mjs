@@ -21,8 +21,14 @@ export async function buildMessages(ctx, services, modelConfig) {
     // Get recent exchanges (keep context focused)
     const rawMessages = historyManager.getLastExchanges(5);
 
+    // Check if this is an autonomous agent loop task
+    const isAgentLoop = ctx.metadata?.tags?.includes('agent-loop') || ctx.metadata?.type === 'agent-loop';
+
     // Inject memory context if available (before budgeting)
-    if (memoryAdapter) {
+    // We skip this for agent-loop tasks because they already receive memory context
+    // in their initial briefing packet, and querying memory with the massive packet
+    // is slow and burns tokens unnecessarily.
+    if (memoryAdapter && !isAgentLoop) {
         const lastUserMsg = rawMessages.filter(m => m.role === 'user').pop();
         if (lastUserMsg && !lastUserMsg._contextInjected) {
             try {

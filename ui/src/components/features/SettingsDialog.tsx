@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, Puzzle } from 'lucide-react';
+import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, Puzzle, Cloud } from 'lucide-react';
 import type { OpenClawStatus } from '../../types';
 import { PropertyGrid, type PropertyItem } from './settings/PropertyGrid';
 import { AIProviderSettings, type AIProviderConfig, type ProviderConfig, type AIProviderType } from './settings/AIProviderSettings';
 import { ModelRoutingSettings } from './settings/ModelRoutingSettings';
 import SkillsSettings from './settings/SkillsSettings';
+import CloudSettings from './settings/CloudSettings';
 import type { SecretItem } from '../../hooks/useSecrets';
 import type { SkillInfo, ClawHubSkill } from '../../hooks/useSkills';
 
@@ -61,7 +62,7 @@ interface SettingsDialogProps {
   };
 }
 
-type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills';
+type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills' | 'cloud';
 type AISubTab = 'config' | 'routing';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ 
@@ -139,6 +140,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
     { id: 'ai', label: 'AI Providers', icon: <Cpu size={15} /> },
     { id: 'openclaw', label: 'OpenClaw', icon: <Database size={15} /> },
     { id: 'skills', label: 'Skills', icon: <Puzzle size={15} /> },
+    { id: 'cloud', label: 'Cloud', icon: <Cloud size={15} /> },
   ];
 
   const renderContent = () => {
@@ -369,6 +371,17 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        );
+
+      case 'cloud':
+        return (
+          <div className="space-y-6 animate-fade-in-up" key="cloud">
+            <div>
+              <h3 className="text-lg font-semibold text-zinc-100 mb-1">Oboto Cloud</h3>
+              <p className="text-xs text-zinc-500 mb-5">Connect to Oboto Cloud for sync, collaboration, and cloud AI agents.</p>
+              <CloudSettings />
             </div>
           </div>
         );

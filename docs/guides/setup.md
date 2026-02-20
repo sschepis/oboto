@@ -74,6 +74,51 @@ To build the UI for production serving:
 npm run build:all
 ```
 
+## Oboto Cloud (Optional)
+
+Oboto Cloud adds workspace sync, team collaboration, cloud AI agents, and metered AI model access. It's fully optional — everything works without it.
+
+### Setting Up Cloud
+
+1.  **Sign up** at [oboto.ai](https://oboto.ai) to get your cloud credentials.
+
+2.  **Add cloud credentials** to your `.env` or Secrets Vault:
+    ```env
+    OBOTO_CLOUD_URL=https://your-project.supabase.co
+    OBOTO_CLOUD_KEY=your-anon-key
+    ```
+    Or configure via the Secrets Vault UI (⌘K → "Secrets Vault").
+
+3.  **Restart the server**. You'll see `☁️ Cloud integration initialized` in the logs.
+
+4.  **Log in** via Settings → Cloud tab in the UI.
+
+### Cloud Features
+
+| Feature | Description |
+|---------|-------------|
+| **Login/Profile** | Sign in to see your org, team, and profile |
+| **Workspace Sync** | Link a local workspace to a cloud workspace for state sync |
+| **Conversation Sync** | Push/pull messages between local and cloud |
+| **Cloud Agents** | Invoke cloud AI agents configured in the dashboard |
+| **AI Proxy** | Route AI requests through the cloud (no local API keys needed) |
+| **Presence** | See who's online in your workspace in real-time |
+
+### Using Cloud as AI Provider
+
+Set `AI_PROVIDER=cloud` in your `.env` to route all AI requests through the cloud proxy. This uses your organization's metered AI access — no local API keys required.
+
+```env
+AI_PROVIDER=cloud
+AI_MODEL=auto
+```
+
+The cloud proxy supports all major models and automatically routes to the optimal provider. If the cloud is unavailable, Oboto falls back to any locally configured provider.
+
+### No Cloud? No Problem
+
+Without `OBOTO_CLOUD_URL` and `OBOTO_CLOUD_KEY`, the cloud module doesn't load at all. Zero impact on startup time, zero cloud code in memory, and all local features work identically.
+
 ## Usage
 
 1.  **Access the UI**: Open `http://localhost:5173` (or the production URL).

@@ -100,6 +100,51 @@ async function main() {
         // Load custom tools before starting
         await assistant.initializeCustomTools();
 
+        // ── Cloud Sync (optional) ──
+        let cloudSync = null;
+        const cloudUrl = process.env.OBOTO_CLOUD_URL || secretsManager.get('OBOTO_CLOUD_URL');
+        const cloudKey = process.env.OBOTO_CLOUD_KEY || secretsManager.get('OBOTO_CLOUD_KEY');
+
+        if (cloudUrl && cloudKey) {
+            try {
+                const { CloudSync } = await import('./cloud/cloud-sync.mjs');
+                const { loadCloudConfig } = await import('./cloud/cloud-config.mjs');
+
+                const cloudConfig = loadCloudConfig();
+                if (cloudConfig) {
+                    cloudSync = new CloudSync(eventBus, secretsManager);
+                    await cloudSync.initialize(cloudConfig);
+
+                    // Auto-login from cached refresh token (silent, non-blocking)
+                    cloudSync.tryAutoLogin().catch(err => {
+                        consoleStyler.log('warning', `Cloud auto-login failed: ${err.message}`);
+                    });
+
+                    cloudSync.setWorkingDir(workingDir);
+
+                    // Wire cloud reference into AI provider for cloud proxy support
+                    const { setCloudSyncRef, setEventBusRef } = await import('./core/ai-provider.mjs');
+                    setCloudSyncRef(cloudSync);
+                    setEventBusRef(eventBus);
+
+                    consoleStyler.log('system', '☁️  Cloud integration initialized');
+                }
+            } catch (err) {
+                consoleStyler.log('warning', `Cloud integration failed to initialize: ${err.message}`);
+            }
+        }
+
+        // Wire eventBus into AI provider for WebLLM support (independent of cloud)
+        if (!cloudUrl || !cloudKey) {
+            try {
+                const { setEventBusRef } = await import('./core/ai-provider.mjs');
+                setEventBusRef(eventBus);
+            } catch { /* ignore */ }
+        }
+
+        // Register cloud as optional service (null if not configured)
+        assistant._services.register('cloudSync', cloudSync);
+
         // Resume session if requested
         if (resume) {
             await assistant.loadSession('.ai-session');
@@ -108,8 +153,8 @@ async function main() {
         if (isServer) {
             // Server mode
             const { startServer } = await import('./server/web-server.mjs');
-            // Pass schedulerService, secretsManager, agentLoopController, and workspaceContentServer to startServer
-            await startServer(assistant, workingDir, eventBus, 3000, schedulerService, secretsManager, agentLoopController, workspaceContentServer);
+            // Pass schedulerService, secretsManager, agentLoopController, workspaceContentServer, and cloudSync to startServer
+            await startServer(assistant, workingDir, eventBus, 3000, schedulerService, secretsManager, agentLoopController, workspaceContentServer, cloudSync);
         } else if (isInteractive) {
             // Interactive mode
             await cli.startInteractiveMode(assistant, workingDir);
@@ -124,6 +169,9 @@ async function main() {
     } finally {
         if (typeof openClawManager !== 'undefined' && openClawManager) {
             await openClawManager.stop();
+        }
+        if (typeof cloudSync !== 'undefined' && cloudSync) {
+            await cloudSync.destroy();
         }
         if (workspaceContentServer) {
             await workspaceContentServer.stop();

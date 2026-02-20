@@ -29,6 +29,7 @@ import { handlers as setupHandlers } from './ws-handlers/setup-handler.mjs';
 import { handlers as miscHandlers } from './ws-handlers/misc-handler.mjs';
 import { handlers as workspaceHandlers } from './ws-handlers/workspace-handler.mjs';
 import { handlers as skillsHandlers } from './ws-handlers/skills-handler.mjs';
+import { handlers as cloudHandlers } from './ws-handlers/cloud-handler.mjs';
 
 // Dynamic import for node-pty (native addon)
 let pty = null;
@@ -62,10 +63,11 @@ function buildDispatcher() {
     dispatcher.registerAll(miscHandlers);
     dispatcher.registerAll(workspaceHandlers);
     dispatcher.registerAll(skillsHandlers);
+    dispatcher.registerAll(cloudHandlers);
     return dispatcher;
 }
 
-export async function startServer(assistant, workingDir, eventBus, port = 3000, schedulerService = null, secretsManager = null, agentLoopController = null, workspaceContentServer = null) {
+export async function startServer(assistant, workingDir, eventBus, port = 3000, schedulerService = null, secretsManager = null, agentLoopController = null, workspaceContentServer = null, cloudSync = null) {
     const app = express();
     // Mutable reference holder so handlers can read/write the active AbortController
     const activeController = { controller: null };
@@ -275,6 +277,27 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             broadcast('message', data);
         });
 
+        // Cloud Realtime Events
+        eventBus.on('cloud:auth:logged-in', (data) => broadcast('cloud:status', data));
+        eventBus.on('cloud:auth:logged-out', () => broadcast('cloud:status', { loggedIn: false }));
+        eventBus.on('cloud:sync-status', (data) => broadcast('cloud:sync-status', data));
+        eventBus.on('cloud:presence:updated', (data) => broadcast('cloud:presence', data));
+        eventBus.on('cloud:message:received', (data) => {
+            broadcast('message', {
+                id: data.id || `cloud-msg-${Date.now()}`,
+                role: data.role === 'assistant' ? 'ai' : 'user',
+                type: 'text',
+                content: data.content,
+                timestamp: new Date().toLocaleTimeString(),
+                isCloud: true,
+            });
+        });
+
+        // WebLLM Bridge — forward generate requests to browser, collect responses
+        eventBus.on('webllm:generate', (data) => {
+            broadcast('webllm:generate', data);
+        });
+
         // Agent Loop Blocking Questions
         eventBus.on('agent-loop:question', (data) => {
             broadcast('agent-loop-question', data);
@@ -411,6 +434,18 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             }
         }
 
+        // Send cloud status to newly connected client
+        if (cloudSync) {
+            try {
+                ws.send(JSON.stringify({
+                    type: 'cloud:status',
+                    payload: cloudSync.getStatus()
+                }));
+            } catch (e) {
+                // Ignore
+            }
+        }
+
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
@@ -424,7 +459,8 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                     secretsManager,
                     activeController,
                     broadcastFileTree,
-                    workspaceContentServer
+                    workspaceContentServer,
+                    cloudSync,
                 };
                 const handled = await dispatcher.dispatch(data, ctx);
                 if (!handled) {

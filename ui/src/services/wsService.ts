@@ -445,6 +445,64 @@ class WSService {
     }
   }
 
+  // --- Cloud methods ---
+
+  cloudLogin(email: string, password: string) {
+    this.sendMessage('cloud:login', { email, password });
+  }
+
+  cloudLogout() {
+    this.sendMessage('cloud:logout');
+  }
+
+  cloudGetStatus() {
+    this.sendMessage('cloud:status');
+  }
+
+  cloudListWorkspaces() {
+    this.sendMessage('cloud:list-workspaces');
+  }
+
+  cloudLinkWorkspace(cloudWorkspaceId: string) {
+    this.sendMessage('cloud:link-workspace', { cloudWorkspaceId });
+  }
+
+  cloudUnlinkWorkspace() {
+    this.sendMessage('cloud:unlink-workspace');
+  }
+
+  cloudSyncPush() {
+    this.sendMessage('cloud:sync-push');
+  }
+
+  cloudSyncPull() {
+    this.sendMessage('cloud:sync-pull');
+  }
+
+  cloudListAgents() {
+    this.sendMessage('cloud:list-agents');
+  }
+
+  cloudInvokeAgent(slug: string, message: string, history?: unknown[]) {
+    this.sendMessage('cloud:invoke-agent', { slug, message, history });
+  }
+
+  cloudCreateWorkspace(name: string, description?: string) {
+    this.sendMessage('cloud:create-workspace', { name, description });
+  }
+
+  cloudListConversations() {
+    this.sendMessage('cloud:list-conversations');
+  }
+
+  cloudPushConversation(cloudConvId: string, lastSyncAt?: string | null) {
+    this.sendMessage('cloud:push-conversation', { cloudConvId, lastSyncAt });
+  }
+
+  cloudPullConversation(cloudConvId: string, since?: string | null) {
+    this.sendMessage('cloud:pull-conversation', { cloudConvId, since });
+  }
+
   /** Send a raw typed message to the server (bypasses the chat wrapper) */
   sendMessage(type: string, payload?: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) {

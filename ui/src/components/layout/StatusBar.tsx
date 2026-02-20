@@ -13,6 +13,8 @@ import {
   Check,
 } from 'lucide-react';
 import type { ProjectStatusData } from '../features/ProjectStatus';
+import CloudSyncIndicator from '../features/CloudSyncIndicator';
+import CloudPresenceBar from '../features/CloudPresenceBar';
 
 interface StatusBarProps {
   isConnected: boolean;
@@ -150,6 +152,10 @@ const StatusBar: React.FC<StatusBarProps> = ({
 
       {/* Right side */}
       <div className="flex items-center gap-3 min-w-0">
+        {/* Cloud presence + sync indicator */}
+        <CloudPresenceBar />
+        <CloudSyncIndicator />
+
         {/* Active conversation */}
         {activeConversation && (
           <div

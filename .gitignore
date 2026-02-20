@@ -37,3 +37,9 @@ plans/
 tray-app/dist/
 public/
 .memory.json
+
+.cursorrules
+.snapshots/
+analysis_result.json
+analysis_result_v2.json
+line_count.txt

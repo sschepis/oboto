@@ -17,6 +17,7 @@ import SecretVaultBlock from '../features/SecretVaultBlock';
 import TestResultsPanel from '../features/TestResultsPanel';
 import BrowserPreview from '../features/BrowserPreview';
 import EmbeddedObject from '../features/EmbeddedObject';
+import SurfaceAutoFixBlock from '../features/SurfaceAutoFixBlock';
 import { wsService } from '../../services/wsService';
 import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 import type { Message } from '../../types';
@@ -120,6 +121,10 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel =
 
   // Determine if this message type supports text actions (copy/edit)
   const hasTextContent = message.type === 'text' && !!message.content;
+
+  // Check if this is a Surface Auto-Fix Request (system-generated user message)
+  const isAutoFixRequest = isUser && message.type === 'text' && !!message.content
+    && message.content.trimStart().startsWith('[Surface Auto-Fix Request]');
   
   return (
     <div className={`group flex w-full gap-4 animate-fade-in-up ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -131,16 +136,21 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel =
       
       <div className={`max-w-[85%] space-y-3 ${isUser ? 'items-end flex flex-col' : ''}`}>
         <div className="flex items-center gap-3 px-1">
-          <span className="text-[9px] font-black uppercase text-zinc-600 tracking-[0.15em]">
-            {isUser ? userLabel : agentLabel}
+          <span className={`text-[9px] font-black uppercase tracking-[0.15em] ${isAutoFixRequest ? 'text-amber-600' : 'text-zinc-600'}`}>
+            {isAutoFixRequest ? 'Auto-Fix' : isUser ? userLabel : agentLabel}
           </span>
           <span className="text-[9px] text-zinc-700/60 font-mono">{message.timestamp}</span>
         </div>
         
         {!isUser && message.thoughts && <ThinkingStream thoughts={message.thoughts} />}
 
+        {/* Surface Auto-Fix Request — formatted card instead of raw text */}
+        {message.type === 'text' && !editing && isAutoFixRequest && (
+          <SurfaceAutoFixBlock content={message.content!} />
+        )}
+
         {/* Text messages — rendered as Markdown */}
-        {message.type === 'text' && !editing && (
+        {message.type === 'text' && !editing && !isAutoFixRequest && (
           <div className={`
             p-5 rounded-2xl leading-relaxed text-[14px] border
             transition-all duration-300

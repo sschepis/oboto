@@ -24,7 +24,7 @@ export class AgentLoopController {
      * @param {object} deps
      * @param {import('./scheduler-service.mjs').SchedulerService} deps.schedulerService — for reading active schedules (context only)
      * @param {import('./task-manager.mjs').TaskManager} deps.taskManager
-     * @param {import('./ai-assistant.mjs').MiniAIAssistant} deps.assistant  — the *foreground* assistant (read-only for context)
+     * @param {import('./assistant-facade.mjs').AssistantFacade} deps.assistant  — the *foreground* assistant (read-only for context)
      * @param {AiManEventBus} deps.eventBus
      * @param {Function} deps.aiAssistantClass — constructor for spawning background tasks
      * @param {object} [opts]
@@ -462,11 +462,12 @@ export class AgentLoopController {
                     .join(' ');
                 const query = missionKeywords || 'current projects goals priorities';
 
-                const memories = await this.assistant.resoLangService.recall(query, 5);
+                // Optimized: fetch fewer memories to save tokens and latency
+                const memories = await this.assistant.resoLangService.recall(query, 2);
                 if (memories && memories.length > 0) {
                     sections.push('## Relevant Memory Context');
                     for (const m of memories) {
-                        sections.push(`[Memory]: ${m.text.substring(0, 200)}${m.text.length > 200 ? '...' : ''}`);
+                        sections.push(`[Memory]: ${m.text.substring(0, 150)}${m.text.length > 150 ? '...' : ''}`);
                     }
                     sections.push('');
                 }
