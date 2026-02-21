@@ -10,6 +10,11 @@
 .vscode/
 .cursor/
 .claude/
+.cursorrules
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Local Dev / Workspaces
 node_modules/
@@ -19,9 +24,17 @@ node_modules/
 .memory.json
 .secrets.enc
 .secrets.enc.bak
+.cloud-link.json
+.conversations/
+.surfaces/
+.snapshots/
 temp_speech.mp3
 test-library.mjs
+test-exports.mjs
 coverage/
+analysis_result.json
+analysis_result_v2.json
+line_count.txt
 
 # Build / Lock files (consumers install their own)
 pnpm-lock.yaml
@@ -32,10 +45,16 @@ package-lock.json
 BubbleLab/
 ui/
 sample/
+chrome-extension/
+tray-app/
+public/
 
 # Documentation / Design (not needed at runtime)
 kanvas/
 plans/
+docs/
+skills/
+logs/
 *.md
 !README.md
 !src/lib/README.md
@@ -53,6 +72,7 @@ ENHANCEMENTS.md
 IMPLEMENTATION_PLANS.md
 NEXT_STEPS_DESIGN.md
 PROMPT_ROUTING_DESIGN.md
+REFACTOR_DESIGN.md
 SECRETS_DESIGN.md
 SURFACES_DESIGN.md
 SYSTEM_MAP.md
@@ -66,8 +86,15 @@ src/**/__tests__/
 src/**/*.test.*
 src/**/*.spec.*
 
+# TypeScript / non-published source directories
+src/client/
+src/gateway/
+src/service/
+
 # Static assets not needed in package
 surface.html
+bot256.png
+bot512.png
 
 # Logs
 *.log

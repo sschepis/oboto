@@ -33,6 +33,7 @@ plans/
 
 .surfaces/
 .conversations/
+.cloud-link.json
 
 tray-app/dist/
 public/

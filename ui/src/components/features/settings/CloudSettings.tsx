@@ -22,7 +22,7 @@ const CloudSettings: React.FC = () => {
       cloud.listWorkspaces();
       cloud.listAgents();
     }
-  }, [cloud.loggedIn]);
+  }, [cloud]);
 
   // Not configured — show setup instructions
   if (!cloud.configured) {
@@ -155,7 +155,7 @@ const CloudSettings: React.FC = () => {
           <div className="mt-3 pt-3 border-t border-zinc-800/20 flex items-center gap-4 text-[10px]">
             <span className="flex items-center gap-1 text-zinc-500"><Building2 size={11} />{cloud.org.name}</span>
             <span className={`px-1.5 py-0.5 rounded ${cloud.org.tier === 'free' ? 'bg-zinc-800/50 text-zinc-400' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
-              {cloud.org.tier.charAt(0).toUpperCase() + cloud.org.tier.slice(1)}
+              {(cloud.org.tier || 'free').charAt(0).toUpperCase() + (cloud.org.tier || 'free').slice(1)}
             </span>
             <span className="text-zinc-600 capitalize">{cloud.role || 'member'}</span>
           </div>

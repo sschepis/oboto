@@ -140,18 +140,26 @@ async function getAnthropicClient() {
 }
 
 /**
- * Detect the AI provider from the model name
+ * Detect the AI provider from the model name.
+ * Uses name-based heuristics to determine the correct provider.
+ * When no model is specified, falls back to the configured default provider.
+ *
+ * IMPORTANT: This function must NOT blindly return config.ai.provider when a
+ * model is specified — that would route all models (including LMStudio models)
+ * to whatever the default provider is (e.g., Gemini), causing 404 errors.
+ *
  * @param {string} model - The model identifier
  * @returns {string} The detected provider key
  */
 export function detectProvider(model) {
-    // Explicit provider override takes priority
-    const explicitProvider = config.ai.provider;
-    if (explicitProvider && Object.values(AI_PROVIDERS).includes(explicitProvider)) {
-        return explicitProvider;
+    if (!model) {
+        // No model specified — use the configured default provider
+        const explicitProvider = config.ai.provider;
+        if (explicitProvider && Object.values(AI_PROVIDERS).includes(explicitProvider)) {
+            return explicitProvider;
+        }
+        return AI_PROVIDERS.LMSTUDIO;
     }
-
-    if (!model) return AI_PROVIDERS.LMSTUDIO;
 
     const m = model.toLowerCase();
 
@@ -166,11 +174,13 @@ export function detectProvider(model) {
     }
 
     // OpenAI models
-    if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
+    if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4') || m.startsWith('chatgpt-')) {
         return AI_PROVIDERS.OPENAI;
     }
 
     // Default: local server (LMStudio, Ollama, etc.)
+    // Any model name that doesn't match a known cloud provider prefix
+    // is assumed to be a local model served by LMStudio or similar
     return AI_PROVIDERS.LMSTUDIO;
 }
 

@@ -380,6 +380,7 @@ export { EnhancementGenerator } from '../structured-dev/enhancement-generator.mj
 export { CancellationError } from './cancellation-error.mjs';
 export { DesignResult } from './design-result.mjs';
 export { WorkflowService } from '../services/workflow-service.mjs';
+export { MemoryAdapter } from './adapters/memory-adapter.mjs';
 
 /**
  * Alias for AiMan, emphasizing the robotic developer persona.

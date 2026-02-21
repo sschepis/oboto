@@ -55,6 +55,11 @@ export class RequestContext {
         // Arbitrary per-request metadata (stages can attach data here)
         this.metadata = {};
 
+        // Chime-in queue: messages the user sends while the agent is working.
+        // These are injected into the conversation at the next turn boundary
+        // rather than cancelling the current task.
+        this.chimeInQueue = [];
+
         // Timing
         this.startedAt = Date.now();
         this.completedAt = null;

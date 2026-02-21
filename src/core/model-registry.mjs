@@ -277,75 +277,83 @@ async function fetchGeminiModels() {
 }
 
 /**
- * Fetch available models from LM Studio's /api/v1/models endpoint.
+ * Fetch available models from LM Studio's /v1/models endpoint (OpenAI-compatible).
+ * Tries the OpenAI-compatible endpoint first, then falls back to the native LMStudio API.
  * @returns {Promise<Object>} Map of modelId → capabilities
  */
 async function fetchLMStudioModels() {
-    try {
-        // LM Studio uses OpenAI-compatible headers if key is set
-        const headers = {};
-        if (config.keys.openai) {
-            headers['Authorization'] = `Bearer ${config.keys.openai}`;
-        }
+    // Determine base URL from config or default to localhost:1234
+    let baseUrl = 'http://localhost:1234';
+    const configuredEndpoint = config.ai.endpoint;
 
-        // Determine base URL from config or default to localhost
-        let baseUrl = 'http://localhost:1234';
-        const configuredEndpoint = config.ai.endpoint;
-        
-        if (configuredEndpoint) {
-            try {
-                // If endpoint includes path (e.g. /v1/chat/completions), extract origin
-                const url = new URL(configuredEndpoint);
-                baseUrl = `${url.protocol}//${url.host}`;
-            } catch (e) {
-                // Invalid URL, ignore
+    if (configuredEndpoint) {
+        try {
+            // If endpoint includes path (e.g. /v1/chat/completions), extract origin
+            const url = new URL(configuredEndpoint);
+            baseUrl = `${url.protocol}//${url.host}`;
+        } catch (e) {
+            // Invalid URL, use default
+        }
+    }
+
+    // LM Studio uses OpenAI-compatible headers if key is set
+    const headers = { 'Content-Type': 'application/json' };
+    if (config.keys.openai) {
+        headers['Authorization'] = `Bearer ${config.keys.openai}`;
+    }
+
+    // Endpoints to try, in order of preference
+    const endpoints = [
+        `${baseUrl}/v1/models`,       // OpenAI-compatible (most common)
+        `${baseUrl}/api/v1/models`,    // Native LMStudio API
+    ];
+
+    let json = null;
+
+    for (const endpoint of endpoints) {
+        try {
+            const resp = await fetch(endpoint, { headers, signal: AbortSignal.timeout(5000) });
+            if (resp.ok) {
+                json = await resp.json();
+                break;
             }
+        } catch (err) {
+            // Connection refused, timeout, or other network error — try next endpoint
+            continue;
         }
+    }
 
-        // Try Native v1 API first (per docs recommendation for models)
-        // http://host:port/api/v1/models
-        let resp = await fetch(`${baseUrl}/api/v1/models`, { headers });
-        
-        // Fallback to OpenAI compatible if native fails (404)
-        if (!resp.ok && resp.status === 404) {
-             resp = await fetch(`${baseUrl}/v1/models`, { headers });
-        }
-
-        if (!resp.ok) {
-            return {};
-        }
-
-        const json = await resp.json();
-        const models = {};
-
-        // LM Studio /api/v1/models returns { data: [...] }
-        for (const m of json.data || []) {
-            const id = m.id;
-            models[id] = {
-                provider: 'lmstudio',
-                // LM Studio models are local, context varies by loaded model
-                // The API might return context info, otherwise default high
-                contextWindow: m.context_window || m.max_context_length || 128000,
-                maxOutputTokens: -1, // Usually limited by context
-                supportsToolCalling: true, // v1 API supports tools
-                supportsStreaming: true,
-                supportsReasoningEffort: false,
-                costTier: 'free',
-                reasoningCapability: 'medium', // Unknown
-                _fromAPI: true,
-            };
-        }
-        
-        const count = Object.keys(models).length;
-        if (count > 0) {
-            console.log(`[model-registry] Fetched ${count} models from LMStudio API`);
-        }
-        return models;
-
-    } catch (err) {
-        // Expected if LM Studio isn't running
+    if (!json) {
+        // LM Studio not running or unreachable — expected, fail silently
         return {};
     }
+
+    const models = {};
+
+    // LM Studio /v1/models returns { data: [{ id, object, owned_by }, ...] }
+    for (const m of json.data || []) {
+        const id = m.id;
+        if (!id) continue;
+        models[id] = {
+            provider: 'lmstudio',
+            // LM Studio models are local; context varies by loaded model
+            contextWindow: m.context_window || m.max_context_length || 128000,
+            maxOutputTokens: -1, // Usually limited by context window
+            supportsToolCalling: true, // v1 API supports tools
+            supportsStreaming: true,
+            supportsReasoningEffort: false,
+            costTier: 'free',
+            reasoningCapability: 'medium',
+            displayName: m.id, // Use the model ID as display name
+            _fromAPI: true,
+        };
+    }
+
+    const count = Object.keys(models).length;
+    if (count > 0) {
+        console.log(`[model-registry] Fetched ${count} models from LMStudio (${baseUrl})`);
+    }
+    return models;
 }
 
 /**

@@ -132,24 +132,30 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <header
       className={`
-        h-11 border-b flex items-center justify-between px-4 select-none shrink-0
+        h-12 border-b flex items-center justify-between px-4 select-none shrink-0
         transition-all duration-500 relative
         ${isAgentWorking
-          ? 'bg-[#0c0c0c]/95 border-indigo-500/20'
-          : 'bg-[#0c0c0c]/95 border-zinc-800/60'}
+          ? 'bg-gradient-to-r from-[#0e0e14] via-[#0c0c10] to-[#0e0e14] border-indigo-500/30'
+          : 'bg-gradient-to-r from-[#0e0e12] via-[#0d0d10] to-[#0e0e12] border-zinc-700/40'}
       `}
       style={{ 
         WebkitAppRegion: 'drag',
-        backdropFilter: 'blur(12px) saturate(180%)',
+        backdropFilter: 'blur(16px) saturate(200%)',
       } as React.CSSProperties}
     >
+      {/* Subtle top highlight line */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-700/30 to-transparent pointer-events-none" />
+
       {/* Ambient working glow */}
       {isAgentWorking && (
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent animate-shimmer" />
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.03] via-transparent to-purple-500/[0.03]" />
+          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/70 to-transparent animate-shimmer" />
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.05] via-transparent to-purple-500/[0.05]" />
         </div>
       )}
+
+      {/* Bottom shadow for depth separation */}
+      <div className="absolute inset-x-0 bottom-0 h-3 bg-gradient-to-b from-transparent to-black/20 pointer-events-none translate-y-full z-10" />
 
       {/* Left: App identity + workspace + conversation */}
       <div className="flex items-center gap-2.5 min-w-0 relative z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>

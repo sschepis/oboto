@@ -1,5 +1,4 @@
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { convertHistoryToUIMessages } from '../ws-helpers.mjs';
 
 /**
  * Handles: list-conversations, create-conversation, switch-conversation, delete-conversation
@@ -25,12 +24,13 @@ async function handleCreateConversation(data, ctx) {
         if (result.created) {
             // Auto-switch to new conversation (default behavior)
             if (autoSwitch !== false) {
-                const switchResult = await assistant.switchConversation(result.name);
-                if (switchResult.switched) {
-                    const history = assistant.historyManager.getHistory();
-                    const uiMessages = convertHistoryToUIMessages(history);
-                    broadcast('history-loaded', uiMessages);
+                try {
+                    await assistant.switchConversation(result.name);
+                } catch (switchErr) {
+                    consoleStyler.log('warning', `Auto-switch after create failed: ${switchErr.message}`);
+                    // Fallback: manually broadcast the switch events
                     broadcast('conversation-switched', { name: result.name, switched: true });
+                    broadcast('history-loaded', []);
                 }
             }
             const conversations = await assistant.listConversations();
@@ -47,15 +47,16 @@ async function handleSwitchConversation(data, ctx) {
     try {
         const { name } = data.payload;
         const result = await assistant.switchConversation(name);
-        ws.send(JSON.stringify({ type: 'conversation-switched', payload: result }));
+        // Note: assistant.switchConversation() (via ConversationController) already
+        // emits server:history-loaded and server:conversation-switched via eventBus,
+        // which the web-server forwards as broadcasts. We only need to send the
+        // conversation list here (not emitted by the controller for switches).
         if (result.switched) {
-            // Send updated history for the new conversation to all clients
-            const history = assistant.historyManager.getHistory();
-            const uiMessages = convertHistoryToUIMessages(history);
-            broadcast('history-loaded', uiMessages);
-            // Broadcast updated conversation list
             const conversations = await assistant.listConversations();
             broadcast('conversation-list', conversations);
+        } else {
+            // If switch failed, notify the requesting client
+            ws.send(JSON.stringify({ type: 'error', payload: result.error || `Failed to switch to conversation "${name}"` }));
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to switch conversation: ${err.message}`);

@@ -22,6 +22,21 @@ export async function agentLoop(ctx, services, next) {
         ctx.throwIfAborted();
         ctx.turnNumber = i + 1;
 
+        // ── Chime-in: Drain queued user messages ──
+        // If the user sent messages while the agent was working (between turns),
+        // inject them into the conversation history so the agent sees them as
+        // updates to the current task — NOT as separate requests.
+        if (ctx.chimeInQueue && ctx.chimeInQueue.length > 0) {
+            const historyManager = services.get('historyManager');
+            const queued = ctx.chimeInQueue.splice(0); // drain all
+            for (const msg of queued) {
+                const chimeMsg = `[UPDATE FROM USER (while you were working)]: ${msg}`;
+                historyManager.addMessage('user', chimeMsg);
+                consoleStyler.log('system', `💬 Chime-in injected: "${msg.substring(0, 80)}${msg.length > 80 ? '...' : ''}"`);
+            }
+            if (eventBus) eventBus.emitTyped('chime-in:injected', { count: queued.length });
+        }
+
         // Show conversation turn progress
         consoleStyler.log('progress', `Processing turn ${ctx.turnNumber}/${ctx.maxTurns}`, { timestamp: true });
         emitStatus(i === 0 ? 'Thinking…' : `Continuing work (turn ${ctx.turnNumber}/${ctx.maxTurns})…`);

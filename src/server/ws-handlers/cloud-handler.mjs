@@ -63,8 +63,13 @@ export const handlers = {
     },
 
     'cloud:status': async (data, ctx) => {
-        const status = ctx.cloudSync
-            ? ctx.cloudSync.getStatus()
+        // Try lazy initialization if cloud secrets were set after startup
+        let cloudSync = ctx.cloudSync;
+        if (!cloudSync && ctx.initCloudSync) {
+            cloudSync = await ctx.initCloudSync();
+        }
+        const status = cloudSync
+            ? cloudSync.getStatus()
             : { configured: false, loggedIn: false, user: null, profile: null, org: null, role: null, linkedWorkspace: null, syncState: 'idle' };
         ctx.ws.send(JSON.stringify({
             type: 'cloud:status',

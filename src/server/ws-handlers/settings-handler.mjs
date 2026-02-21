@@ -1,12 +1,93 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider } from '../../core/model-registry.mjs';
+import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider, listModels } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
 import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
 
 /**
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
  */
+
+// ── AI Settings Persistence ─────────────────────────────────────────────
+
+/**
+ * Save current AI/routing settings to .ai-man/ai-settings.json in the workspace.
+ * @param {string} workingDir
+ */
+async function persistAISettings(workingDir) {
+    if (!workingDir) return;
+    try {
+        const dir = path.join(workingDir, '.ai-man');
+        if (!fs.existsSync(dir)) {
+            await fs.promises.mkdir(dir, { recursive: true });
+        }
+        const settings = {
+            model: config.ai.model,
+            provider: config.ai.provider,
+            endpoint: config.ai.endpoint,
+            temperature: config.ai.temperature,
+            routing: { ...config.routing },
+            updatedAt: new Date().toISOString()
+        };
+        await fs.promises.writeFile(
+            path.join(dir, 'ai-settings.json'),
+            JSON.stringify(settings, null, 2)
+        );
+    } catch (err) {
+        consoleStyler.log('warning', `Failed to persist AI settings: ${err.message}`);
+    }
+}
+
+/**
+ * Restore AI/routing settings from .ai-man/ai-settings.json in a workspace.
+ * @param {string} workingDir
+ * @param {Object} assistant - The assistant facade
+ * @returns {boolean} True if settings were restored
+ */
+function restoreAISettings(workingDir, assistant) {
+    if (!workingDir) return false;
+    const settingsPath = path.join(workingDir, '.ai-man', 'ai-settings.json');
+    try {
+        if (!fs.existsSync(settingsPath)) return false;
+        const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+
+        if (data.model) {
+            config.ai.model = data.model;
+            process.env.AI_MODEL = data.model;
+            assistant.model = data.model;
+        }
+        if (data.provider) {
+            config.ai.provider = data.provider;
+            process.env.AI_PROVIDER = data.provider;
+        }
+        if (data.endpoint) {
+            config.ai.endpoint = data.endpoint;
+            process.env.AI_ENDPOINT = data.endpoint;
+        }
+        if (data.temperature !== undefined) {
+            config.ai.temperature = data.temperature;
+        }
+        if (data.routing && assistant.promptRouter) {
+            // Apply explicit routing overrides (empty = follow primary)
+            const primaryModel = config.ai.model;
+            for (const [role, modelId] of Object.entries(data.routing)) {
+                if (modelId && modelId !== primaryModel) {
+                    assistant.promptRouter.setRoute(role, modelId);
+                } else {
+                    assistant.promptRouter.setRoute(role, '');
+                }
+            }
+            Object.assign(config.routing, data.routing);
+        }
+
+        consoleStyler.log('system', `⚙️  Restored AI settings from ${settingsPath} (model: ${data.model})`);
+        return true;
+    } catch (err) {
+        consoleStyler.log('warning', `Failed to restore AI settings: ${err.message}`);
+        return false;
+    }
+}
 
 /**
  * Build the canonical settings payload for sending to the UI.
@@ -45,6 +126,13 @@ function buildSettingsPayload(assistant, ctx) {
         }
         if (secretsStatus.ANTHROPIC_API_KEY?.isConfigured && providers.anthropic && !providers.anthropic.enabled) {
             providers.anthropic = { ...providers.anthropic, enabled: true };
+        }
+        // Auto-enable LMStudio if models were discovered (LMStudio has no API key)
+        if (providers.lmstudio && !providers.lmstudio.enabled) {
+            const lmstudioModels = listModels({ provider: 'lmstudio' });
+            if (lmstudioModels.length > 0) {
+                providers.lmstudio = { ...providers.lmstudio, enabled: true };
+            }
         }
 
         // Build routing with defaults
@@ -115,6 +203,8 @@ async function handleUpdateSettings(data, ctx) {
     // Persist AI provider config to process.env + live config
     if (settings.ai) {
         const { provider, model, endpoint, providers } = settings.ai;
+        const oldModel = config.ai.model;
+
         if (provider) {
             process.env.AI_PROVIDER = provider;
             config.ai.provider = provider;
@@ -122,6 +212,21 @@ async function handleUpdateSettings(data, ctx) {
         if (model) {
             process.env.AI_MODEL = model;
             config.ai.model = model;
+            // Also update the facade's model property (used for code completion)
+            assistant.model = model;
+
+            // When the primary model changes, clear any PromptRouter routes that
+            // were set to the OLD primary model so they fall through to the new one.
+            // This prevents stale route references from overriding the user's choice.
+            if (assistant.promptRouter && oldModel && model !== oldModel) {
+                const currentRoutes = assistant.promptRouter.getRoutes();
+                for (const [role, routeModel] of Object.entries(currentRoutes)) {
+                    if (routeModel === oldModel) {
+                        assistant.promptRouter.setRoute(role, '');
+                    }
+                }
+                consoleStyler.log('routing', `Primary model changed: ${oldModel} → ${model}. Cleared default routes.`);
+            }
         }
         if (endpoint) {
             process.env.AI_ENDPOINT = endpoint;
@@ -152,7 +257,19 @@ async function handleUpdateSettings(data, ctx) {
     // Update routing configuration
     if (settings.routing) {
         if (assistant.promptRouter) {
-            assistant.promptRouter.setRoutes(settings.routing);
+            // Distinguish between "use primary model" (empty/same as primary) and explicit overrides.
+            // If a route value matches the current primary model, treat it as "default" (clear it)
+            // so it dynamically follows future primary model changes.
+            const primaryModel = config.ai.model;
+            const cleanedRoutes = {};
+            for (const [role, modelId] of Object.entries(settings.routing)) {
+                if (modelId && modelId !== primaryModel) {
+                    cleanedRoutes[role] = modelId; // Explicit override
+                } else {
+                    cleanedRoutes[role] = ''; // Default — follow primary model
+                }
+            }
+            assistant.promptRouter.setRoutes(cleanedRoutes);
         }
         // Update config and env vars for persistence
         Object.assign(config.routing, settings.routing);
@@ -175,6 +292,9 @@ async function handleUpdateSettings(data, ctx) {
         type: 'settings',
         payload: buildSettingsPayload(assistant, ctx)
     }));
+
+    // Persist to workspace so settings survive restarts
+    persistAISettings(assistant.workingDir);
 }
 
 async function handleGetStatus(data, ctx) {
@@ -216,6 +336,10 @@ async function handleSetCwd(data, ctx) {
         }
 
         const actualPath = await assistant.changeWorkingDirectory(newPath);
+
+        // Restore AI settings saved for this workspace
+        restoreAISettings(actualPath, assistant);
+
         ws.send(JSON.stringify({ type: 'status', payload: `Changed working directory to ${actualPath}` }));
         
         const info = await getProjectInfo(actualPath);

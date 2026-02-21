@@ -25,7 +25,7 @@ The `AiMan` class is the main entry point for the library. It orchestrates the A
 ### Constructor
 
 ```javascript
-import { AiMan } from 'ai-man/lib';
+import { AiMan } from '@sschepis/oboto';
 
 const ai = new AiMan({
     workingDir: process.cwd(),      // Root directory for file operations
@@ -78,7 +78,7 @@ The library can be used as a general-purpose assistant via the `chat()` method a
 Send a conversational message to the assistant. Unlike `execute()`, which is task-oriented, `chat()` allows for interactive sessions where the assistant maintains context across multiple turns.
 
 ```javascript
-import { Oboto } from 'ai-man/lib'; // Oboto is an alias for AiMan
+import { Oboto } from '@sschepis/oboto'; // Oboto is an alias for AiMan
 
 const assistant = new Oboto();
 
@@ -141,7 +141,7 @@ Subscribe to lifecycle events:
 These modules power the structured development workflow and can be imported directly for specialized use cases.
 
 ```javascript
-import { FlowManager, ManifestManager, C4Visualizer } from 'ai-man/lib';
+import { FlowManager, ManifestManager, C4Visualizer } from '@sschepis/oboto';
 ```
 
 ### FlowManager

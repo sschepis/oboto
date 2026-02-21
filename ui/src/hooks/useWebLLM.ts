@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { MLCEngine, InitProgressReport, ChatCompletionMessageParam } from '@mlc-ai/web-llm';
 import { wsService } from '../services/wsService';
 
 /**
@@ -46,6 +47,12 @@ interface WebLLMState {
   webgpuAvailable: boolean;
 }
 
+/** Helper to extract an error message from an unknown catch value. */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 /**
  * React hook for the WebLLM in-browser AI engine.
  * 
@@ -66,7 +73,7 @@ export function useWebLLM() {
   });
 
   // Use ref for the engine to avoid re-renders
-  const engineRef = useRef<any>(null);
+  const engineRef = useRef<MLCEngine | null>(null);
   const loadingRef = useRef(false);
 
   // Check WebGPU availability on mount
@@ -74,7 +81,8 @@ export function useWebLLM() {
     const checkWebGPU = async () => {
       try {
         if ('gpu' in navigator) {
-          const adapter = await (navigator as any).gpu?.requestAdapter();
+          const nav = navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } };
+          const adapter = await nav.gpu?.requestAdapter();
           setState(prev => ({ ...prev, webgpuAvailable: !!adapter }));
         }
       } catch {
@@ -90,7 +98,7 @@ export function useWebLLM() {
       const req = payload as {
         requestId: string;
         model: string;
-        messages: Array<{ role: string; content: string }>;
+        messages: ChatCompletionMessageParam[];
         temperature?: number;
         max_tokens?: number;
       };
@@ -128,10 +136,10 @@ export function useWebLLM() {
             usage: result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         wsService.sendMessage('webllm:response', {
           requestId: req.requestId,
-          error: `WebLLM generation failed: ${err.message}`,
+          error: `WebLLM generation failed: ${getErrorMessage(err)}`,
         });
       } finally {
         setState(prev => ({ ...prev, status: 'ready' }));
@@ -158,8 +166,8 @@ export function useWebLLM() {
       const webllm = await import('@mlc-ai/web-llm');
 
       const engine = await webllm.CreateMLCEngine(modelId, {
-        initProgressCallback: (progress: any) => {
-          const pct = typeof progress === 'object' ? Math.round((progress.progress || 0) * 100) : 0;
+        initProgressCallback: (progress: InitProgressReport) => {
+          const pct = Math.round((progress.progress || 0) * 100);
           setState(prev => ({ ...prev, loadProgress: pct }));
           // Broadcast loading progress to server for status display
           wsService.sendMessage('webllm:status', {
@@ -183,17 +191,18 @@ export function useWebLLM() {
         status: 'ready',
         model: modelId,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
       setState(prev => ({
         ...prev,
         status: 'error',
-        error: err.message,
+        error: message,
         loadProgress: 0,
       }));
 
       wsService.sendMessage('webllm:status', {
         status: 'error',
-        error: err.message,
+        error: message,
       });
     } finally {
       loadingRef.current = false;

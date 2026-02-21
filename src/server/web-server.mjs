@@ -71,6 +71,61 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     const app = express();
     // Mutable reference holder so handlers can read/write the active AbortController
     const activeController = { controller: null };
+
+    // Mutable cloudSync reference — allows lazy initialization when secrets are set after startup
+    const cloudSyncHolder = { instance: cloudSync };
+
+    /**
+     * Lazy-initialize CloudSync when cloud secrets become available after startup.
+     * Called by the secrets handler when OBOTO_CLOUD_URL or OBOTO_CLOUD_KEY are set.
+     * @returns {Promise<object|null>} The CloudSync instance, or null if secrets aren't complete
+     */
+    const initCloudSync = async () => {
+        // Already initialized
+        if (cloudSyncHolder.instance) return cloudSyncHolder.instance;
+
+        const url = process.env.OBOTO_CLOUD_URL;
+        const key = process.env.OBOTO_CLOUD_KEY;
+        if (!url || !key) return null;
+
+        try {
+            const { CloudSync } = await import('../cloud/cloud-sync.mjs');
+            const { loadCloudConfig } = await import('../cloud/cloud-config.mjs');
+            const cloudConfig = loadCloudConfig();
+            if (!cloudConfig) return null;
+
+            const newCloudSync = new CloudSync(eventBus, secretsManager);
+            await newCloudSync.initialize(cloudConfig);
+            newCloudSync.setWorkingDir(workingDir);
+
+            // Register in assistant's service registry
+            if (assistant._services) {
+                assistant._services.register('cloudSync', newCloudSync);
+            }
+
+            // Set up AI provider cloud reference
+            try {
+                const { setCloudSyncRef, setEventBusRef } = await import('../core/ai-provider.mjs');
+                setCloudSyncRef(newCloudSync);
+                setEventBusRef(eventBus);
+            } catch (e) {
+                // ai-provider refs are optional
+            }
+
+            // Auto-login from cached refresh token (silent, non-blocking)
+            newCloudSync.tryAutoLogin().catch(err => {
+                consoleStyler.log('warning', `Cloud auto-login failed: ${err.message}`);
+            });
+
+            cloudSyncHolder.instance = newCloudSync;
+            consoleStyler.log('system', '☁️  Cloud initialized from secrets vault');
+
+            return newCloudSync;
+        } catch (err) {
+            consoleStyler.log('warning', `Failed to initialize cloud from secrets: ${err.message}`);
+            return null;
+        }
+    };
     
     // Serve static files from ui/dist
     // The UI build lives in the project root, NOT the user's workspace directory.
@@ -435,11 +490,11 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
         }
 
         // Send cloud status to newly connected client
-        if (cloudSync) {
+        if (cloudSyncHolder.instance) {
             try {
                 ws.send(JSON.stringify({
                     type: 'cloud:status',
-                    payload: cloudSync.getStatus()
+                    payload: cloudSyncHolder.instance.getStatus()
                 }));
             } catch (e) {
                 // Ignore
@@ -460,7 +515,8 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                     activeController,
                     broadcastFileTree,
                     workspaceContentServer,
-                    cloudSync,
+                    cloudSync: cloudSyncHolder.instance,
+                    initCloudSync,
                 };
                 const handled = await dispatcher.dispatch(data, ctx);
                 if (!handled) {

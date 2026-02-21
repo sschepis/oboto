@@ -73,15 +73,18 @@ export class PromptRouter {
      * @param {Object} [routingOverrides] - Optional route overrides { [role]: modelId }
      */
     constructor(routingOverrides = {}) {
-        // Build routes from config + overrides
+        // Build routes from EXPLICIT config overrides only.
+        // Routes left empty ('') will dynamically fall through to config.ai.model
+        // at resolve time, so changing the primary model in settings automatically
+        // updates all non-overridden routes.
         this._routes = {
-            [TASK_ROLES.AGENTIC]: config.routing?.agentic || config.ai.model,
-            [TASK_ROLES.REASONING_HIGH]: config.routing?.reasoning_high || config.ai.model,
-            [TASK_ROLES.REASONING_MEDIUM]: config.routing?.reasoning_medium || config.ai.model,
-            [TASK_ROLES.REASONING_LOW]: config.routing?.reasoning_low || config.ai.model,
-            [TASK_ROLES.SUMMARIZER]: config.routing?.summarizer || config.ai.model,
-            [TASK_ROLES.CODE_COMPLETION]: config.routing?.code_completion || config.ai.model,
-            [TASK_ROLES.TRIAGE]: config.routing?.triage || config.ai.model,
+            [TASK_ROLES.AGENTIC]: config.routing?.agentic || '',
+            [TASK_ROLES.REASONING_HIGH]: config.routing?.reasoning_high || '',
+            [TASK_ROLES.REASONING_MEDIUM]: config.routing?.reasoning_medium || '',
+            [TASK_ROLES.REASONING_LOW]: config.routing?.reasoning_low || '',
+            [TASK_ROLES.SUMMARIZER]: config.routing?.summarizer || '',
+            [TASK_ROLES.CODE_COMPLETION]: config.routing?.code_completion || '',
+            [TASK_ROLES.TRIAGE]: config.routing?.triage || '',
             ...routingOverrides,
         };
     }
@@ -121,11 +124,12 @@ export class PromptRouter {
 
     /**
      * Set multiple routes at once.
+     * Empty string values clear the route (falls through to primary model).
      * @param {Object} routes - { [role]: modelId }
      */
     setRoutes(routes) {
         for (const [role, modelId] of Object.entries(routes)) {
-            if (ROLE_METADATA[role] && modelId) {
+            if (ROLE_METADATA[role] && modelId !== undefined && modelId !== null) {
                 this._routes[role] = modelId;
             }
         }

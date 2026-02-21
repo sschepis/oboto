@@ -17,11 +17,21 @@ export class ConversationController {
         const personaContent = this.assistant.personaManager ? this.assistant.personaManager.renderPersonaPrompt() : '';
         const openclawAvailable = !!(this.assistant.openClawManager && this.assistant.openClawManager.client && this.assistant.openClawManager.client.isConnected);
         
+        let skillsSummary = "";
+        if (this.assistant.toolExecutor && this.assistant.toolExecutor.skillsManager) {
+            try {
+                await this.assistant.toolExecutor.skillsManager.ensureInitialized();
+                skillsSummary = this.assistant.toolExecutor.skillsManager.getSkillsSummary();
+            } catch (e) {
+                // Skills loading failed, continue without them
+            }
+        }
+
         const systemPrompt = createSystemPrompt(
             this.assistant.workingDir,
             this.assistant.workspaceManager.getCurrentWorkspace(),
             null,
-            { openclawAvailable, personaContent }
+            { openclawAvailable, personaContent, skillsSummary }
         );
 
         const result = await this.manager.createConversation(name, systemPrompt);
@@ -39,7 +49,7 @@ export class ConversationController {
 
         if (result.switched) {
             this.assistant.historyManager = this.manager.getActiveHistoryManager();
-            this.assistant._refreshServices(); // Sync services with new history manager
+            this.assistant.refreshServices(); // Sync services with new history manager
             await this.assistant.updateSystemPrompt();
 
             await this.assistant.symbolicContinuity.initialize(
@@ -63,7 +73,7 @@ export class ConversationController {
 
         if (result.deleted) {
             this.assistant.historyManager = this.manager.getActiveHistoryManager();
-            this.assistant._refreshServices();
+            this.assistant.refreshServices();
 
             if (this.eventBus) {
                 const conversations = await this.manager.listConversations();
@@ -86,7 +96,7 @@ export class ConversationController {
             // If active conversation was renamed, update references
             if (this.manager.getActiveConversationName() === result.newName) {
                  this.assistant.historyManager = this.manager.getActiveHistoryManager();
-                 this.assistant._refreshServices();
+                 this.assistant.refreshServices();
             }
 
             if (this.eventBus) {

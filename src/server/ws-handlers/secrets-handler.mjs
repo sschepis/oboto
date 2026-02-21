@@ -25,7 +25,7 @@ async function handleGetSecrets(data, ctx) {
 }
 
 async function handleSetSecret(data, ctx) {
-    const { ws, secretsManager } = ctx;
+    const { ws, secretsManager, broadcast } = ctx;
     if (secretsManager) {
         try {
             const { name, value, category, description } = data.payload;
@@ -34,6 +34,15 @@ async function handleSetSecret(data, ctx) {
                 type: 'secret-set',
                 payload: { name, success: true }
             }));
+
+            // When cloud-related secrets are set, try to initialize cloud module
+            // and broadcast updated cloud status to all clients
+            if ((name === 'OBOTO_CLOUD_URL' || name === 'OBOTO_CLOUD_KEY') && ctx.initCloudSync) {
+                const cloudSync = await ctx.initCloudSync();
+                if (cloudSync) {
+                    broadcast('cloud:status', cloudSync.getStatus());
+                }
+            }
         } catch (err) {
             consoleStyler.log('error', `Failed to set secret: ${err.message}`);
             ws.send(JSON.stringify({

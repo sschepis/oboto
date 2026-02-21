@@ -1,6 +1,6 @@
 {
   "name": "@sschepis/oboto",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "type": "module",
   "description": "Oboto: AI-powered everything assistant",
   "author": "sschepis",
@@ -21,22 +21,45 @@
     "oboto": "./ai.mjs"
   },
   "main": "src/lib/index.mjs",
+  "module": "src/lib/index.mjs",
   "types": "src/lib/interfaces.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
+      "types": "./src/lib/interfaces.d.ts",
       "import": "./src/lib/index.mjs",
-      "types": "./src/lib/interfaces.d.ts"
+      "default": "./src/lib/index.mjs"
     },
     "./cli": "./ai.mjs",
     "./lib": {
+      "types": "./src/lib/interfaces.d.ts",
       "import": "./src/lib/index.mjs",
-      "types": "./src/lib/interfaces.d.ts"
+      "default": "./src/lib/index.mjs"
+    },
+    "./adapters": {
+      "types": "./src/lib/interfaces.d.ts",
+      "import": "./src/lib/adapters/index.mjs",
+      "default": "./src/lib/adapters/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      ".": ["src/lib/interfaces.d.ts"],
+      "lib": ["src/lib/interfaces.d.ts"],
+      "adapters": ["src/lib/interfaces.d.ts"]
     }
   },
   "files": [
     "ai.mjs",
     "src/**/*.mjs",
     "src/**/*.d.ts",
+    "!src/**/__tests__/**",
+    "!src/**/*.test.*",
+    "!src/**/*.spec.*",
+    "!src/client/**",
+    "!src/gateway/**",
+    "!src/service/**",
     "src/lib/README.md",
     "themes.json",
     "README.md",
@@ -55,12 +78,15 @@
     "tray:build:mac": "cd tray-app && npx electron-builder --mac",
     "tray:build:win": "cd tray-app && npx electron-builder --win",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
-    "prepublishOnly": "node -e \"const p=require('./package.json'); if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}\" && node -e \"import('./src/lib/index.mjs').then(()=>console.log('Library entry OK')).catch(e=>{console.error('Library entry FAILED:',e.message);process.exit(1)})\""
+    "check:deps": "node --input-type=module -e \"import{readFileSync}from'node:fs';const p=JSON.parse(readFileSync('./package.json','utf8'));if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}else{console.log('Dependencies OK')}\"",
+    "check:exports": "node --input-type=module -e \"import('./src/lib/index.mjs').then(m=>{const exports=['AiMan','Oboto','ConsoleStatusAdapter','NetworkLLMAdapter','MemoryAdapter','AiManEventBus','MiddlewareChain','CancellationError','DesignResult'];const missing=exports.filter(e=>!m[e]);if(missing.length){console.error('Missing exports:',missing);process.exit(1)}console.log('All',exports.length,'exports OK')}).catch(e=>{console.error('Library entry FAILED:',e.message);process.exit(1)})\"",
+    "prepublishOnly": "npm run check:deps && npm run check:exports"
   },
   "dependencies": {
     "@aleph-ai/tinyaleph": "^1.7.2",
     "@anthropic-ai/vertex-sdk": "^0.14.3",
     "@google/genai": "^1.41.0",
+    "@mlc-ai/web-llm": "^0.2.81",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@sschepis/resolang": "^0.5.0",

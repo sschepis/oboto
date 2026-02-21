@@ -197,8 +197,9 @@ export function useTabManager(
   }, []);
 
   const handleNewChat = useCallback(() => {
-    // Generate name: "New Conversation X"
-    const prefix = 'New Conversation ';
+    // Generate name: "new-conversation-X"
+    // Server sanitizes names to lowercase kebab-case, so match that pattern
+    const prefix = 'new-conversation-';
     let max = 0;
     for (const c of conversations) {
       if (c.name.startsWith(prefix)) {

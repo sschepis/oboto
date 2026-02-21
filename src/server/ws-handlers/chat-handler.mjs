@@ -70,13 +70,50 @@ async function handleChat(data, ctx) {
         return;
     }
     
+    // ── Chime-in: If the agent is already working, queue the message ──
+    // Instead of cancelling the current task, inject the user's message
+    // as an update that the agent will see at its next turn boundary.
+    if (activeRef.controller && assistant.isBusy()) {
+        const queued = assistant.queueChimeIn(userInput);
+        if (queued) {
+            consoleStyler.log('system', `💬 User chimed in while agent is working: "${userInput.substring(0, 80)}..."`);
+            
+            // Show the user's message in chat
+            ws.send(JSON.stringify({
+                type: 'message',
+                payload: {
+                    id: Date.now().toString(),
+                    role: 'user',
+                    type: 'text',
+                    content: userInput,
+                    timestamp: new Date().toLocaleTimeString(),
+                    isChimeIn: true
+                }
+            }));
+
+            // Acknowledge the chime-in
+            ws.send(JSON.stringify({
+                type: 'message',
+                payload: {
+                    id: (Date.now() + 1).toString(),
+                    role: 'ai',
+                    type: 'text',
+                    content: '💬 *Message queued — the agent will incorporate this update during its current task.*',
+                    timestamp: new Date().toLocaleTimeString(),
+                    isChimeInAck: true
+                }
+            }));
+            return;
+        }
+    }
+
     // Simulate thinking
     ws.send(JSON.stringify({ type: 'status', payload: 'working' }));
 
     // Signal foreground activity to agent loop
     if (agentLoopController) agentLoopController.setForegroundBusy(true);
 
-    // Cancel any previous active task
+    // Cancel any previous active task (only reached if NOT chime-in)
     if (activeRef.controller) {
         activeRef.controller.abort();
     }

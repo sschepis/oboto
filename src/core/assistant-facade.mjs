@@ -125,6 +125,9 @@ export class AssistantFacade {
         this.temperature = config.ai.temperature;
         this.customToolsLoaded = false;
 
+        // Active request context (for chime-in support)
+        this._activeRequestContext = null;
+
         // ── Pipeline Infrastructure ──
         this._services = new ServiceRegistry();
         this._conversationLock = new ConversationLock();
@@ -235,8 +238,13 @@ export class AssistantFacade {
         // Execute through per-conversation lock to serialize same-conversation requests
         const convName = this.conversationManager.getActiveConversationName() || 'default';
         return this._conversationLock.acquire(convName, async () => {
-            const result = await this._pipeline.execute(ctx, this._services);
-            return ctx.finalResponse || "The assistant could not determine a final answer after multiple steps.";
+            this._activeRequestContext = ctx;
+            try {
+                await this._pipeline.execute(ctx, this._services);
+                return ctx.finalResponse || "The assistant could not determine a final answer after multiple steps.";
+            } finally {
+                this._activeRequestContext = null;
+            }
         });
     }
 
@@ -267,9 +275,37 @@ export class AssistantFacade {
 
         const convName = this.conversationManager.getActiveConversationName() || 'default';
         return this._conversationLock.acquire(convName, async () => {
-            await this._pipeline.execute(ctx, this._services);
-            return ctx.finalResponse || "The assistant could not determine a final answer after multiple steps.";
+            this._activeRequestContext = ctx;
+            try {
+                await this._pipeline.execute(ctx, this._services);
+                return ctx.finalResponse || "The assistant could not determine a final answer after multiple steps.";
+            } finally {
+                this._activeRequestContext = null;
+            }
         });
+    }
+
+    /**
+     * Queue a "chime in" message for the currently running agent.
+     * The message will be injected at the next turn boundary instead of
+     * cancelling the current task.
+     * @param {string} message - The user's chime-in message
+     * @returns {boolean} True if queued, false if no active request
+     */
+    queueChimeIn(message) {
+        if (this._activeRequestContext) {
+            this._activeRequestContext.chimeInQueue.push(message);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if the agent is currently processing a request.
+     * @returns {boolean}
+     */
+    isBusy() {
+        return this._activeRequestContext !== null;
     }
 
     /**
@@ -390,12 +426,22 @@ export class AssistantFacade {
             const activeHm = this.conversationManager.getActiveHistoryManager();
             const history = activeHm.getHistory();
 
+            let skillsSummary = "";
+            if (this.toolExecutor && this.toolExecutor.skillsManager) {
+                try {
+                    await this.toolExecutor.skillsManager.ensureInitialized();
+                    skillsSummary = this.toolExecutor.skillsManager.getSkillsSummary();
+                } catch (e) {
+                    // Skills loading failed, continue without them
+                }
+            }
+
             this.openclawAvailable = !!(this.openClawManager && this.openClawManager.client && this.openClawManager.client.isConnected);
             const currentSystemPrompt = createSystemPrompt(
                 this.workingDir,
                 this.workspaceManager.getCurrentWorkspace(),
                 null,
-                { openclawAvailable: this.openclawAvailable, personaContent }
+                { openclawAvailable: this.openclawAvailable, personaContent, skillsSummary }
             );
 
             if (history.length > 0 && history[0].role === 'system') {
@@ -496,8 +542,9 @@ ${suffix}
 COMPLETION:`;
 
         try {
+            const modelConfig = this.promptRouter.resolveModel(TASK_ROLES.CODE_COMPLETION);
             const result = await this.llmAdapter.generateContent({
-                model: this.model,
+                model: modelConfig.modelId,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.1,
                 max_tokens: 64,

@@ -65,7 +65,14 @@ CONTINUING WORK on this task. Use \`manage_workspace\` to track progress.`;
     if (skillsSummary) {
         prompt += `
 
-${skillsSummary}`;
+${skillsSummary}
+
+**Skills (Domain Knowledge):**
+Before attempting complex or specialized tasks, check if a relevant skill exists using \`list_skills\`.
+Use \`read_skill\` to load domain-specific instructions that guide your approach.
+Use \`use_skill\` to execute a task with skill-guided expertise.
+Skills provide expert knowledge for API integrations, data processing, deployment, DevOps, and more.
+Do NOT reinvent solutions from scratch when a skill already covers the domain.`;
     }
 
     prompt += `
@@ -247,6 +254,31 @@ Surfaces can bind to BubbleFlow workflow automations.
 
 **Workflow events:** workflow-step, workflow-interaction-needed, workflow-completed, workflow-error`;
     }
+
+    // Add Scheduling & Recurring Tasks instructions
+    prompt += `
+
+## Scheduling & Recurring Tasks
+You can create tasks that run automatically on a schedule:
+
+- \`create_recurring_task\` — schedule a task to run every N minutes (monitoring, reports, syncs, health checks, data collection)
+- \`list_recurring_tasks\` — view all scheduled tasks and their status
+- \`manage_recurring_task\` — pause, resume, delete, or trigger a schedule immediately
+
+Recurring tasks run independently in the background. Each run spawns a background task that executes your query autonomously.
+Use these for any request involving periodic, repeated, or scheduled work.
+
+## Automation Playbook — Combining Surfaces, Tasks & Skills
+When a user asks you to **automate, monitor, track, dashboard, or manage** something ongoing:
+
+1. **Create a Surface** — This is the user's interactive dashboard and control panel. Use \`create_surface\` + \`update_surface_component\` to build the UI.
+2. **Set up Recurring Tasks** — Use \`create_recurring_task\` for anything that needs to run on a schedule (polling APIs, checking status, collecting data, generating reports).
+3. **Leverage Skills** — Check \`list_skills\` for domain expertise before building from scratch. Skills contain specialized instructions for common integrations and tasks.
+4. **Wire them together** — Surface components can use \`surfaceApi.callAgent()\` to trigger the agent on demand. Recurring tasks can update files or state that surfaces read. Use \`surfaceApi.callTool()\` for direct data access from the UI.
+
+**This pattern applies to:** server monitoring, API uptime checks, deployment pipelines, data dashboards, expense tracking, notification systems, periodic reports, CI/CD status, log watching, social media monitoring, and any general automation the user describes.
+
+**Surfaces are the primary UI.** When the user needs to visualize data, interact with results, or control an automation — build a Surface rather than just returning text. Surfaces persist as tabs the user can revisit anytime.`;
 
     prompt += `
 `;

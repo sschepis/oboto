@@ -77,6 +77,18 @@ export const KNOWN_SECRETS = [
         description: 'Custom AI endpoint URL for local or proxy models',
         required: false,
     },
+    {
+        name: 'OBOTO_CLOUD_URL',
+        category: 'Integrations',
+        description: 'Oboto Cloud base URL for sync, collaboration, and cloud AI agents',
+        required: false,
+    },
+    {
+        name: 'OBOTO_CLOUD_KEY',
+        category: 'Integrations',
+        description: 'Oboto Cloud anonymous/public key for API authentication',
+        required: false,
+    },
 ];
 
 const CATEGORIES = ['AI Providers', 'Integrations', 'Endpoints', 'Custom'];

@@ -89,7 +89,9 @@ export class ConversationManager {
         try {
             const files = await fs.promises.readdir(this._conversationsDir);
             for (const file of files) {
-                if (file.endsWith('.json')) {
+                // Only load plain conversation JSON files; skip auxiliary files
+                // like .continuity.json (symbolic continuity data)
+                if (file.endsWith('.json') && !file.includes('.continuity.')) {
                     const name = file.replace(/\.json$/, '');
                     if (!this._conversations.has(name)) {
                         await this._loadFromDisk(name);
