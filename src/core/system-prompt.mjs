@@ -7,9 +7,9 @@ export function createSystemPrompt(workingDir, workspace = null, manifestContent
     personaContent = "",
     symbolicContinuityEnabled = false,
     chineseRoomMode = false,
-    includeSurfaces = true,
-    includeStyling = true,
-    includeWorkflows = true
+    includeSurfaces = false,
+    includeStyling = false,
+    includeWorkflows = false
 } = {}) {
     let prompt = '';
 
@@ -377,6 +377,8 @@ export function getSystemPrompt(context = {}) {
         workingDir = process.cwd(),
         workspace = null,
         manifestContent = null,
+        // Forward all option flags so callers can opt-in to surfaces/styling/workflows
+        ...options
     } = context;
 
     switch (type) {
@@ -390,6 +392,6 @@ export function getSystemPrompt(context = {}) {
             return createSchemaGenerationPrompt();
         
         default:
-            return createSystemPrompt(workingDir, workspace, manifestContent);
+            return createSystemPrompt(workingDir, workspace, manifestContent, options);
     }
 }

@@ -14,7 +14,7 @@ jest.mock('../../config.mjs', () => ({
 
 import { detectProvider, AI_PROVIDERS, _testExports } from '../ai-provider.mjs';
 
-const { withRetry } = _testExports;
+const { withRetry, isCancellationError } = _testExports;
 
 // ─── detectProvider ──────────────────────────────────────────────────────
 
@@ -212,5 +212,84 @@ describe('withRetry', () => {
         expect(result.ok).toBe(false);
         expect(result.status).toBe(400);
         expect(calls).toBe(1);
+    });
+
+    test('does NOT retry cancellation errors (AbortError)', async () => {
+        let calls = 0;
+        const fn = () => {
+            calls++;
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            return Promise.reject(err);
+        };
+
+        await expect(withRetry(fn, 3, 1)).rejects.toThrow('aborted');
+        expect(calls).toBe(1);
+    });
+
+    test('does NOT retry Gemini 499 cancellation errors', async () => {
+        let calls = 0;
+        const fn = () => {
+            calls++;
+            const err = new Error('{"status":"CANCELLED"}');
+            err.status = 499;
+            return Promise.reject(err);
+        };
+
+        await expect(withRetry(fn, 3, 1)).rejects.toThrow();
+        expect(calls).toBe(1);
+    });
+});
+
+// ─── isCancellationError ─────────────────────────────────────────────────
+
+describe('isCancellationError', () => {
+    test('returns false for null/undefined', () => {
+        expect(isCancellationError(null)).toBe(false);
+        expect(isCancellationError(undefined)).toBe(false);
+    });
+
+    test('returns false for a generic Error', () => {
+        expect(isCancellationError(new Error('something went wrong'))).toBe(false);
+    });
+
+    test('returns true for AbortError', () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        expect(isCancellationError(err)).toBe(true);
+    });
+
+    test('returns true for CancellationError', () => {
+        const err = new Error('cancelled');
+        err.name = 'CancellationError';
+        expect(isCancellationError(err)).toBe(true);
+    });
+
+    test('returns true for status 499 (Gemini cancellation)', () => {
+        const err = new Error('request failed');
+        err.status = 499;
+        expect(isCancellationError(err)).toBe(true);
+    });
+
+    test('returns true when message contains "CANCELLED" status', () => {
+        const err = new Error('{"status":"CANCELLED","message":"The operation was cancelled"}');
+        expect(isCancellationError(err)).toBe(true);
+    });
+
+    test('returns true when message contains "The operation was cancelled"', () => {
+        const err = new Error('The operation was cancelled by the client');
+        expect(isCancellationError(err)).toBe(true);
+    });
+
+    test('returns false for HTTP error codes that are not 499', () => {
+        const err = new Error('server error');
+        err.status = 500;
+        expect(isCancellationError(err)).toBe(false);
+    });
+
+    test('returns false for retryable network errors', () => {
+        const err = new Error('connection reset');
+        err.code = 'ECONNRESET';
+        expect(isCancellationError(err)).toBe(false);
     });
 });

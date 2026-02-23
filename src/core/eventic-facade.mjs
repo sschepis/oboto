@@ -293,7 +293,10 @@ export class EventicFacade {
             this.workingDir,
             this.workspaceManager.getCurrentWorkspace(),
             null,
-            { openclawAvailable: this.openclawAvailable, personaContent, skillsSummary }
+            {
+                openclawAvailable: this.openclawAvailable, personaContent, skillsSummary,
+                includeSurfaces: true, includeStyling: true, includeWorkflows: true
+            }
         );
         this.aiProvider.systemPrompt = currentSystemPrompt;
 
@@ -365,7 +368,10 @@ export class EventicFacade {
                 this.workingDir,
                 this.workspaceManager.getCurrentWorkspace(),
                 null,
-                { openclawAvailable: this.openclawAvailable, personaContent, skillsSummary }
+                {
+                    openclawAvailable: this.openclawAvailable, personaContent, skillsSummary,
+                    includeSurfaces: true, includeStyling: true, includeWorkflows: true
+                }
             );
 
             // Inject or update system prompt in history

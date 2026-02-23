@@ -31,7 +31,10 @@ export class ConversationController {
             this.assistant.workingDir,
             this.assistant.workspaceManager.getCurrentWorkspace(),
             null,
-            { openclawAvailable, personaContent, skillsSummary }
+            {
+                openclawAvailable, personaContent, skillsSummary,
+                includeSurfaces: true, includeStyling: true, includeWorkflows: true
+            }
         );
 
         const result = await this.manager.createConversation(name, systemPrompt);

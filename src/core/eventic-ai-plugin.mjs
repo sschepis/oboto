@@ -1,5 +1,5 @@
 import { config } from '../config.mjs';
-import { callProvider, callProviderStream } from './ai-provider.mjs';
+import { callProvider, callProviderStream, isCancellationError } from './ai-provider.mjs';
 
 /**
  * Eventic AI Plugin wrapping the existing ai-provider.mjs
@@ -218,8 +218,10 @@ export class EventicAIProvider {
             return content;
         } catch (error) {
             cleanup();
-            if (error.name === 'AbortError' || (options.signal && options.signal.aborted)) {
-                console.error('[EventicAIProvider] Request aborted or timed out');
+            // Cancellation errors (AbortError, Gemini 499, CancellationError, user signal)
+            // are rethrown as-is — upstream handlers use isCancellationError() to detect all
+            // variants, so no normalization wrapper is needed here.
+            if (isCancellationError(error) || (options.signal && options.signal.aborted)) {
                 throw error;
             }
             console.error('[EventicAIProvider] Request failed:', error.message);

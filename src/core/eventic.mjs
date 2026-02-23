@@ -77,7 +77,15 @@ export class Eventic {
         try {
             return await handler(this.context, payload, eventLog, this.dispatch.bind(this), this);
         } catch (error) {
-            this.log(`[${name}] Error: ${error.message}`);
+            // Parse structured JSON error messages for readable logging
+            let displayMessage = error.message;
+            if (displayMessage && displayMessage.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(displayMessage);
+                    displayMessage = parsed?.error?.message || parsed?.message || displayMessage;
+                } catch { /* use raw message */ }
+            }
+            this.log(`[${name}] Error: ${displayMessage}`);
             this.context.status = "error";
             throw error;
         }

@@ -881,6 +881,25 @@ async function _callWithFallbackContext(fallback, requestBody, options = {}) {
 // ─── Utility Functions ───────────────────────────────────────────────────
 
 /**
+ * Detect whether an error represents a cancellation (user abort or provider-side cancel).
+ * Gemini SDK throws ApiError with status 499 and message containing "CANCELLED".
+ * Standard AbortController throws DOMException with name "AbortError".
+ * @param {Error} err
+ * @returns {boolean}
+ */
+export function isCancellationError(err) {
+    if (!err) return false;
+    if (err.name === 'AbortError') return true;
+    if (err.name === 'CancellationError') return true;
+    if (err.status === 499) return true;
+    if (err.message && (
+        err.message.includes('"status":"CANCELLED"') ||
+        err.message.includes('The operation was cancelled')
+    )) return true;
+    return false;
+}
+
+/**
  * Retry helper for network operations
  * @param {Function} fn - Async function to retry
  * @param {number} retries - Max retries
@@ -892,6 +911,9 @@ async function withRetry(fn, retries = 3, delay = 2000) {
         try {
             result = await fn();
         } catch (err) {
+            // Never retry cancellation errors — bail immediately
+            if (isCancellationError(err)) throw err;
+
             // Network-level errors (DNS, connection refused, timeouts)
             const isRetryable = err.code === 'UND_ERR_HEADERS_TIMEOUT' ||
                               err.code === 'ETIMEDOUT' ||
@@ -963,4 +985,4 @@ export function getProviderLabel(model) {
 }
 
 // Test-only exports (stripped in production builds)
-export const _testExports = { withRetry };
+export const _testExports = { withRetry, isCancellationError };
