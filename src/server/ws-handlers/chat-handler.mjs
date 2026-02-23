@@ -1,10 +1,23 @@
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { convertHistoryToUIMessages } from '../ws-helpers.mjs';
+import { convertHistoryToUIMessages, processContentForUI } from '../ws-helpers.mjs';
 import { isLLMAuthError, buildLLMAuthErrorPayload } from '../llm-error-detector.mjs';
+import { wsSend } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: chat, interrupt
  */
+
+/** Helper: send an AI chat message via ws */
+function sendAiMessage(ws, content, extra = {}) {
+    wsSend(ws, 'message', {
+        id: Date.now().toString(),
+        role: 'ai',
+        type: 'text',
+        content,
+        timestamp: new Date().toLocaleString(),
+        ...extra
+    });
+}
 
 async function handleChat(data, ctx) {
     const { ws, assistant, broadcast, agentLoopController, activeController: activeRef } = ctx;
@@ -20,100 +33,49 @@ async function handleChat(data, ctx) {
         try {
             const result = await assistant.createConversation(name);
             if (result.created) {
-                // Auto-switch to the new conversation
                 const switchResult = await assistant.switchConversation(result.name);
                 if (switchResult.switched) {
-                    // Send history (empty for new conversation)
                     const history = assistant.historyManager.getHistory();
                     const uiMessages = convertHistoryToUIMessages(history);
                     broadcast('history-loaded', uiMessages);
                     broadcast('conversation-switched', { name: result.name, switched: true });
                 }
-                // Refresh conversation list
                 const conversations = await assistant.listConversations();
                 broadcast('conversation-list', conversations);
-                // Inform user
-                ws.send(JSON.stringify({
-                    type: 'message',
-                    payload: {
-                        id: Date.now().toString(),
-                        role: 'ai',
-                        type: 'text',
-                        content: `✅ Created and switched to new conversation **"${result.name}"**. You can start chatting here!`,
-                        timestamp: new Date().toLocaleTimeString()
-                    }
-                }));
+                sendAiMessage(ws, `✅ Created and switched to new conversation **"${result.name}"**. You can start chatting here!`);
             } else {
-                ws.send(JSON.stringify({
-                    type: 'message',
-                    payload: {
-                        id: Date.now().toString(),
-                        role: 'ai',
-                        type: 'text',
-                        content: `⚠️ Could not create conversation: ${result.error}`,
-                        timestamp: new Date().toLocaleTimeString()
-                    }
-                }));
+                sendAiMessage(ws, `⚠️ Could not create conversation: ${result.error}`);
             }
         } catch (err) {
-            ws.send(JSON.stringify({
-                type: 'message',
-                payload: {
-                    id: Date.now().toString(),
-                    role: 'ai',
-                    type: 'text',
-                    content: `❌ Failed to create conversation: ${err.message}`,
-                    timestamp: new Date().toLocaleTimeString()
-                }
-            }));
+            sendAiMessage(ws, `❌ Failed to create conversation: ${err.message}`);
         }
         return;
     }
     
     // ── Chime-in: If the agent is already working, queue the message ──
-    // Instead of cancelling the current task, inject the user's message
-    // as an update that the agent will see at its next turn boundary.
     if (activeRef.controller && assistant.isBusy()) {
         const queued = assistant.queueChimeIn(userInput);
         if (queued) {
             consoleStyler.log('system', `💬 User chimed in while agent is working: "${userInput.substring(0, 80)}..."`);
             
-            // Show the user's message in chat
-            ws.send(JSON.stringify({
-                type: 'message',
-                payload: {
-                    id: Date.now().toString(),
-                    role: 'user',
-                    type: 'text',
-                    content: userInput,
-                    timestamp: new Date().toLocaleTimeString(),
-                    isChimeIn: true
-                }
-            }));
+            wsSend(ws, 'message', {
+                id: Date.now().toString(),
+                role: 'user',
+                type: 'text',
+                content: userInput,
+                timestamp: new Date().toLocaleString(),
+                isChimeIn: true
+            });
 
-            // Acknowledge the chime-in
-            ws.send(JSON.stringify({
-                type: 'message',
-                payload: {
-                    id: (Date.now() + 1).toString(),
-                    role: 'ai',
-                    type: 'text',
-                    content: '💬 *Message queued — the agent will incorporate this update during its current task.*',
-                    timestamp: new Date().toLocaleTimeString(),
-                    isChimeInAck: true
-                }
-            }));
+            sendAiMessage(ws, '💬 *Message queued — the agent will incorporate this update during its current task.*', { id: (Date.now() + 1).toString(), isChimeInAck: true });
             return;
         }
     }
 
-    // Simulate thinking
-    ws.send(JSON.stringify({ type: 'status', payload: 'working' }));
+    wsSend(ws, 'status', 'working');
 
-    // Signal foreground activity to agent loop
     if (agentLoopController) agentLoopController.setForegroundBusy(true);
 
-    // Cancel any previous active task (only reached if NOT chime-in)
     if (activeRef.controller) {
         activeRef.controller.abort();
     }
@@ -145,61 +107,28 @@ async function handleChat(data, ctx) {
         }
     }
 
-    // Run assistant
     try {
         const responseText = await assistant.run(surfaceContextInput, { signal: activeRef.controller.signal, model: modelOverride });
         
-        // Send response back
-        ws.send(JSON.stringify({
-            type: 'message',
-            payload: {
-                id: Date.now().toString(),
-                role: 'ai',
-                type: 'text',
-                content: responseText,
-                timestamp: new Date().toLocaleTimeString()
-            }
-        }));
+        sendAiMessage(ws, processContentForUI(responseText));
 
-        // Generate and broadcast next steps AFTER the response
         await assistant.generateNextSteps();
     } catch (err) {
         if (err.name === 'AbortError' || err.message.includes('cancelled')) {
             consoleStyler.log('system', 'Task execution cancelled by user');
-            ws.send(JSON.stringify({
-                type: 'message',
-                payload: {
-                    id: Date.now().toString(),
-                    role: 'ai',
-                    type: 'text',
-                    content: '🛑 Task cancelled.',
-                    timestamp: new Date().toLocaleTimeString()
-                }
-            }));
+            sendAiMessage(ws, '🛑 Task cancelled.');
         } else if (isLLMAuthError(err)) {
-            // LLM authentication / API key error — redirect to secrets config
             consoleStyler.log('error', `LLM auth error detected: ${err.message}`);
             const payload = buildLLMAuthErrorPayload(err, 'chat');
-            // Broadcast to ALL clients so any connected UI shows the secrets view
             broadcast('llm-auth-error', payload);
-            // Also send an error message to the requesting client's chat
-            ws.send(JSON.stringify({
-                type: 'message',
-                payload: {
-                    id: Date.now().toString(),
-                    role: 'ai',
-                    type: 'text',
-                    content: `🔑 **LLM API Key Error**\n\n${payload.suggestion}\n\n_Original error: ${payload.errorMessage}_`,
-                    timestamp: new Date().toLocaleTimeString()
-                }
-            }));
+            sendAiMessage(ws, `🔑 **LLM API Key Error**\n\n${payload.suggestion}\n\n_Original error: ${payload.errorMessage}_`);
         } else {
-            throw err; // Re-throw to be caught by outer catch
+            throw err;
         }
     } finally {
         activeRef.controller = null;
         if (agentLoopController) agentLoopController.setForegroundBusy(false);
-        ws.send(JSON.stringify({ type: 'status', payload: 'idle' }));
+        wsSend(ws, 'status', 'idle');
     }
 }
 
@@ -213,10 +142,8 @@ async function handleInterrupt(data, ctx) {
     } else {
         consoleStyler.log('system', '🛑 No active request to interrupt');
     }
-    // Always transition to idle and notify client
     if (agentLoopController) agentLoopController.setForegroundBusy(false);
-    ws.send(JSON.stringify({ type: 'status', payload: 'idle' }));
-    // Broadcast an explicit "interrupted" log so the UI sees it in the activity feed
+    wsSend(ws, 'status', 'idle');
     broadcast('log', { level: 'status', message: 'Request interrupted by user' });
 }
 

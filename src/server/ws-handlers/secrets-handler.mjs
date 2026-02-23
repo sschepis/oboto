@@ -1,4 +1,5 @@
 import { consoleStyler } from '../../ui/console-styler.mjs';
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: get-secrets, set-secret, delete-secret
@@ -8,19 +9,9 @@ async function handleGetSecrets(data, ctx) {
     const { ws, secretsManager } = ctx;
     if (secretsManager) {
         const secrets = secretsManager.list();
-        ws.send(JSON.stringify({
-            type: 'secrets-list',
-            payload: {
-                secrets,
-                categories: secretsManager.getCategories()
-            }
-        }));
+        wsSend(ws, 'secrets-list', { secrets, categories: secretsManager.getCategories() });
     } else {
-        // Send an empty secrets-list so the UI exits the loading state
-        ws.send(JSON.stringify({
-            type: 'secrets-list',
-            payload: { secrets: [], categories: [] }
-        }));
+        wsSend(ws, 'secrets-list', { secrets: [], categories: [] });
     }
 }
 
@@ -30,13 +21,8 @@ async function handleSetSecret(data, ctx) {
         try {
             const { name, value, category, description } = data.payload;
             await secretsManager.set(name, value, category, description);
-            ws.send(JSON.stringify({
-                type: 'secret-set',
-                payload: { name, success: true }
-            }));
+            wsSend(ws, 'secret-set', { name, success: true });
 
-            // When cloud-related secrets are set, try to initialize cloud module
-            // and broadcast updated cloud status to all clients
             if ((name === 'OBOTO_CLOUD_URL' || name === 'OBOTO_CLOUD_KEY') && ctx.initCloudSync) {
                 const cloudSync = await ctx.initCloudSync();
                 if (cloudSync) {
@@ -45,13 +31,10 @@ async function handleSetSecret(data, ctx) {
             }
         } catch (err) {
             consoleStyler.log('error', `Failed to set secret: ${err.message}`);
-            ws.send(JSON.stringify({
-                type: 'error',
-                payload: `Failed to set secret: ${err.message}`
-            }));
+            wsSendError(ws, `Failed to set secret: ${err.message}`);
         }
     } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Secrets manager not available' }));
+        wsSendError(ws, 'Secrets manager not available');
     }
 }
 
@@ -61,23 +44,17 @@ async function handleDeleteSecret(data, ctx) {
         try {
             const { name } = data.payload;
             const deleted = await secretsManager.delete(name);
-            ws.send(JSON.stringify({
-                type: 'secret-deleted',
-                payload: {
-                    name,
-                    success: deleted,
-                    reason: deleted ? undefined : 'Secret not found in vault'
-                }
-            }));
+            wsSend(ws, 'secret-deleted', {
+                name,
+                success: deleted,
+                reason: deleted ? undefined : 'Secret not found in vault'
+            });
         } catch (err) {
             consoleStyler.log('error', `Failed to delete secret: ${err.message}`);
-            ws.send(JSON.stringify({
-                type: 'error',
-                payload: `Failed to delete secret: ${err.message}`
-            }));
+            wsSendError(ws, `Failed to delete secret: ${err.message}`);
         }
     } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Secrets manager not available' }));
+        wsSendError(ws, 'Secrets manager not available');
     }
 }
 

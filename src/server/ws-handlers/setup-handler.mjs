@@ -1,30 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { wsSend } from '../../lib/ws-utils.mjs';
+import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
 
 const SETUP_FILE = '.ai-man/setup.json';
 
 async function handleGetSetupStatus(data, ctx) {
     const { ws } = ctx;
-    // Project root is up two levels from src/server/ws-handlers
     const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const filePath = path.join(projectRoot, SETUP_FILE);
     
-    let isFirstRun = true;
-    let setupData = {};
+    const setupData = readJsonFileSync(filePath, null);
+    const isFirstRun = setupData === null;
     
-    try {
-        const content = await fs.promises.readFile(filePath, 'utf8');
-        setupData = JSON.parse(content);
-        isFirstRun = false;
-    } catch {
-        // File doesn't exist = first run
-    }
-    
-    ws.send(JSON.stringify({
-        type: 'setup-status',
-        payload: { isFirstRun, ...setupData }
-    }));
+    wsSend(ws, 'setup-status', { isFirstRun, ...(setupData || {}) });
 }
 
 async function handleCompleteSetup(data, ctx) {
@@ -43,17 +33,10 @@ async function handleCompleteSetup(data, ctx) {
         };
         
         await fs.promises.writeFile(filePath, JSON.stringify(setupData, null, 2));
-        
-        ws.send(JSON.stringify({
-            type: 'setup-complete',
-            payload: { success: true }
-        }));
+        wsSend(ws, 'setup-complete', { success: true });
     } catch (err) {
         console.error('[SetupHandler] Failed to save setup status:', err);
-        ws.send(JSON.stringify({
-            type: 'setup-complete',
-            payload: { success: false, error: err.message }
-        }));
+        wsSend(ws, 'setup-complete', { success: false, error: err.message });
     }
 }
 
@@ -61,18 +44,11 @@ async function handleValidateApiKey(data, ctx) {
     const { ws } = ctx;
     const { provider, key, endpoint } = data.payload;
     
-    // Lightweight validation by attempting a small API call
     try {
         const result = await validateProviderKey(provider, key, endpoint);
-        ws.send(JSON.stringify({
-            type: 'api-key-validation',
-            payload: result
-        }));
+        wsSend(ws, 'api-key-validation', result);
     } catch (err) {
-        ws.send(JSON.stringify({
-            type: 'api-key-validation',
-            payload: { valid: false, error: err.message }
-        }));
+        wsSend(ws, 'api-key-validation', { valid: false, error: err.message });
     }
 }
 

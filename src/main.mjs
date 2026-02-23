@@ -1,21 +1,25 @@
 // Main entry point for the AI Assistant
 // Orchestrates CLI interface and AI assistant initialization
 
-import { AssistantFacade as MiniAIAssistant } from './core/assistant-facade.mjs';
+import { EventicFacade as MiniAIAssistant } from './core/eventic-facade.mjs';
 import { CLIInterface } from './cli/cli-interface.mjs';
 import { AiManEventBus } from './lib/event-bus.mjs';
 import { consoleStyler } from './ui/console-styler.mjs';
 import { TaskManager } from './core/task-manager.mjs';
 import { SchedulerService } from './core/scheduler-service.mjs';
 import { AgentLoopController } from './core/agent-loop-controller.mjs';
+import { TaskCheckpointManager } from './core/task-checkpoint-manager.mjs';
 import { OpenClawManager } from './integration/openclaw/manager.mjs';
 import { SecretsManager } from './server/secrets-manager.mjs';
 import { WorkspaceContentServer } from './server/workspace-content-server.mjs';
+
+let _globalEventBus = null;
 
 // Main execution function
 async function main() {
     const cli = new CLIInterface();
     const eventBus = new AiManEventBus();
+    _globalEventBus = eventBus;
     const workspaceContentServer = new WorkspaceContentServer();
     let openClawManager = null; // Lift scope
     
@@ -69,20 +73,37 @@ async function main() {
             }
         }
 
-        // Initialize AI assistant
+        // Initialize Task Checkpoint Manager FIRST (so it can be shared with the assistant)
+        const taskCheckpointManager = new TaskCheckpointManager({
+            eventBus,
+            taskManager,
+            workingDir,
+            aiAssistantClass: MiniAIAssistant
+        }, {
+            enabled: process.env.OBOTO_CHECKPOINT_ENABLED !== 'false',
+            intervalMs: parseInt(process.env.OBOTO_CHECKPOINT_INTERVAL || '10000', 10),
+            recoverOnStartup: true,
+            notifyOnRecovery: true
+        });
+
+        // Initialize checkpoint manager (WAL replay + crash recovery)
+        await taskCheckpointManager.initialize();
+
+        // Initialize Scheduler Service
+        const schedulerService = new SchedulerService(eventBus, taskManager, workingDir, MiniAIAssistant);
+        await schedulerService.restore(); // Restore active schedules
+
+        // Initialize AI assistant (pass checkpoint manager to avoid duplicate creation)
         const assistant = new MiniAIAssistant(workingDir, {
             statusAdapter,
             eventBus,
             taskManager,
             openClawManager,
-            workspaceContentServer // Pass content server
+            workspaceContentServer,
+            taskCheckpointManager // Share the single checkpoint manager
         });
-        
-        // Initialize Scheduler Service
-        const schedulerService = new SchedulerService(eventBus, taskManager, workingDir, MiniAIAssistant);
-        await schedulerService.restore(); // Restore active schedules
 
-        // Wire schedulerService into the assistant (created after assistant due to dependency order)
+        // Wire schedulerService into the assistant
         assistant.schedulerService = schedulerService;
         if (assistant.toolExecutor) {
             assistant.toolExecutor.schedulerService = schedulerService;
@@ -96,6 +117,9 @@ async function main() {
             eventBus,
             aiAssistantClass: MiniAIAssistant
         });
+
+        // Wire checkpoint manager into assistant's service registry
+        assistant._services.register('taskCheckpointManager', taskCheckpointManager);
 
         // Load custom tools before starting
         await assistant.initializeCustomTools();
@@ -167,6 +191,9 @@ async function main() {
         cli.displayError(error);
         process.exit(1);
     } finally {
+        if (typeof taskCheckpointManager !== 'undefined' && taskCheckpointManager) {
+            await taskCheckpointManager.shutdown();
+        }
         if (typeof openClawManager !== 'undefined' && openClawManager) {
             await openClawManager.stop();
         }
@@ -179,6 +206,52 @@ async function main() {
         cli.close();
     }
 }
+
+// Global error handlers to prevent crashes
+let _unhandledRejectionCount = 0;
+const _rejectionWindow = 60_000; // 1 minute window
+let _rejectionWindowStart = Date.now();
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ [ERROR] UNHANDLED REJECTION:', reason);
+    
+    const msg = reason?.message || String(reason);
+
+    // Broadcast to agent loop via event bus if available
+    if (_globalEventBus) {
+        _globalEventBus.emit('system:error', {
+            type: 'unhandledRejection',
+            message: msg,
+            stack: reason?.stack
+        });
+    }
+
+    // Track rejection rate — too many in a short window indicates systemic failure
+    const now = Date.now();
+    if (now - _rejectionWindowStart > _rejectionWindow) {
+        _unhandledRejectionCount = 0;
+        _rejectionWindowStart = now;
+    }
+    _unhandledRejectionCount++;
+
+    // Transient/tool errors — keep running
+    if (reason?.code === 'ENOENT' || reason?.code === 'ECONNRESET' || msg.includes('scandir') || msg.includes('socket hang up')) {
+        return;
+    }
+    
+    // If too many non-transient rejections accumulate, exit to prevent silent corruption
+    if (_unhandledRejectionCount > 10) {
+        console.error('❌ [FATAL] Too many unhandled rejections in the last minute, exiting.');
+        process.exit(1);
+    }
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ [ERROR] UNCAUGHT EXCEPTION:', err);
+    // After an uncaught exception, Node.js is in an undefined state.
+    // Perform a graceful shutdown.
+    setTimeout(() => process.exit(1), 1000);
+});
 
 // Handle module execution
 if (import.meta.url === `file://${process.argv[1]}`) {

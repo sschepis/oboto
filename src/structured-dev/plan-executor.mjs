@@ -4,6 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { readJsonFileSync } from '../lib/json-file-utils.mjs';
 
 export class PlanExecutor {
     constructor(manifestManager, aiAssistantClass) {
@@ -18,7 +19,7 @@ export class PlanExecutor {
             return { success: false, message: `Plan file not found: ${planPath}` };
         }
 
-        const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+        const plan = readJsonFileSync(planPath);
         const stages = plan.stages;
         const totalStages = stages.length;
 
@@ -47,11 +48,14 @@ export class PlanExecutor {
         return { success: true, message: "All stages completed successfully.", details: results };
     }
 
-    // Execute a list of tasks concurrently
+    // Execute a list of tasks (sequentially to prevent filesystem race conditions)
     async executeStage(tasks) {
-        // tasks is now an array of feature objects: { id, status, phase, dependencies }
-        const executions = tasks.map(task => this.executeTask(task));
-        return await Promise.all(executions);
+        const results = [];
+        for (const task of tasks) {
+            // Execute one by one
+            results.push(await this.executeTask(task));
+        }
+        return results;
     }
 
     // Execute a single task with an isolated AI agent

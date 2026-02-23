@@ -30,6 +30,7 @@ import { handlers as miscHandlers } from './ws-handlers/misc-handler.mjs';
 import { handlers as workspaceHandlers } from './ws-handlers/workspace-handler.mjs';
 import { handlers as skillsHandlers } from './ws-handlers/skills-handler.mjs';
 import { handlers as cloudHandlers } from './ws-handlers/cloud-handler.mjs';
+import { mountDynamicRoutes } from './dynamic-router.mjs';
 
 // Dynamic import for node-pty (native addon)
 let pty = null;
@@ -132,6 +133,13 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     // __dirname points to src/server/, so project root is two levels up.
     const projectRoot = path.resolve(__dirname, '..', '..');
     const uiDistPath = path.join(projectRoot, 'ui', 'dist');
+
+    // Mount dynamic routes from workspace
+    try {
+        await mountDynamicRoutes(app, workingDir);
+    } catch (e) {
+        consoleStyler.log('warning', `Failed to mount dynamic routes: ${e.message}`);
+    }
 
     // Serve generated images
     const generatedImagesPath = path.join(workingDir, 'public', 'generated-images');
@@ -247,6 +255,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                 data.toolName === 'edit_file' || 
                 data.toolName === 'create_directory' || 
                 data.toolName === 'move_file' ||
+                data.toolName === 'bootstrap_project' || 
                 data.toolName.startsWith('mcp_filesystem_')
             )) {
                 broadcastFileTree();
@@ -343,7 +352,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                 role: data.role === 'assistant' ? 'ai' : 'user',
                 type: 'text',
                 content: data.content,
-                timestamp: new Date().toLocaleTimeString(),
+                timestamp: new Date().toLocaleString(),
                 isCloud: true,
             });
         });
@@ -362,10 +371,31 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                 role: 'ai',
                 type: 'agent-loop-question',
                 content: `🤖❓ **Question from Background Agent:**\n\n${data.question}\n\n*Please respond to continue the background agent's work.*`,
-                timestamp: data.timestamp || new Date().toLocaleTimeString(),
+                timestamp: data.timestamp || new Date().toLocaleString(),
                 questionId: data.questionId,
                 isAgentLoop: true
             });
+        });
+
+        // Checkpoint/Recovery Events
+        eventBus.on('checkpoint:recovery-pending', (data) => {
+            broadcast('checkpoint-recovery-pending', data);
+            // Also broadcast a system message to notify the user
+            if (data.tasks && data.tasks.length > 0) {
+                const taskList = data.tasks.map(t => `• ${t.description || t.taskId} (turn ${t.turnNumber || 0})`).join('\n');
+                broadcast('message', {
+                    id: `recovery-${Date.now()}`,
+                    role: 'ai',
+                    type: 'system',
+                    content: `🔄 **Recovered Tasks Available**\n\nThe server was restarted and found ${data.tasks.length} task(s) that were interrupted:\n\n${taskList}\n\n_These tasks have been queued for recovery. Background tasks will resume automatically. For foreground requests, you may need to re-submit._`,
+                    timestamp: new Date().toLocaleString(),
+                    isRecovery: true
+                });
+            }
+        });
+
+        eventBus.on('checkpoint:resumed', (data) => {
+            broadcast('checkpoint-resumed', data);
         });
     }
 
@@ -456,6 +486,16 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             }
         }
 
+        // Send current task list to newly connected client (for restoration visibility)
+        if (assistant.taskManager) {
+            try {
+                const tasks = assistant.taskManager.listTasks('all');
+                ws.send(JSON.stringify({ type: 'task-list', payload: tasks }));
+            } catch (e) {
+                // Ignore
+            }
+        }
+
         // Send current display names and theme to newly connected client
         if (assistant.toolExecutor?.uiStyleHandlers) {
             try {
@@ -535,7 +575,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                             role: 'ai',
                             type: 'text',
                             content: `🔑 **LLM API Key Error**\n\n${payload.suggestion}\n\n_Original error: ${payload.errorMessage}_`,
-                            timestamp: new Date().toLocaleTimeString()
+                            timestamp: new Date().toLocaleString()
                         }
                     }));
                 } else {

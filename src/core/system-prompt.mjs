@@ -189,13 +189,51 @@ Create dynamic UI pages with live React components.
 - Build incrementally — one component at a time
 
 **MANDATORY UI COMPONENTS (Use \`UI.*\` NOT raw HTML):**
-- Layout: UI.Card, UI.CardHeader, UI.CardTitle, UI.CardContent, UI.Stack, UI.ScrollArea, UI.Separator
-- Primitives: UI.Button, UI.Input, UI.TextArea, UI.Select, UI.Checkbox, UI.Switch, UI.Label, UI.Slider
-- Navigation: UI.Tabs, UI.TabsList, UI.TabsTrigger, UI.TabsContent, UI.Accordion
-- Data: UI.Table, UI.Badge, UI.Avatar, UI.Progress, UI.Skeleton
-- Feedback: UI.Alert, UI.toast
-- Charts: UI.LineChart, UI.BarChart, UI.PieChart, UI.AreaChart, UI.Sparkline
-- Icons: UI.Icons.{Name} (Lucide icons)
+
+**Layout Components:**
+- UI.Card, UI.CardHeader, UI.CardTitle, UI.CardDescription, UI.CardContent, UI.CardFooter
+- UI.ScrollArea — scrollable container
+- UI.Separator — horizontal divider
+- UI.Collapsible, UI.CollapsibleTrigger, UI.CollapsibleContent
+
+**Primitive Components:**
+- UI.Button — supports: variant="default|destructive|outline|secondary|ghost|link", size="default|sm|lg|icon"
+- UI.Input — text input
+- UI.Textarea — multiline input
+- UI.Label — form label
+- UI.Checkbox — returns checked boolean
+- UI.Switch — toggle switch
+- UI.Slider — range slider
+- UI.Select, UI.SelectTrigger, UI.SelectContent, UI.SelectItem, UI.SelectValue
+
+**Navigation Components:**
+- UI.Tabs, UI.TabsList, UI.TabsTrigger, UI.TabsContent — tabbed interface
+- UI.Accordion, UI.AccordionItem, UI.AccordionTrigger, UI.AccordionContent
+
+**Data Display Components:**
+- UI.Table, UI.TableHeader, UI.TableBody, UI.TableRow, UI.TableHead, UI.TableCell
+- UI.Badge — supports: variant="default|secondary|destructive|outline"
+- UI.Avatar, UI.AvatarImage, UI.AvatarFallback
+- UI.Progress — progress bar (value prop 0-100)
+- UI.Skeleton — loading placeholder
+
+**Feedback Components:**
+- UI.Alert — container only (use div children for title/description, NO UI.AlertTitle/UI.AlertDescription)
+- UI.toast({ title, description, variant? }) — toast notification function
+
+**Chart Components:**
+- UI.LineChart, UI.BarChart, UI.PieChart, UI.AreaChart, UI.Sparkline
+
+**Icons (Lucide):**
+- UI.Icons.{Name} — e.g., UI.Icons.Check, UI.Icons.X, UI.Icons.Plus, UI.Icons.Loader2, etc.
+- Common icons: Check, X, Plus, Minus, ChevronDown, ChevronRight, ChevronUp, ChevronLeft,
+  Search, Settings, User, Home, File, Folder, Edit, Trash, Copy, Download, Upload,
+  RefreshCw, Loader2, AlertCircle, Info, CheckCircle, XCircle, Activity, Terminal
+
+**⚠️ COMPONENTS THAT DO NOT EXIST (will cause errors):**
+- NO UI.AlertTitle, UI.AlertDescription — use plain div/span inside UI.Alert
+- NO UI.Stack — use div with flex classes
+- NO UI.Icons.Atom, UI.Icons.Orbit, UI.Icons.Cpu — use available Lucide icons only
 
 **surfaceApi — Runtime API for Components:**
 Components can use the \`surfaceApi\` global to interact with the workspace and agent:

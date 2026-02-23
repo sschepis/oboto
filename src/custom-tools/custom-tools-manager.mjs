@@ -1,9 +1,11 @@
 // Custom tools management system
 // Handles loading, saving, validating, and managing custom tools
 
+import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { readJsonFileSync, writeJsonFileSync } from '../lib/json-file-utils.mjs';
 
 export class CustomToolsManager {
     constructor() {
@@ -12,16 +14,29 @@ export class CustomToolsManager {
         this.toolsFilePath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../.tools.json');
     }
 
+    // ── Internal helpers ─────────────────────────────────────────────────
+
+    /** Read and parse .tools.json, returning fallback on missing/corrupt file. */
+    _readToolsFile(fallback = { version: '1.0.0', tools: {} }) {
+        return readJsonFileSync(this.toolsFilePath, fallback);
+    }
+
+    /** Write toolsData to .tools.json with pretty-printing. */
+    _writeToolsFile(toolsData) {
+        writeJsonFileSync(this.toolsFilePath, toolsData);
+    }
+
+    // ── Load / Validate ──────────────────────────────────────────────────
+
     // Load custom tools from .tools.json on startup
     async loadCustomTools() {
         try {
-            const fs = await import('fs');
             if (!fs.existsSync(this.toolsFilePath)) {
                 consoleStyler.log('tools', `No custom tools file found at ${this.toolsFilePath}`);
                 return [];
             }
 
-            const toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
+            const toolsData = this._readToolsFile();
             let loadedCount = 0;
             const loadedSchemas = [];
 
@@ -90,20 +105,12 @@ export class CustomToolsManager {
         return true;
     }
 
+    // ── Save / Update / Remove ───────────────────────────────────────────
+
     // Save a custom tool to .tools.json
     async saveCustomTool(toolName, toolFunction, toolSchema, category = 'utility') {
         try {
-            const fs = await import('fs');
-            
-            // Load existing tools or create new structure
-            let toolsData = { version: '1.0.0', tools: {} };
-            if (fs.existsSync(this.toolsFilePath)) {
-                try {
-                    toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
-                } catch (e) {
-                    consoleStyler.log('warning', 'Corrupted tools file, creating new one');
-                }
-            }
+            const toolsData = this._readToolsFile();
 
             // Add the new tool
             toolsData.tools[toolName] = {
@@ -124,7 +131,7 @@ export class CustomToolsManager {
             }
 
             // Save the updated tools
-            fs.writeFileSync(this.toolsFilePath, JSON.stringify(toolsData, null, 2), 'utf8');
+            this._writeToolsFile(toolsData);
             
             // Add to runtime maps
             this.customTools.set(toolName, toolFunction);
@@ -141,31 +148,57 @@ export class CustomToolsManager {
     // Update tool usage statistics
     async updateToolUsage(toolName) {
         try {
-            const fs = await import('fs');
             if (!fs.existsSync(this.toolsFilePath)) return;
 
-            const toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
+            const toolsData = this._readToolsFile();
             if (toolsData.tools && toolsData.tools[toolName]) {
                 toolsData.tools[toolName].metadata.usage_count = (toolsData.tools[toolName].metadata.usage_count || 0) + 1;
                 toolsData.tools[toolName].metadata.last_used = new Date().toISOString();
-                
-                fs.writeFileSync(this.toolsFilePath, JSON.stringify(toolsData, null, 2), 'utf8');
+                this._writeToolsFile(toolsData);
             }
         } catch (error) {
             // Ignore usage tracking errors
         }
     }
 
+    // Remove a custom tool
+    async removeCustomTool(toolName) {
+        try {
+            if (!fs.existsSync(this.toolsFilePath)) {
+                return { success: false, message: "No custom tools file found." };
+            }
+            
+            const toolsData = this._readToolsFile();
+            
+            if (!toolsData.tools || !toolsData.tools[toolName]) {
+                return { success: false, message: `Tool '${toolName}' not found.` };
+            }
+            
+            // Remove from file
+            delete toolsData.tools[toolName];
+            this._writeToolsFile(toolsData);
+            
+            // Remove from runtime
+            this.customTools.delete(toolName);
+            this.customToolSchemas.delete(toolName);
+            
+            consoleStyler.log('tools', `✓ Removed custom tool: ${toolName}`);
+            return { success: true, message: `✓ Successfully removed tool: ${toolName}` };
+        } catch (error) {
+            return { success: false, message: `Error removing tool: ${error.message}` };
+        }
+    }
+
+    // ── Query / Export ────────────────────────────────────────────────────
+
     // List custom tools with optional filtering
     async listCustomTools(category = null, showUsage = false) {
         try {
-            const fs = await import('fs');
-            
             if (!fs.existsSync(this.toolsFilePath)) {
                 return "No custom tools found.";
             }
             
-            const toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
+            const toolsData = this._readToolsFile();
             const tools = toolsData.tools || {};
             
             let filteredTools = Object.entries(tools);
@@ -202,46 +235,14 @@ export class CustomToolsManager {
         }
     }
 
-    // Remove a custom tool
-    async removeCustomTool(toolName) {
-        try {
-            const fs = await import('fs');
-            
-            if (!fs.existsSync(this.toolsFilePath)) {
-                return { success: false, message: "No custom tools file found." };
-            }
-            
-            const toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
-            
-            if (!toolsData.tools || !toolsData.tools[toolName]) {
-                return { success: false, message: `Tool '${toolName}' not found.` };
-            }
-            
-            // Remove from file
-            delete toolsData.tools[toolName];
-            fs.writeFileSync(this.toolsFilePath, JSON.stringify(toolsData, null, 2), 'utf8');
-            
-            // Remove from runtime
-            this.customTools.delete(toolName);
-            this.customToolSchemas.delete(toolName);
-            
-            consoleStyler.log('tools', `✓ Removed custom tool: ${toolName}`);
-            return { success: true, message: `✓ Successfully removed tool: ${toolName}` };
-        } catch (error) {
-            return { success: false, message: `Error removing tool: ${error.message}` };
-        }
-    }
-
     // Export tools to a file
     async exportTools(outputFile = 'exported_tools.json', toolsToExport = null) {
         try {
-            const fs = await import('fs');
-            
             if (!fs.existsSync(this.toolsFilePath)) {
                 return { success: false, message: "No custom tools found to export." };
             }
             
-            const toolsData = JSON.parse(fs.readFileSync(this.toolsFilePath, 'utf8'));
+            const toolsData = this._readToolsFile();
             const allTools = toolsData.tools || {};
             
             let exportData = {
@@ -262,7 +263,7 @@ export class CustomToolsManager {
                 exportData.tools = allTools;
             }
             
-            fs.writeFileSync(outputFile, JSON.stringify(exportData, null, 2), 'utf8');
+            writeJsonFileSync(outputFile, exportData);
             
             const toolCount = Object.keys(exportData.tools).length;
             return { 
@@ -273,6 +274,8 @@ export class CustomToolsManager {
             return { success: false, message: `Error exporting tools: ${error.message}` };
         }
     }
+
+    // ── Runtime Accessors ────────────────────────────────────────────────
 
     // Check if a tool exists
     hasCustomTool(toolName) {

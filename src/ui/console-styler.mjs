@@ -6,9 +6,9 @@ import gradient from 'gradient-string';
 import boxen from 'boxen';
 import ora from 'ora';
 import figures from 'figures';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readJsonFileSync } from '../lib/json-file-utils.mjs';
 
 export class ConsoleStyler {
     constructor(theme = 'cyberpunk') {
@@ -35,8 +35,8 @@ export class ConsoleStyler {
             const scriptDir = path.dirname(path.dirname(path.dirname(__filename)));
             const themesPath = path.join(scriptDir, 'themes.json');
             
-            if (fs.existsSync(themesPath)) {
-                const loadedThemes = JSON.parse(fs.readFileSync(themesPath, 'utf8'));
+            const loadedThemes = readJsonFileSync(themesPath);
+            if (loadedThemes) {
                 
                 // Convert arrays of colors to gradient functions
                 for (const [name, colors] of Object.entries(loadedThemes)) {

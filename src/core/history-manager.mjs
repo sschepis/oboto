@@ -4,6 +4,7 @@
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { config } from '../config.mjs';
 import { v4 as uuidv4 } from 'uuid';
+import { readJsonFileSync, writeJsonFileSync } from '../lib/json-file-utils.mjs';
 
 // Average characters per token (approximate for English text)
 const CHARS_PER_TOKEN = 4;
@@ -43,7 +44,8 @@ export class HistoryManager {
         this.systemMessage = { 
             id: uuidv4(),
             role: 'system', 
-            content: systemPrompt 
+            content: systemPrompt,
+            timestamp: new Date().toISOString()
         };
         this.history = [this.systemMessage];
     }
@@ -60,7 +62,8 @@ export class HistoryManager {
         const message = { 
             id: uuidv4(),
             role, 
-            content 
+            content,
+            timestamp: new Date().toISOString()
         };
         
         if (toolCalls) {
@@ -88,6 +91,9 @@ export class HistoryManager {
     pushMessage(message) {
         if (!message.id) {
             message.id = uuidv4();
+        }
+        if (!message.timestamp) {
+            message.timestamp = new Date().toISOString();
         }
         this.history.push(message);
         this.enforceContextLimits();
@@ -384,13 +390,11 @@ export class HistoryManager {
      */
     async save(filePath) {
         try {
-            const fs = await import('fs');
-            const data = {
+            writeJsonFileSync(filePath, {
                 timestamp: new Date().toISOString(),
                 history: this.history,
                 systemMessage: this.systemMessage
-            };
-            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+            });
             return true;
         } catch (error) {
             consoleStyler.log('error', `Failed to save history: ${error.message}`);
@@ -405,12 +409,8 @@ export class HistoryManager {
      */
     async load(filePath) {
         try {
-            const fs = await import('fs');
-            if (!fs.existsSync(filePath)) {
-                return false;
-            }
-            
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const data = readJsonFileSync(filePath);
+            if (!data) return false;
             
             if (data.history && Array.isArray(data.history)) {
                 this.history = data.history.map(msg => {

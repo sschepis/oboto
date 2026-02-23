@@ -30,7 +30,6 @@ const PROVIDER_ENDPOINTS = {
 
 // Lazy-loaded SDK instances
 let _geminiAI = null;
-let _anthropicVertex = null;
 
 // Cloud proxy reference (set externally when cloud is active)
 let _cloudSync = null;
@@ -121,25 +120,6 @@ async function getGeminiClient() {
 }
 
 /**
- * Get or create the Anthropic Vertex SDK client
- * @returns {Object} AnthropicVertex instance
- */
-async function getAnthropicClient() {
-    if (_anthropicVertex) return _anthropicVertex;
-
-    // Use dynamic import for the SDK
-    const { AnthropicVertex } = await import('@anthropic-ai/vertex-sdk');
-    
-    _anthropicVertex = new AnthropicVertex({
-        projectId: config.vertex?.projectId,
-        region: config.vertex?.region || 'us-east5',
-        // Auth is handled automatically via Google ADC (Application Default Credentials)
-    });
-    
-    return _anthropicVertex;
-}
-
-/**
  * Detect the AI provider from the model name.
  * Uses name-based heuristics to determine the correct provider.
  * When no model is specified, falls back to the configured default provider.
@@ -168,9 +148,14 @@ export function detectProvider(model) {
         return AI_PROVIDERS.GEMINI;
     }
 
-    // Anthropic Claude models
+    // Anthropic Claude models — Vertex SDK was removed; route to OpenAI-compatible endpoint
+    // (users can point their configured endpoint to an Anthropic-compatible proxy)
     if (m.startsWith('claude-')) {
-        return AI_PROVIDERS.ANTHROPIC;
+        if (!detectProvider._claudeWarned) {
+            detectProvider._claudeWarned = true;
+            console.warn('[AI Provider] Anthropic Vertex SDK has been removed. Claude models will be routed to the configured OpenAI-compatible endpoint. Set AI_ENDPOINT to an Anthropic-compatible proxy if needed.');
+        }
+        return AI_PROVIDERS.OPENAI;
     }
 
     // OpenAI models
@@ -610,12 +595,6 @@ export async function callProvider(requestBody, options = {}) {
         return await callGeminiSDK(ctx, requestBody);
     }
 
-    // ── Anthropic: use Vertex SDK ──
-    if (ctx.provider === AI_PROVIDERS.ANTHROPIC) {
-        // TODO: Add cancellation support to Anthropic SDK call if possible
-        return await callAnthropicVertexSDK(ctx, requestBody);
-    }
-
     // ── OpenAI / Local: use REST fetch ──
     return await callOpenAIREST(ctx, requestBody, options.signal);
 }
@@ -666,12 +645,12 @@ export async function callProviderStream(requestBody, options = {}) {
     // ── OpenAI / Local: use REST SSE ──
     const body = transformRequestBody(ctx.provider, { ...requestBody, stream: true });
 
-    const response = await fetch(ctx.endpoint, {
+    const response = await withRetry(() => fetch(ctx.endpoint, {
         method: 'POST',
         headers: ctx.headers,
         body: JSON.stringify(body),
         signal: options.signal,
-    });
+    }));
 
     if (!response.ok) {
         const providerLabel = ctx.provider === AI_PROVIDERS.LMSTUDIO
@@ -720,11 +699,11 @@ async function callGeminiSDK(ctx, requestBody) {
         generateConfig.systemInstruction = systemInstruction;
     }
 
-    const geminiResponse = await ai.models.generateContent({
+    const geminiResponse = await withRetry(() => ai.models.generateContent({
         model: ctx.model,
         contents: contents,
         config: generateConfig,
-    });
+    }));
 
     // Translate response to OpenAI format
     return geminiResponseToOpenai(geminiResponse);
@@ -750,7 +729,9 @@ async function callGeminiSDKStream(ctx, requestBody) {
         generateConfig.systemInstruction = systemInstruction;
     }
 
-    // Use generateContentStream for real streaming
+    // Do NOT wrap streaming calls in withRetry — if the stream partially sends
+    // data then errors, a retry would create a second stream, leading to
+    // duplicated/garbled output sent to the client.
     const streamResult = await ai.models.generateContentStream({
         model: ctx.model,
         contents: contents,
@@ -798,12 +779,12 @@ async function callGeminiSDKStream(ctx, requestBody) {
 async function callOpenAIREST(ctx, requestBody, signal) {
     const body = transformRequestBody(ctx.provider, requestBody);
 
-    const response = await fetch(ctx.endpoint, {
+    const response = await withRetry(() => fetch(ctx.endpoint, {
         method: 'POST',
         headers: ctx.headers,
         body: JSON.stringify(body),
         signal,
-    });
+    }));
 
     if (!response.ok) {
         const providerLabel = ctx.provider === AI_PROVIDERS.LMSTUDIO
@@ -813,175 +794,6 @@ async function callOpenAIREST(ctx, requestBody, signal) {
     }
 
     return response.json();
-}
-
-// ─── Anthropic Vertex SDK Calls ──────────────────────────────────────────
-
-/**
- * Call Anthropic using the @anthropic-ai/vertex-sdk
- */
-async function callAnthropicVertexSDK(ctx, requestBody) {
-    const ai = await getAnthropicClient();
-    const { system, messages } = openaiMessagesToAnthropic(requestBody.messages);
-    const anthropicTools = openaiToolsToAnthropic(requestBody.tools);
-
-    const callParams = {
-        model: ctx.model,
-        messages: messages,
-        max_tokens: requestBody.max_tokens || 8192,
-        temperature: requestBody.temperature,
-    };
-
-    if (system) {
-        callParams.system = system;
-    }
-
-    if (anthropicTools && anthropicTools.length > 0) {
-        callParams.tools = anthropicTools;
-    }
-
-    const response = await ai.messages.create(callParams);
-
-    // Translate response to OpenAI format
-    return anthropicResponseToOpenai(response);
-}
-
-// ─── OpenAI ↔ Anthropic Format Translation ────────────────────────────────
-
-/**
- * Convert OpenAI tools to Anthropic tools
- */
-function openaiToolsToAnthropic(tools) {
-    if (!tools || tools.length === 0) return undefined;
-
-    return tools
-        .filter(t => t.type === 'function' && t.function)
-        .map(t => ({
-            name: t.function.name,
-            description: t.function.description || '',
-            input_schema: t.function.parameters
-        }));
-}
-
-/**
- * Convert OpenAI messages to Anthropic format
- */
-function openaiMessagesToAnthropic(messages) {
-    // Collect ALL system messages and concatenate them (same fix as Gemini).
-    // Previously only the last system message survived, causing role confusion.
-    const systemParts = [];
-    const anthropicMessages = [];
-
-    for (const msg of messages) {
-        if (msg.role === 'system') {
-            if (msg.content) {
-                systemParts.push(msg.content);
-            }
-            continue;
-        }
-
-        if (msg.role === 'user') {
-            anthropicMessages.push({
-                role: 'user',
-                content: msg.content
-            });
-            continue;
-        }
-
-        if (msg.role === 'assistant') {
-            const content = [];
-            
-            if (msg.content) {
-                content.push({ type: 'text', text: msg.content });
-            }
-            
-            if (msg.tool_calls) {
-                for (const tc of msg.tool_calls) {
-                    let input = {};
-                    try {
-                        input = typeof tc.function.arguments === 'string'
-                            ? JSON.parse(tc.function.arguments)
-                            : tc.function.arguments;
-                    } catch {}
-                    
-                    content.push({
-                        type: 'tool_use',
-                        id: tc.id,
-                        name: tc.function.name,
-                        input: input
-                    });
-                }
-            }
-            
-            anthropicMessages.push({
-                role: 'assistant',
-                content: content
-            });
-            continue;
-        }
-
-        if (msg.role === 'tool') {
-            anthropicMessages.push({
-                role: 'user',
-                content: [{
-                    type: 'tool_result',
-                    tool_use_id: msg.tool_call_id,
-                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-                }]
-            });
-            continue;
-        }
-    }
-
-    const system = systemParts.length > 0
-        ? systemParts.join('\n\n---\n\n')
-        : undefined;
-
-    return { system, messages: anthropicMessages };
-}
-
-/**
- * Convert Anthropic response to OpenAI format
- */
-function anthropicResponseToOpenai(response) {
-    const message = { role: 'assistant' };
-    const toolCalls = [];
-    let content = '';
-
-    for (const block of response.content) {
-        if (block.type === 'text') {
-            content += block.text;
-        } else if (block.type === 'tool_use') {
-            toolCalls.push({
-                id: block.id,
-                type: 'function',
-                function: {
-                    name: block.name,
-                    arguments: JSON.stringify(block.input)
-                }
-            });
-        }
-    }
-
-    if (content) message.content = content;
-    else message.content = null;
-
-    if (toolCalls.length > 0) {
-        message.tool_calls = toolCalls;
-    }
-
-    return {
-        choices: [{
-            index: 0,
-            message: message,
-            finish_reason: response.stop_reason === 'tool_use' ? 'tool_calls' : 'stop'
-        }],
-        usage: {
-            prompt_tokens: response.usage?.input_tokens || 0,
-            completion_tokens: response.usage?.output_tokens || 0,
-            total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
-        }
-    };
 }
 
 // ─── WebLLM Browser Bridge ──────────────────────────────────────────────
@@ -1038,10 +850,6 @@ function _detectLocalProvider() {
     if (config.keys.openai) {
         return { provider: AI_PROVIDERS.OPENAI, model: 'gpt-4o' };
     }
-    // Anthropic requires Vertex credentials (ADC), not a simple key check
-    if (config.vertex?.projectId) {
-        return { provider: AI_PROVIDERS.ANTHROPIC, model: 'claude-sonnet-4-20250514' };
-    }
     // Try local server as last resort (always "available")
     return { provider: AI_PROVIDERS.LMSTUDIO, model: config.ai.model || 'local-model' };
 }
@@ -1067,13 +875,75 @@ async function _callWithFallbackContext(fallback, requestBody, options = {}) {
     if (ctx.provider === AI_PROVIDERS.GEMINI) {
         return await callGeminiSDK(ctx, { ...requestBody, model: ctx.model });
     }
-    if (ctx.provider === AI_PROVIDERS.ANTHROPIC) {
-        return await callAnthropicVertexSDK(ctx, { ...requestBody, model: ctx.model });
-    }
     return await callOpenAIREST(ctx, { ...requestBody, model: ctx.model }, options.signal);
 }
 
 // ─── Utility Functions ───────────────────────────────────────────────────
+
+/**
+ * Retry helper for network operations
+ * @param {Function} fn - Async function to retry
+ * @param {number} retries - Max retries
+ * @param {number} delay - Initial delay in ms
+ */
+async function withRetry(fn, retries = 3, delay = 2000) {
+    for (let i = 0; i < retries; i++) {
+        let result;
+        try {
+            result = await fn();
+        } catch (err) {
+            // Network-level errors (DNS, connection refused, timeouts)
+            const isRetryable = err.code === 'UND_ERR_HEADERS_TIMEOUT' ||
+                              err.code === 'ETIMEDOUT' ||
+                              err.code === 'ECONNRESET' ||
+                              (err.message && (
+                                  err.message.includes('fetch failed') ||
+                                  err.message.includes('timeout') ||
+                                  err.message.includes('socket hang up')
+                              ));
+
+            if (i === retries - 1 || !isRetryable) throw err;
+            
+            const waitTime = delay * Math.pow(2, i);
+            console.warn(`[AI Provider] Request failed (${err.code || err.message}). Retrying in ${waitTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+        }
+
+        // Handle HTTP error responses from fetch (fetch doesn't throw on 4xx/5xx)
+        if (result && typeof result.ok === 'boolean' && !result.ok) {
+            const status = result.status;
+            const isRetryableStatus = status === 429 || status === 503 || status === 504;
+
+            if (isRetryableStatus && i < retries - 1) {
+                // Respect Retry-After header on 429 rate-limit responses
+                let waitTime = delay * Math.pow(2, i);
+                if (status === 429) {
+                    const retryAfter = result.headers?.get?.('retry-after');
+                    if (retryAfter) {
+                        const parsed = Number(retryAfter);
+                        if (!isNaN(parsed)) {
+                            // Retry-After is in seconds
+                            waitTime = parsed * 1000;
+                        } else {
+                            // Retry-After is an HTTP-date
+                            const retryDate = new Date(retryAfter).getTime();
+                            if (!isNaN(retryDate)) {
+                                waitTime = Math.max(0, retryDate - Date.now());
+                            }
+                        }
+                    }
+                }
+
+                console.warn(`[AI Provider] HTTP ${status}. Retrying in ${waitTime}ms...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                continue;
+            }
+        }
+
+        return result;
+    }
+}
 
 /**
  * Get a human-readable label for the current provider setup
@@ -1088,7 +958,9 @@ export function getProviderLabel(model) {
         [AI_PROVIDERS.LMSTUDIO]: 'LMStudio',
         [AI_PROVIDERS.OPENAI]: 'OpenAI',
         [AI_PROVIDERS.GEMINI]: 'Gemini',
-        [AI_PROVIDERS.ANTHROPIC]: 'Anthropic',
     };
     return `${labels[ctx.provider] || ctx.provider} (${ctx.model})`;
 }
+
+// Test-only exports (stripped in production builds)
+export const _testExports = { withRetry };

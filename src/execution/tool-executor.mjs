@@ -42,6 +42,7 @@ import { UIStyleHandlers } from './handlers/ui-style-handlers.mjs';
 import { MathHandlers } from './handlers/math-handlers.mjs';
 import { ImageHandlers } from './handlers/image-handlers.mjs';
 import { EmbedHandlers } from './handlers/embed-handlers.mjs';
+import { TOOLS, OPENCLAW_TOOLS } from '../tools/tool-definitions.mjs';
 
 const TOOL_TIMEOUTS = {
     read_file: 10_000,
@@ -420,6 +421,37 @@ export class ToolExecutor {
 
     getDryRunResults() {
         return this._plannedChanges;
+    }
+
+    getAllToolDefinitions() {
+        const allTools = [...TOOLS];
+
+        // Add OpenClaw tools if enabled
+        if (this.openClawHandlers && OPENCLAW_TOOLS) {
+            allTools.push(...OPENCLAW_TOOLS);
+        }
+
+        // Add Custom Tools
+        if (this.customToolsManager) {
+            const customTools = this.customToolsManager.getCustomToolSchemas();
+            allTools.push(...customTools);
+        }
+
+        // Add MCP Tools
+        if (this.mcpClientManager) {
+            const mcpRawTools = this.mcpClientManager.getAllTools();
+            const mcpTools = mcpRawTools.map(t => ({
+                type: 'function',
+                function: {
+                    name: t.name,
+                    description: t.description,
+                    parameters: t.inputSchema
+                }
+            }));
+            allTools.push(...mcpTools);
+        }
+
+        return allTools;
     }
 
     registerChromeTools() {

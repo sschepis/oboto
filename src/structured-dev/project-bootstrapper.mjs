@@ -1,10 +1,11 @@
-// Project Bootstrapper
-// Discovers design documents in a target directory and pre-populates
-// the SYSTEM_MAP.md manifest with extracted features and invariants.
+// Project Bootstrapper (Structured Development)
+// Discovers design documents and pre-populates SYSTEM_MAP.md
+// Refactored to extend BaseBootstrapper (see docs/DUPLICATE_CODE_ANALYSIS.md — DUP-1)
 
 import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { BaseBootstrapper } from '../lib/base-bootstrapper.mjs';
 
 // Design file names to search for, in priority order
 const DESIGN_FILE_CANDIDATES = ['DESIGN.md', 'ARCHITECTURE.md', 'README.md'];
@@ -31,12 +32,6 @@ const INVARIANT_KEYWORDS = [
     'security', 'performance', 'budget'
 ];
 
-// Bullet prefixes that indicate constraints
-const CONSTRAINT_PREFIXES = [
-    'must ', 'never ', 'always ', 'no ', 'all ', 'shall ',
-    'cannot ', 'should not ', 'must not ', 'do not '
-];
-
 // Keywords that push phase toward "Interface"
 const INTERFACE_KEYWORDS = [
     'interface', 'type ', 'schema', 'endpoint', 'signature',
@@ -50,8 +45,12 @@ const DESIGN_REVIEW_KEYWORDS = [
     'risk', 'mitigation', 'alternative', 'pros and cons'
 ];
 
-export class ProjectBootstrapper {
+export class ProjectBootstrapper extends BaseBootstrapper {
     constructor(manifestManager) {
+        super(manifestManager, {
+            docCandidates: DESIGN_FILE_CANDIDATES,
+            manifestFilename: 'SYSTEM_MAP.md'
+        });
         this.manifestManager = manifestManager;
     }
 
@@ -79,7 +78,7 @@ export class ProjectBootstrapper {
         }
 
         // Discover design file
-        const designFilePath = this.discoverDesignFile(targetDir);
+        const designFilePath = this.findDocFile(targetDir);
         if (!designFilePath) {
             return {
                 bootstrapped: false,
@@ -107,7 +106,7 @@ export class ProjectBootstrapper {
             };
         }
 
-        const parsed = this.parseDesignDoc(content);
+        const parsed = this.parseDocument(content);
         const features = this.extractFeatures(parsed);
         const invariants = this.extractInvariants(parsed);
 
@@ -142,74 +141,6 @@ export class ProjectBootstrapper {
     }
 
     /**
-     * Look for DESIGN.md, ARCHITECTURE.md, README.md in priority order.
-     * @param {string} targetDir
-     * @returns {string|null} Path to the found design file, or null
-     */
-    discoverDesignFile(targetDir) {
-        for (const candidate of DESIGN_FILE_CANDIDATES) {
-            const filePath = path.join(targetDir, candidate);
-            if (fs.existsSync(filePath)) {
-                // For README.md, only use it if it has substantial content
-                if (candidate === 'README.md') {
-                    try {
-                        const stat = fs.statSync(filePath);
-                        // Skip very small READMEs (likely just a title)
-                        if (stat.size < 200) continue;
-                    } catch {
-                        continue;
-                    }
-                }
-                return filePath;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Parse a markdown document into structured sections.
-     * @param {string} content - Raw markdown content
-     * @returns {{ title: string, sections: Array<{heading: string, level: number, content: string}>, rawContent: string }}
-     */
-    parseDesignDoc(content) {
-        const lines = content.split('\n');
-        const sections = [];
-        let title = '';
-        let currentSection = null;
-
-        for (const line of lines) {
-            const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
-            if (headingMatch) {
-                // Save previous section
-                if (currentSection) {
-                    currentSection.content = currentSection.content.trim();
-                    sections.push(currentSection);
-                }
-
-                const level = headingMatch[1].length;
-                const heading = headingMatch[2].replace(/\*\*/g, '').trim();
-
-                // First H1 or H2 is the title
-                if (!title && level <= 2) {
-                    title = heading;
-                }
-
-                currentSection = { heading, level, content: '' };
-            } else if (currentSection) {
-                currentSection.content += line + '\n';
-            }
-        }
-
-        // Push final section
-        if (currentSection) {
-            currentSection.content = currentSection.content.trim();
-            sections.push(currentSection);
-        }
-
-        return { title, sections, rawContent: content };
-    }
-
-    /**
      * Extract features from parsed design document.
      * @param {{ title: string, sections: Array, rawContent: string }} parsed
      * @returns {Array<{id: string, name: string, phase: string, priority: string, dependencies: string}>}
@@ -225,7 +156,7 @@ export class ProjectBootstrapper {
             const isFeatureListSection = FEATURE_SECTION_TITLES.some(t => headingLower.includes(t));
 
             if (isFeatureListSection) {
-                // Extract features from bullets and sub-headings within this section
+                // Extract features from bullets within this section
                 const bulletFeatures = this.extractFeaturesFromBullets(section.content);
                 for (const bf of bulletFeatures) {
                     const phase = this.determinePhase(bf.detail || section.content);
@@ -243,8 +174,7 @@ export class ProjectBootstrapper {
             // Strategy 2: Check if the heading itself describes a feature/component
             const isFeatureHeading = FEATURE_KEYWORDS.some(kw => headingLower.includes(kw));
 
-            // Also check for Phase-named sections from the project's own design doc pattern
-            // e.g., "Phase I: The Discovery Anchor"
+            // Also check for Phase-named sections
             const isPhaseSection = /phase\s+[ivx\d]+/i.test(headingLower);
 
             if (isFeatureHeading || isPhaseSection) {
@@ -287,20 +217,15 @@ export class ProjectBootstrapper {
         const lines = content.split('\n');
 
         for (const line of lines) {
-            // Match bullets: "- Feature Name" or "* Feature Name" or "1. Feature Name"
             const bulletMatch = line.match(/^\s*[-*]\s+\*?\*?(.+?)\*?\*?\s*$/);
             const numberedMatch = line.match(/^\s*\d+\.\s+\*?\*?(.+?)\*?\*?\s*$/);
 
             const match = bulletMatch || numberedMatch;
             if (match) {
                 let name = match[1].trim();
-                // Remove trailing punctuation like colons
                 name = name.replace(/[:\.]$/, '').trim();
-                // Remove markdown bold/italic
                 name = name.replace(/\*\*/g, '').replace(/\*/g, '').trim();
-                // Skip very short or generic items
                 if (name.length > 2 && name.length < 100) {
-                    // Split on colon or dash to get name vs detail
                     const parts = name.split(/:\s*|—\s*|–\s*/);
                     features.push({
                         name: parts[0].trim(),
@@ -332,10 +257,8 @@ export class ProjectBootstrapper {
             if (cols.some(c => c.match(/^-+$/))) continue;
             if (i > 0 && lines[i - 1] && lines[i - 1].includes('---')) continue;
 
-            // If first column looks like a section/feature name
             if (cols.length >= 2 && cols[0].length > 2) {
                 const name = cols[0].replace(/\*\*/g, '').trim();
-                // Skip generic table headers
                 if (!['section', 'name', 'id', 'feature', 'column', '#'].includes(name.toLowerCase())) {
                     features.push(name);
                 }
@@ -359,7 +282,6 @@ export class ProjectBootstrapper {
             const isConstraintSection = INVARIANT_KEYWORDS.some(kw => headingLower.includes(kw));
 
             if (isConstraintSection) {
-                // Extract constraints from bullets in this section
                 const constraints = this.extractConstraintsFromBullets(section.content);
                 for (const c of constraints) {
                     invariants.push({
@@ -382,85 +304,12 @@ export class ProjectBootstrapper {
             }
         }
 
-        // Deduplicate by name
-        const seen = new Set();
-        return invariants.filter(inv => {
-            const key = inv.name.toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-    }
-
-    /**
-     * Extract constraints from bullet points in a constraint-focused section.
-     * @param {string} content
-     * @returns {Array<{name: string, description: string}>}
-     */
-    extractConstraintsFromBullets(content) {
-        const constraints = [];
-        const lines = content.split('\n');
-
-        for (const line of lines) {
-            const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
-            if (!bulletMatch) continue;
-
-            let text = bulletMatch[1].replace(/\*\*/g, '').trim();
-            if (text.length < 5) continue;
-
-            // Split on colon for name:description pattern
-            const parts = text.split(/:\s*/);
-            if (parts.length >= 2) {
-                constraints.push({
-                    name: parts[0].trim().substring(0, 40),
-                    description: parts.slice(1).join(': ').trim()
-                });
-            } else {
-                // Use first few words as name, full text as description
-                const words = text.split(/\s+/);
-                constraints.push({
-                    name: words.slice(0, 4).join(' '),
-                    description: text
-                });
-            }
-        }
-
-        return constraints;
-    }
-
-    /**
-     * Scan content for inline constraint-like statements.
-     * These are bullets starting with "Must", "Never", "Always", etc.
-     * @param {string} content
-     * @returns {Array<{name: string, description: string}>}
-     */
-    extractInlineConstraints(content) {
-        const constraints = [];
-        const lines = content.split('\n');
-
-        for (const line of lines) {
-            const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
-            if (!bulletMatch) continue;
-
-            const text = bulletMatch[1].replace(/\*\*/g, '').trim();
-            const textLower = text.toLowerCase();
-
-            const isConstraint = CONSTRAINT_PREFIXES.some(prefix => textLower.startsWith(prefix));
-            if (isConstraint) {
-                const words = text.split(/\s+/);
-                constraints.push({
-                    name: words.slice(0, 4).join(' '),
-                    description: text
-                });
-            }
-        }
-
-        return constraints;
+        return this.deduplicate(invariants);
     }
 
     /**
      * Determine the initial phase for a feature based on content detail level.
-     * @param {string} content - The feature's descriptive content
+     * @param {string} content
      * @returns {string} Phase name
      */
     determinePhase(content) {
@@ -468,21 +317,18 @@ export class ProjectBootstrapper {
 
         const contentLower = content.toLowerCase();
 
-        // Check for interface-level detail
         const interfaceScore = INTERFACE_KEYWORDS.reduce((score, kw) => {
             return score + (contentLower.includes(kw) ? 1 : 0);
         }, 0);
 
         if (interfaceScore >= 2) return 'Interface';
 
-        // Check for design-review-level detail
         const designScore = DESIGN_REVIEW_KEYWORDS.reduce((score, kw) => {
             return score + (contentLower.includes(kw) ? 1 : 0);
         }, 0);
 
         if (designScore >= 2) return 'Design Review';
 
-        // Default to Discovery
         return 'Discovery';
     }
 
@@ -493,10 +339,10 @@ export class ProjectBootstrapper {
      */
     cleanFeatureName(heading) {
         return heading
-            .replace(/^(phase\s+[ivx\d]+\s*[:\-–—]\s*)/i, '')  // Remove "Phase I: " prefix
-            .replace(/^(the\s+)/i, '')                          // Remove leading "The "
-            .replace(/\*\*/g, '')                                // Remove bold
-            .replace(/`/g, '')                                   // Remove code ticks
+            .replace(/^(phase\s+[ivx\d]+\s*[:\-–—]\s*)/i, '')
+            .replace(/^(the\s+)/i, '')
+            .replace(/\*\*/g, '')
+            .replace(/`/g, '')
             .trim();
     }
 

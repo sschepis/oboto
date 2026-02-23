@@ -1,7 +1,9 @@
 // Implementation Planner
 // Analyzes the System Map to generate a parallel execution plan for multi-agent implementation.
+// Refactored to use shared topologicalSchedule (see docs/DUPLICATE_CODE_ANALYSIS.md — DUP-3)
 
 import { ManifestManager } from './manifest-manager.mjs';
+import { topologicalSchedule } from '../lib/scheduling-utils.mjs';
 import fs from 'fs';
 import path from 'path';
 
@@ -125,93 +127,11 @@ export class ImplementationPlanner {
         return features;
     }
 
-    // Schedule tasks into parallel stages using topological sort logic with resource constraints
+    // Schedule tasks into parallel stages using shared topological sort
     scheduleTasks(features, numDevelopers = 3) {
-        const pendingFeatures = features.filter(f => f.status !== 'Completed');
-        const completedFeatureIds = new Set(features.filter(f => f.status === 'Completed').map(f => f.id));
-        
-        // Build adjacency list and in-degree map for pending tasks
-        const graph = new Map(); // id -> [dependents]
-        const inDegree = new Map(); // id -> count of pending dependencies
-        const featureMap = new Map(); // id -> feature object
-
-        // Initialize
-        pendingFeatures.forEach(f => {
-            featureMap.set(f.id, f);
-            inDegree.set(f.id, 0);
-            if (!graph.has(f.id)) graph.set(f.id, []);
-        });
-
-        // Populate graph based on dependencies
-        pendingFeatures.forEach(feature => {
-            feature.dependencies.forEach(depId => {
-                // If dependency is already completed, it doesn't block
-                if (completedFeatureIds.has(depId)) return;
-
-                // If dependency is pending, add edge
-                if (featureMap.has(depId)) {
-                    if (!graph.has(depId)) graph.set(depId, []);
-                    graph.get(depId).push(feature.id);
-                    inDegree.set(feature.id, (inDegree.get(feature.id) || 0) + 1);
-                } else {
-                    // Dependency exists but not in our list (external or typo)
-                    // We should treat this as a potential blocker or at least warn.
-                    // For robustness, we'll log it but not block, assuming manual resolution or external dependency.
-                    console.warn(`[ImplementationPlanner] Warning: Feature ${feature.id} depends on unknown/missing feature ${depId}. Ignoring dependency.`);
-                }
-            });
-        });
-
-        const stages = [];
-        let readyQueue = [];
-
-        // Initial set of ready tasks (in-degree 0)
-        inDegree.forEach((count, id) => {
-            if (count === 0) readyQueue.push(id);
-        });
-
-        // Simple List Scheduling Algorithm
-        // While we have tasks to schedule
-        while (readyQueue.length > 0) {
-            // Take up to numDevelopers tasks for this stage
-            // We sort by number of dependents (heuristic: prioritize tasks that unlock more work)
-            readyQueue.sort((a, b) => {
-                const depsA = graph.get(a)?.length || 0;
-                const depsB = graph.get(b)?.length || 0;
-                return depsB - depsA; // Descending
-            });
-
-            const currentStageTasks = readyQueue.splice(0, numDevelopers);
-            
-            // Map IDs to full feature objects for the plan
-            const stageTasksWithDetails = currentStageTasks.map(id => featureMap.get(id));
-
-            stages.push({
-                id: stages.length + 1,
-                tasks: stageTasksWithDetails
-            });
-
-            // Simulate completion of these tasks to find new ready tasks
-            const nextReady = [];
-            
-            for (const completedId of currentStageTasks) {
-                const dependents = graph.get(completedId) || [];
-                for (const dependentId of dependents) {
-                    inDegree.set(dependentId, inDegree.get(dependentId) - 1);
-                    if (inDegree.get(dependentId) === 0) {
-                        nextReady.push(dependentId);
-                    }
-                }
-            }
-
-            // Add newly ready tasks to the queue
-            readyQueue.push(...nextReady);
-        }
-
-        // Check for cycles (remaining in-degrees > 0)
-        const unscheduled = [];
-        inDegree.forEach((count, id) => {
-            if (count > 0) unscheduled.push(id);
+        const { stages, unscheduled } = topologicalSchedule(features, {
+            numParallel: numDevelopers,
+            doneStatus: 'Completed'
         });
 
         if (unscheduled.length > 0) {

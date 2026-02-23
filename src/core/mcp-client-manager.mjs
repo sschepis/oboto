@@ -5,6 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { readJsonFileSync, writeJsonFileSync } from '../lib/json-file-utils.mjs';
 
 /**
  * Manages MCP client connections and configuration.
@@ -35,28 +36,15 @@ export class McpClientManager {
         this.config = { mcpServers: {} };
 
         // Load Global Config
-        if (fs.existsSync(this.globalConfigPath)) {
-            try {
-                const globalData = JSON.parse(fs.readFileSync(this.globalConfigPath, 'utf8'));
-                if (globalData.mcpServers) {
-                    this.config.mcpServers = { ...globalData.mcpServers };
-                }
-            } catch (e) {
-                consoleStyler.log('error', `Failed to load global MCP config: ${e.message}`);
-            }
+        const globalData = readJsonFileSync(this.globalConfigPath);
+        if (globalData?.mcpServers) {
+            this.config.mcpServers = { ...globalData.mcpServers };
         }
 
-        // Load Workspace Config
-        if (fs.existsSync(this.workspaceConfigPath)) {
-            try {
-                const workspaceData = JSON.parse(fs.readFileSync(this.workspaceConfigPath, 'utf8'));
-                if (workspaceData.mcpServers) {
-                    // Merge workspace config (overwriting global with same name)
-                    this.config.mcpServers = { ...this.config.mcpServers, ...workspaceData.mcpServers };
-                }
-            } catch (e) {
-                consoleStyler.log('error', `Failed to load workspace MCP config: ${e.message}`);
-            }
+        // Load Workspace Config (overrides global)
+        const workspaceData = readJsonFileSync(this.workspaceConfigPath);
+        if (workspaceData?.mcpServers) {
+            this.config.mcpServers = { ...this.config.mcpServers, ...workspaceData.mcpServers };
         }
     }
 
@@ -74,14 +62,7 @@ export class McpClientManager {
             fs.mkdirSync(targetDir, { recursive: true });
         }
 
-        let currentConfig = {};
-        if (fs.existsSync(targetPath)) {
-            try {
-                currentConfig = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-            } catch (e) {
-                // Ignore error, start fresh
-            }
-        }
+        let currentConfig = readJsonFileSync(targetPath, {});
 
         if (!currentConfig.mcpServers) {
             currentConfig.mcpServers = {};
@@ -89,7 +70,7 @@ export class McpClientManager {
 
         currentConfig.mcpServers[serverName] = serverConfig;
 
-        fs.writeFileSync(targetPath, JSON.stringify(currentConfig, null, 2), 'utf8');
+        writeJsonFileSync(targetPath, currentConfig);
         
         // Reload in-memory config
         await this.loadConfig();
@@ -103,16 +84,10 @@ export class McpClientManager {
     async removeServerConfig(serverName, isGlobal = false) {
         const targetPath = isGlobal ? this.globalConfigPath : this.workspaceConfigPath;
         
-        if (fs.existsSync(targetPath)) {
-            try {
-                const currentConfig = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-                if (currentConfig.mcpServers && currentConfig.mcpServers[serverName]) {
-                    delete currentConfig.mcpServers[serverName];
-                    fs.writeFileSync(targetPath, JSON.stringify(currentConfig, null, 2), 'utf8');
-                }
-            } catch (e) {
-                consoleStyler.log('error', `Failed to update config file: ${e.message}`);
-            }
+        const currentConfig = readJsonFileSync(targetPath);
+        if (currentConfig?.mcpServers?.[serverName]) {
+            delete currentConfig.mcpServers[serverName];
+            writeJsonFileSync(targetPath, currentConfig);
         }
 
         // Reload in-memory config

@@ -1,3 +1,5 @@
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
+
 /**
  * Handles: get-tasks, get-task-output, cancel-task,
  *          get-schedules, pause-schedule, resume-schedule, delete-schedule, trigger-schedule
@@ -8,13 +10,12 @@ async function handleGetTasks(data, ctx) {
     if (assistant.taskManager) {
         const { status_filter } = data.payload || {};
         const tasks = assistant.taskManager.listTasks(status_filter);
-        // Strip huge output logs for list view
         const simplified = tasks.map(t => ({
             ...t,
-            outputLog: undefined, // Don't send full logs in list
-            abortController: undefined // Not serializable
+            outputLog: undefined,
+            abortController: undefined
         }));
-        ws.send(JSON.stringify({ type: 'task-list', payload: simplified }));
+        wsSend(ws, 'task-list', simplified);
     }
 }
 
@@ -23,7 +24,7 @@ async function handleGetTaskOutput(data, ctx) {
     if (assistant.taskManager) {
         const { task_id, since_index } = data.payload;
         const logs = assistant.taskManager.getTaskOutput(task_id, since_index || 0);
-        ws.send(JSON.stringify({ type: 'task-output-history', payload: { taskId: task_id, logs } }));
+        wsSend(ws, 'task-output-history', { taskId: task_id, logs });
     }
 }
 
@@ -33,7 +34,7 @@ async function handleCancelTask(data, ctx) {
         const { task_id } = data.payload;
         const success = assistant.taskManager.cancelTask(task_id);
         if (!success) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to cancel task ${task_id}` }));
+            wsSendError(ws, `Failed to cancel task ${task_id}`);
         }
     }
 }
@@ -42,7 +43,7 @@ async function handleGetSchedules(data, ctx) {
     const { ws, schedulerService } = ctx;
     if (schedulerService) {
         const schedules = schedulerService.listSchedules(data.payload?.status_filter);
-        ws.send(JSON.stringify({ type: 'schedule-list', payload: schedules }));
+        wsSend(ws, 'schedule-list', schedules);
     }
 }
 

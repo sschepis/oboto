@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Check,
+  Zap,
 } from 'lucide-react';
 import type { ProjectStatusData } from '../features/ProjectStatus';
 import CloudSyncIndicator from '../features/CloudSyncIndicator';
@@ -28,6 +29,8 @@ interface StatusBarProps {
   onSettingsClick?: () => void;
   onTerminalClick?: () => void;
   onConsoleClick?: () => void;
+  onTasksClick?: () => void;
+  runningTaskCount?: number;
 }
 
 /** VS Code-style status bar pinned to the bottom of the window. */
@@ -43,6 +46,8 @@ const StatusBar: React.FC<StatusBarProps> = ({
   onSettingsClick,
   onTerminalClick,
   onConsoleClick,
+  onTasksClick,
+  runningTaskCount = 0,
 }) => {
   const gitBranch = projectStatus?.gitBranch;
   const projectType = projectStatus?.projectType;
@@ -244,6 +249,23 @@ const StatusBar: React.FC<StatusBarProps> = ({
               </button>
             )}
           </div>
+        )}
+
+        {/* Tasks toggle */}
+        {onTasksClick && (
+          <button
+            onClick={onTasksClick}
+            className="flex items-center gap-1 hover:bg-white/10 px-1 py-0.5 rounded transition-colors cursor-pointer"
+            title="Toggle Tasks Panel (⌘T)"
+          >
+            <Zap size={11} />
+            Tasks
+            {runningTaskCount > 0 && (
+              <span className="px-1 py-0.5 text-[8px] font-bold rounded-full bg-amber-500/20 text-amber-400 tabular-nums animate-pulse">
+                {runningTaskCount}
+              </span>
+            )}
+          </button>
         )}
 
         {/* Terminal toggle */}

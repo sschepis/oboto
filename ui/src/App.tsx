@@ -33,6 +33,7 @@ import { ToastProvider } from './surface-kit/feedback/Toast';
 import SetupWizard from './components/features/SetupWizard';
 import { useSetupWizard } from './hooks/useSetupWizard';
 import { useSkills } from './hooks/useSkills';
+import { useTaskManager } from './hooks/useTaskManager';
 
 import { useTabManager } from './hooks/useTabManager';
 import { useWorkspaceState } from './hooks/useWorkspaceState';
@@ -70,6 +71,10 @@ function App() {
   const { isFirstRun, isLoading: setupLoading } = useSetupWizard();
 
   const skills = useSkills();
+
+  // Task Manager for running task count
+  const { tasks } = useTaskManager();
+  const runningTaskCount = tasks.filter(t => t.status === 'running').length;
 
   // New Refactored Hooks
   const ui = useUIState();
@@ -478,6 +483,8 @@ function App() {
           }}
           activeConversation={activeConversation}
           onSettingsClick={() => ui.setShowSettings(true)}
+          onTasksClick={() => ui.setShowTaskSidebar(p => !p)}
+          runningTaskCount={runningTaskCount}
           onTerminalClick={() => ui.setShowTerminal(p => !p)}
           onConsoleClick={() => setLogPanelOpen(p => !p)}
         />

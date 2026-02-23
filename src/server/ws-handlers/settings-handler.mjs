@@ -4,6 +4,8 @@ import { consoleStyler } from '../../ui/console-styler.mjs';
 import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider, listModels } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
 import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
+import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
@@ -50,7 +52,7 @@ function restoreAISettings(workingDir, assistant) {
     const settingsPath = path.join(workingDir, '.ai-man', 'ai-settings.json');
     try {
         if (!fs.existsSync(settingsPath)) return false;
-        const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        const data = readJsonFileSync(settingsPath);
 
         if (data.model) {
             config.ai.model = data.model;
@@ -174,23 +176,16 @@ function buildSettingsPayload(assistant, ctx) {
 async function handleGetSettings(data, ctx) {
     const { ws, assistant } = ctx;
     try {
-        ws.send(JSON.stringify({
-            type: 'settings',
-            payload: buildSettingsPayload(assistant, ctx)
-        }));
+        wsSend(ws, 'settings', buildSettingsPayload(assistant, ctx));
     } catch (err) {
         consoleStyler.log('error', `handleGetSettings failed: ${err.message}`);
-        // Send minimal valid settings so UI doesn't hang
-        ws.send(JSON.stringify({
-            type: 'settings',
-            payload: {
-                maxTurns: assistant.maxTurns || 100,
-                maxSubagents: assistant.maxSubagents || 1,
-                ai: config.ai,
-                routing: config.routing,
-                modelRegistry: {},
-            }
-        }));
+        wsSend(ws, 'settings', {
+            maxTurns: assistant.maxTurns || 100,
+            maxSubagents: assistant.maxSubagents || 1,
+            ai: config.ai,
+            routing: config.routing,
+            modelRegistry: {},
+        });
     }
 }
 
@@ -282,16 +277,10 @@ async function handleUpdateSettings(data, ctx) {
         if (settings.routing.code_completion) process.env.ROUTE_CODE_COMPLETION = settings.routing.code_completion;
     }
     
-    ws.send(JSON.stringify({
-        type: 'status',
-        payload: 'Settings updated'
-    }));
+    wsSend(ws, 'status', 'Settings updated');
     
     // Broadcast new settings back
-    ws.send(JSON.stringify({
-        type: 'settings',
-        payload: buildSettingsPayload(assistant, ctx)
-    }));
+    wsSend(ws, 'settings', buildSettingsPayload(assistant, ctx));
 
     // Persist to workspace so settings survive restarts
     persistAISettings(assistant.workingDir);
@@ -301,7 +290,7 @@ async function handleGetStatus(data, ctx) {
     const { ws, assistant } = ctx;
     try {
         const info = await getProjectInfo(assistant.workingDir);
-        ws.send(JSON.stringify({ type: 'status-update', payload: info }));
+        wsSend(ws, 'status-update', info);
     } catch (err) {
         consoleStyler.log('error', `Failed to get project info: ${err.message}`);
     }
@@ -319,15 +308,14 @@ async function handleSetCwd(data, ctx) {
             // (happens on browser reload when localStorage has the saved CWD)
             try {
                 const info = await getProjectInfo(resolvedNew);
-                ws.send(JSON.stringify({ type: 'status-update', payload: info }));
+                wsSend(ws, 'status-update', info);
                 const tree = await getDirectoryTree(resolvedNew, 2);
-                ws.send(JSON.stringify({ type: 'file-tree', payload: tree }));
-                // Send surfaces for this workspace
+                wsSend(ws, 'file-tree', tree);
                 if (assistant.toolExecutor?.surfaceManager) {
                     try {
                         const surfaces = await assistant.toolExecutor.surfaceManager.listSurfaces();
-                        ws.send(JSON.stringify({ type: 'surface-list', payload: surfaces }));
-                    } catch { ws.send(JSON.stringify({ type: 'surface-list', payload: [] })); }
+                        wsSend(ws, 'surface-list', surfaces);
+                    } catch { wsSend(ws, 'surface-list', []); }
                 }
             } catch (e) {
                 // Non-fatal — the UI will just show what it has
@@ -340,13 +328,13 @@ async function handleSetCwd(data, ctx) {
         // Restore AI settings saved for this workspace
         restoreAISettings(actualPath, assistant);
 
-        ws.send(JSON.stringify({ type: 'status', payload: `Changed working directory to ${actualPath}` }));
+        wsSend(ws, 'status', `Changed working directory to ${actualPath}`);
         
         const info = await getProjectInfo(actualPath);
-        ws.send(JSON.stringify({ type: 'status-update', payload: info }));
+        wsSend(ws, 'status-update', info);
 
         const tree = await getDirectoryTree(actualPath, 2);
-        ws.send(JSON.stringify({ type: 'file-tree', payload: tree }));
+        wsSend(ws, 'file-tree', tree);
 
         if (schedulerService) {
             await schedulerService.switchWorkspace(actualPath);
@@ -357,31 +345,28 @@ async function handleSetCwd(data, ctx) {
         if (assistant.toolExecutor?.surfaceManager) {
             try {
                 const surfaces = await assistant.toolExecutor.surfaceManager.listSurfaces();
-                ws.send(JSON.stringify({ type: 'surface-list', payload: surfaces }));
+                wsSend(ws, 'surface-list', surfaces);
             } catch (e) {
-                ws.send(JSON.stringify({ type: 'surface-list', payload: [] }));
+                wsSend(ws, 'surface-list', []);
             }
         } else {
-            ws.send(JSON.stringify({ type: 'surface-list', payload: [] }));
+            wsSend(ws, 'surface-list', []);
         }
 
         if (assistant.openClawManager) {
              await assistant.openClawManager.restart(actualPath);
-             ws.send(JSON.stringify({
-                type: 'openclaw-status',
-                payload: {
-                    available: true,
-                    connected: assistant.openClawManager.client?.isConnected ?? false,
-                    mode: assistant.openClawManager.config.mode,
-                    url: assistant.openClawManager.config.url,
-                    path: assistant.openClawManager.config.path,
-                    authToken: assistant.openClawManager.config.authToken
-                }
-             }));
+             wsSend(ws, 'openclaw-status', {
+                 available: true,
+                 connected: assistant.openClawManager.client?.isConnected ?? false,
+                 mode: assistant.openClawManager.config.mode,
+                 url: assistant.openClawManager.config.url,
+                 path: assistant.openClawManager.config.path,
+                 authToken: assistant.openClawManager.config.authToken
+             });
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to change directory: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: err.message }));
+        wsSendError(ws, err.message);
     }
 }
 
@@ -391,7 +376,7 @@ async function handleRefreshModels(data, ctx) {
         await fetchRemoteModels();
         broadcast('settings', buildSettingsPayload(assistant, ctx));
     } catch (err) {
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to refresh models: ${err.message}` }));
+        wsSendError(ws, `Failed to refresh models: ${err.message}`);
     }
 }
 
@@ -399,7 +384,7 @@ async function handleRefreshProviderModels(data, ctx) {
     const { ws, assistant, broadcast } = ctx;
     const provider = data.payload?.provider;
     if (!provider) {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Missing provider in refresh-provider-models request' }));
+        wsSendError(ws, 'Missing provider in refresh-provider-models request');
         return;
     }
 
@@ -407,7 +392,7 @@ async function handleRefreshProviderModels(data, ctx) {
         await fetchModelsForProvider(provider);
         broadcast('settings', buildSettingsPayload(assistant, ctx));
     } catch (err) {
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to refresh ${provider} models: ${err.message}` }));
+        wsSendError(ws, `Failed to refresh ${provider} models: ${err.message}`);
     }
 }
 

@@ -101,7 +101,7 @@ export const useChat = () => {
       }),
       wsService.on('log', (payload: unknown) => {
         const p = payload as { level: string; message: string; metadata?: unknown };
-        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); // Keep activity log as time-only for brevity
 
         // Activity log (recent, cleared per work cycle — shown in ThinkingIndicator)
         setActivityLog(prev => {
@@ -209,7 +209,7 @@ export const useChat = () => {
                      type: 'text',
                      content: '',
                      toolCalls: [newToolCall],
-                     timestamp: new Date().toLocaleTimeString(),
+                     timestamp: new Date().toLocaleString(),
                      _pending: true,
                  };
                  return [...prev, responseMsg];
@@ -254,7 +254,7 @@ export const useChat = () => {
           type: 'test-results',
           testResults,
           content: `Test run complete: ${testResults.totalPassed} passed, ${testResults.totalFailed} failed, ${testResults.totalPending} pending`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          timestamp: new Date().toLocaleString()
         }]);
       }),
 
@@ -297,7 +297,7 @@ export const useChat = () => {
       role: 'user',
       type: 'text',
       content: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleString()
     };
     setMessages(prev => [...prev, userMsg]);
 
@@ -345,7 +345,7 @@ export const useChat = () => {
         role: 'user',
         type: 'text',
         content: nextMsg,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleString()
       };
       setMessages(prev => [...prev, userMsg]);
 

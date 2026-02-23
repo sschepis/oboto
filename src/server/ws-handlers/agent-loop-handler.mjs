@@ -1,3 +1,5 @@
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
+
 /**
  * Handles: agent-loop-play, agent-loop-pause, agent-loop-stop,
  *          agent-loop-set-interval, get-agent-loop-state, agent-loop-answer
@@ -36,23 +38,21 @@ async function handleAgentLoopSetInterval(data, ctx) {
 async function handleGetAgentLoopState(data, ctx) {
     const { ws, agentLoopController } = ctx;
     if (agentLoopController) {
-        ws.send(JSON.stringify({ type: 'agent-loop-state', payload: agentLoopController.getState() }));
+        wsSend(ws, 'agent-loop-state', agentLoopController.getState());
     } else {
-        // Return a disabled state if no controller exists
-        ws.send(JSON.stringify({ type: 'agent-loop-state', payload: { state: 'stopped', intervalMs: 180000, invocationCount: 0, pendingQuestions: [] } }));
+        wsSend(ws, 'agent-loop-state', { state: 'stopped', intervalMs: 180000, invocationCount: 0, pendingQuestions: [] });
     }
 }
 
 async function handleAgentLoopAnswer(data, ctx) {
     const { ws, agentLoopController } = ctx;
     if (agentLoopController) {
-        // User is answering a blocking question from the background agent
         const { questionId, answer } = data.payload;
         if (questionId && answer) {
             agentLoopController.resolveQuestion(questionId, answer);
-            ws.send(JSON.stringify({ type: 'status', payload: 'Answer sent to background agent' }));
+            wsSend(ws, 'status', 'Answer sent to background agent');
         } else {
-            ws.send(JSON.stringify({ type: 'error', payload: 'Missing questionId or answer' }));
+            wsSendError(ws, 'Missing questionId or answer');
         }
     }
 }

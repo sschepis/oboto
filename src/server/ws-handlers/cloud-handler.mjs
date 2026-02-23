@@ -2,9 +2,15 @@
 // Handles all cloud:* and webllm:* message types from the UI.
 // ctx.cloudSync may be null if cloud is not configured.
 
+import { wsSend } from '../../lib/ws-utils.mjs';
+
+/** Send a cloud:error to the requesting client */
+function sendCloudError(ws, message) {
+    wsSend(ws, 'cloud:error', { error: message });
+}
+
 export const handlers = {
     // ── WebLLM Response Handler ───────────────────────────────────────────
-    // The browser runs the model via @mlc-ai/web-llm and sends results back
     'webllm:response': async (data, ctx) => {
         if (ctx.eventBus && data.payload) {
             ctx.eventBus.emitTyped('webllm:response', data.payload);
@@ -12,7 +18,6 @@ export const handlers = {
     },
 
     'webllm:status': async (data, ctx) => {
-        // Broadcast WebLLM engine status to all clients
         ctx.broadcast('webllm:status', data.payload);
     },
 
@@ -20,32 +25,19 @@ export const handlers = {
 
     'cloud:login': async (data, ctx) => {
         if (!ctx.cloudSync) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:login-result',
-                payload: { success: false, configured: false, error: 'Cloud not configured. Set OBOTO_CLOUD_URL and OBOTO_CLOUD_KEY.' }
-            }));
+            return wsSend(ctx.ws, 'cloud:login-result', { success: false, configured: false, error: 'Cloud not configured. Set OBOTO_CLOUD_URL and OBOTO_CLOUD_KEY.' });
         }
         try {
             const { email, password } = data.payload || {};
             if (!email || !password) {
-                return ctx.ws.send(JSON.stringify({
-                    type: 'cloud:login-result',
-                    payload: { success: false, error: 'Email and password are required' }
-                }));
+                return wsSend(ctx.ws, 'cloud:login-result', { success: false, error: 'Email and password are required' });
             }
             await ctx.cloudSync.login(email, password);
             const status = ctx.cloudSync.getStatus();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:login-result',
-                payload: { success: true, ...status }
-            }));
-            // Broadcast to all clients that cloud state changed
+            wsSend(ctx.ws, 'cloud:login-result', { success: true, ...status });
             ctx.broadcast('cloud:status', status);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:login-result',
-                payload: { success: false, error: err.message }
-            }));
+            wsSend(ctx.ws, 'cloud:login-result', { success: false, error: err.message });
         }
     },
 
@@ -55,15 +47,11 @@ export const handlers = {
             await ctx.cloudSync.logout();
             ctx.broadcast('cloud:status', ctx.cloudSync.getStatus());
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Logout failed: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Logout failed: ${err.message}`);
         }
     },
 
     'cloud:status': async (data, ctx) => {
-        // Try lazy initialization if cloud secrets were set after startup
         let cloudSync = ctx.cloudSync;
         if (!cloudSync && ctx.initCloudSync) {
             cloudSync = await ctx.initCloudSync();
@@ -71,32 +59,20 @@ export const handlers = {
         const status = cloudSync
             ? cloudSync.getStatus()
             : { configured: false, loggedIn: false, user: null, profile: null, org: null, role: null, linkedWorkspace: null, syncState: 'idle' };
-        ctx.ws.send(JSON.stringify({
-            type: 'cloud:status',
-            payload: status
-        }));
+        wsSend(ctx.ws, 'cloud:status', status);
     },
 
     // ── Workspace (Phase 2 stubs) ─────────────────────────────────────────
 
     'cloud:list-workspaces': async (data, ctx) => {
         if (!ctx.cloudSync?.isLoggedIn()) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:workspaces',
-                payload: []
-            }));
+            return wsSend(ctx.ws, 'cloud:workspaces', []);
         }
         try {
             const workspaces = await ctx.cloudSync.listCloudWorkspaces();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:workspaces',
-                payload: workspaces || []
-            }));
+            wsSend(ctx.ws, 'cloud:workspaces', workspaces || []);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to list workspaces: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to list workspaces: ${err.message}`);
         }
     },
 
@@ -106,10 +82,7 @@ export const handlers = {
             await ctx.cloudSync.linkWorkspace(data.payload.cloudWorkspaceId);
             ctx.broadcast('cloud:status', ctx.cloudSync.getStatus());
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to link workspace: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to link workspace: ${err.message}`);
         }
     },
 
@@ -119,10 +92,7 @@ export const handlers = {
             await ctx.cloudSync.unlinkWorkspace();
             ctx.broadcast('cloud:status', ctx.cloudSync.getStatus());
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to unlink workspace: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to unlink workspace: ${err.message}`);
         }
     },
 
@@ -131,15 +101,9 @@ export const handlers = {
         try {
             const state = ctx.assistant.workspaceManager.getWorkspaceContext();
             await ctx.cloudSync.pushWorkspaceState(state);
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:sync-result',
-                payload: { action: 'push', success: true }
-            }));
+            wsSend(ctx.ws, 'cloud:sync-result', { action: 'push', success: true });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:sync-result',
-                payload: { action: 'push', success: false, error: err.message }
-            }));
+            wsSend(ctx.ws, 'cloud:sync-result', { action: 'push', success: false, error: err.message });
         }
     },
 
@@ -147,15 +111,9 @@ export const handlers = {
         if (!ctx.cloudSync?.isLoggedIn()) return;
         try {
             const state = await ctx.cloudSync.pullWorkspaceState();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:sync-result',
-                payload: { action: 'pull', success: true, state }
-            }));
+            wsSend(ctx.ws, 'cloud:sync-result', { action: 'pull', success: true, state });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:sync-result',
-                payload: { action: 'pull', success: false, error: err.message }
-            }));
+            wsSend(ctx.ws, 'cloud:sync-result', { action: 'pull', success: false, error: err.message });
         }
     },
 
@@ -163,22 +121,13 @@ export const handlers = {
 
     'cloud:list-agents': async (data, ctx) => {
         if (!ctx.cloudSync?.isLoggedIn()) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:agents',
-                payload: []
-            }));
+            return wsSend(ctx.ws, 'cloud:agents', []);
         }
         try {
             const agents = await ctx.cloudSync.listAgents();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:agents',
-                payload: agents || []
-            }));
+            wsSend(ctx.ws, 'cloud:agents', agents || []);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to list agents: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to list agents: ${err.message}`);
         }
     },
 
@@ -188,10 +137,7 @@ export const handlers = {
         if (!ctx.cloudSync?.isLoggedIn()) return;
         const { name, description } = data.payload || {};
         if (!name) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: 'Workspace name is required' }
-            }));
+            return sendCloudError(ctx.ws, 'Workspace name is required');
         }
         try {
             const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -206,21 +152,11 @@ export const handlers = {
                 created_by: ctx.cloudSync.auth?.user?.id || null,
             }, { 'Prefer': 'return=representation' });
             const workspace = Array.isArray(result) ? result[0] : result;
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:workspace-created',
-                payload: workspace
-            }));
-            // Refresh workspace list
+            wsSend(ctx.ws, 'cloud:workspace-created', workspace);
             const workspaces = await ctx.cloudSync.listCloudWorkspaces();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:workspaces',
-                payload: workspaces || []
-            }));
+            wsSend(ctx.ws, 'cloud:workspaces', workspaces || []);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to create workspace: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to create workspace: ${err.message}`);
         }
     },
 
@@ -228,22 +164,13 @@ export const handlers = {
 
     'cloud:list-conversations': async (data, ctx) => {
         if (!ctx.cloudSync?.isLoggedIn()) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:conversations',
-                payload: []
-            }));
+            return wsSend(ctx.ws, 'cloud:conversations', []);
         }
         try {
             const conversations = await ctx.cloudSync.listCloudConversations();
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:conversations',
-                payload: conversations || []
-            }));
+            wsSend(ctx.ws, 'cloud:conversations', conversations || []);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to list conversations: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to list conversations: ${err.message}`);
         }
     },
 
@@ -254,15 +181,9 @@ export const handlers = {
         try {
             const history = ctx.assistant.historyManager.getHistory();
             const result = await ctx.cloudSync.pushConversation(cloudConvId, history, lastSyncAt);
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:conversation-sync-result',
-                payload: { action: 'push', ...result }
-            }));
+            wsSend(ctx.ws, 'cloud:conversation-sync-result', { action: 'push', ...result });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to push conversation: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to push conversation: ${err.message}`);
         }
     },
 
@@ -272,11 +193,7 @@ export const handlers = {
         if (!cloudConvId) return;
         try {
             const result = await ctx.cloudSync.pullConversation(cloudConvId, since);
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:conversation-sync-result',
-                payload: { action: 'pull', ...result }
-            }));
-            // Broadcast new messages from cloud as chat messages
+            wsSend(ctx.ws, 'cloud:conversation-sync-result', { action: 'pull', ...result });
             if (result.messages && result.messages.length > 0) {
                 for (const msg of result.messages) {
                     ctx.broadcast('message', {
@@ -290,10 +207,7 @@ export const handlers = {
                 }
             }
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: `Failed to pull conversation: ${err.message}` }
-            }));
+            sendCloudError(ctx.ws, `Failed to pull conversation: ${err.message}`);
         }
     },
 
@@ -303,18 +217,11 @@ export const handlers = {
         if (!ctx.cloudSync?.isLoggedIn()) return;
         const { slug, message, history } = data.payload || {};
         if (!slug || !message) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:agent-error',
-                payload: { error: 'Agent slug and message are required', slug }
-            }));
+            return wsSend(ctx.ws, 'cloud:agent-error', { error: 'Agent slug and message are required', slug });
         }
         try {
             const result = await ctx.cloudSync.invokeAgent(slug, message, history || []);
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:agent-response',
-                payload: result
-            }));
-            // Also broadcast as a chat message so it appears in conversation
+            wsSend(ctx.ws, 'cloud:agent-response', result);
             ctx.broadcast('message', {
                 id: result.messageId || `cloud-agent-${Date.now()}`,
                 role: 'ai',
@@ -325,10 +232,7 @@ export const handlers = {
                 agentName: result.agentName,
             });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:agent-error',
-                payload: { error: err.message, slug }
-            }));
+            wsSend(ctx.ws, 'cloud:agent-error', { error: err.message, slug });
         }
     },
 
@@ -336,15 +240,15 @@ export const handlers = {
 
     'cloud:list-files': async (data, ctx) => {
         if (!ctx.cloudSync?.isLoggedIn() || !ctx.cloudSync.fileSync) {
-            return ctx.ws.send(JSON.stringify({ type: 'cloud:files', payload: [] }));
+            return wsSend(ctx.ws, 'cloud:files', []);
         }
         const wsId = ctx.cloudSync.workspaceSync?.getLinkedWorkspaceId();
-        if (!wsId) return ctx.ws.send(JSON.stringify({ type: 'cloud:files', payload: [] }));
+        if (!wsId) return wsSend(ctx.ws, 'cloud:files', []);
         try {
             const files = await ctx.cloudSync.fileSync.listFiles(wsId);
-            ctx.ws.send(JSON.stringify({ type: 'cloud:files', payload: files }));
+            wsSend(ctx.ws, 'cloud:files', files);
         } catch (err) {
-            ctx.ws.send(JSON.stringify({ type: 'cloud:error', payload: { error: `List files failed: ${err.message}` } }));
+            sendCloudError(ctx.ws, `List files failed: ${err.message}`);
         }
     },
 
@@ -356,9 +260,9 @@ export const handlers = {
         if (!filePath) return;
         try {
             const result = await ctx.cloudSync.fileSync.uploadFile(wsId, ctx.assistant.workingDir, filePath);
-            ctx.ws.send(JSON.stringify({ type: 'cloud:file-uploaded', payload: { filePath, ...result } }));
+            wsSend(ctx.ws, 'cloud:file-uploaded', { filePath, ...result });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({ type: 'cloud:error', payload: { error: `Upload failed: ${err.message}` } }));
+            sendCloudError(ctx.ws, `Upload failed: ${err.message}`);
         }
     },
 
@@ -370,10 +274,10 @@ export const handlers = {
         if (!filePath) return;
         try {
             const result = await ctx.cloudSync.fileSync.downloadFile(wsId, ctx.assistant.workingDir, filePath);
-            ctx.ws.send(JSON.stringify({ type: 'cloud:file-downloaded', payload: result }));
+            wsSend(ctx.ws, 'cloud:file-downloaded', result);
             ctx.broadcastFileTree();
         } catch (err) {
-            ctx.ws.send(JSON.stringify({ type: 'cloud:error', payload: { error: `Download failed: ${err.message}` } }));
+            sendCloudError(ctx.ws, `Download failed: ${err.message}`);
         }
     },
 
@@ -383,22 +287,12 @@ export const handlers = {
         if (!ctx.cloudSync?.isLoggedIn()) return;
         const { agentSlug, task, history } = data.payload || {};
         if (!agentSlug || !task) {
-            return ctx.ws.send(JSON.stringify({
-                type: 'cloud:error',
-                payload: { error: 'Agent slug and task message are required' }
-            }));
+            return sendCloudError(ctx.ws, 'Agent slug and task message are required');
         }
         try {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:task-started',
-                payload: { agentSlug, task }
-            }));
+            wsSend(ctx.ws, 'cloud:task-started', { agentSlug, task });
             const result = await ctx.cloudSync.invokeAgent(agentSlug, task, history || []);
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:task-completed',
-                payload: { agentSlug, ...result }
-            }));
-            // Broadcast result as chat message
+            wsSend(ctx.ws, 'cloud:task-completed', { agentSlug, ...result });
             ctx.broadcast('message', {
                 id: result.messageId || `cloud-task-${Date.now()}`,
                 role: 'ai',
@@ -409,10 +303,7 @@ export const handlers = {
                 agentName: result.agentName,
             });
         } catch (err) {
-            ctx.ws.send(JSON.stringify({
-                type: 'cloud:task-failed',
-                payload: { agentSlug, error: err.message }
-            }));
+            wsSend(ctx.ws, 'cloud:task-failed', { agentSlug, error: err.message });
         }
     },
 };

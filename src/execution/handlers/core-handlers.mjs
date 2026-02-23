@@ -158,8 +158,15 @@ export class CoreHandlers {
                 console: console,
                 require: require,
                 process: {
-                    env: { ...process.env },
-                    cwd: process.cwd
+                    env: {
+                        NODE_ENV: process.env.NODE_ENV,
+                        HOME: process.env.HOME,
+                        PATH: process.env.PATH,
+                        LANG: process.env.LANG,
+                    },
+                    cwd: process.cwd,
+                    platform: process.platform,
+                    arch: process.arch,
                 },
                 Buffer: Buffer,
                 setTimeout: setTimeout,

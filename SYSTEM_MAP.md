@@ -33,3 +33,41 @@ Last Updated: 2026-02-20T08:00:00.000Z
 ## 4. State Snapshots
 - [2026-02-20T07:25:00.000Z] Initial State Created (bootstrapped from REFACTOR_DESIGN.md)
 - [2026-02-20T08:00:00.000Z] Refactored AssistantFacade, removed dead ai-assistant.mjs
+- [2026-02-21T09:50:00.000Z] Added Task Checkpoint System for crash recovery (CheckpointStore, TaskCheckpointManager)
+
+## 5. Task Checkpoint System (Crash Recovery)
+The task checkpoint system enables recovery of running tasks if the server crashes.
+
+### Components
+| Component | File | Description |
+|-----------|------|-------------|
+| CheckpointStore | `src/core/checkpoint-store.mjs` | File-based persistence with WAL for atomicity |
+| TaskCheckpointManager | `src/core/task-checkpoint-manager.mjs` | Central coordinator for checkpointing and recovery |
+
+### Checkpoint Types
+| Type | Recovery Strategy | Auto-Recovery |
+|------|------------------|---------------|
+| `background` | Restart task with recovery context | Yes |
+| `agent-loop` | Restart with briefing packet | Yes |
+| `recurring` | Restart with recovery context | Yes |
+| `request` | Pending user action | No (requires confirmation) |
+
+### Storage Layout
+```
+.ai-man/checkpoints/
+  task-{id}.checkpoint.json     # Individual task checkpoints
+  wal.json                       # Write-ahead log for atomicity
+  recovery-manifest.json         # Index of active checkpoints
+```
+
+### Configuration (Environment Variables)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OBOTO_CHECKPOINT_ENABLED` | `true` | Enable/disable checkpointing |
+| `OBOTO_CHECKPOINT_INTERVAL` | `10000` | Checkpoint interval in milliseconds |
+
+### Integration Points
+- **agent-loop.mjs**: Checkpoints every 3 turns during request processing
+- **main.mjs**: Initializes TaskCheckpointManager on startup
+- **web-server.mjs**: Broadcasts recovery events to UI
+- **ServiceRegistry**: Registered as `taskCheckpointManager`

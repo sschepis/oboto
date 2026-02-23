@@ -1,4 +1,5 @@
 import { consoleStyler } from '../../ui/console-styler.mjs';
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: list-conversations, create-conversation, switch-conversation, delete-conversation
@@ -8,10 +9,10 @@ async function handleListConversations(data, ctx) {
     const { ws, assistant } = ctx;
     try {
         const conversations = await assistant.listConversations();
-        ws.send(JSON.stringify({ type: 'conversation-list', payload: conversations }));
+        wsSend(ws, 'conversation-list', conversations);
     } catch (err) {
         consoleStyler.log('error', `Failed to list conversations: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to list conversations: ${err.message}` }));
+        wsSendError(ctx.ws, `Failed to list conversations: ${err.message}`);
     }
 }
 
@@ -20,7 +21,7 @@ async function handleCreateConversation(data, ctx) {
     try {
         const { name, autoSwitch } = data.payload;
         const result = await assistant.createConversation(name);
-        ws.send(JSON.stringify({ type: 'conversation-created', payload: result }));
+        wsSend(ws, 'conversation-created', result);
         if (result.created) {
             // Auto-switch to new conversation (default behavior)
             if (autoSwitch !== false) {
@@ -38,7 +39,7 @@ async function handleCreateConversation(data, ctx) {
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to create conversation: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to create conversation: ${err.message}` }));
+        wsSendError(ws, `Failed to create conversation: ${err.message}`);
     }
 }
 
@@ -56,11 +57,11 @@ async function handleSwitchConversation(data, ctx) {
             broadcast('conversation-list', conversations);
         } else {
             // If switch failed, notify the requesting client
-            ws.send(JSON.stringify({ type: 'error', payload: result.error || `Failed to switch to conversation "${name}"` }));
+            wsSendError(ws, result.error || `Failed to switch to conversation "${name}"`);
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to switch conversation: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to switch conversation: ${err.message}` }));
+        wsSendError(ws, `Failed to switch conversation: ${err.message}`);
     }
 }
 
@@ -69,14 +70,14 @@ async function handleDeleteConversation(data, ctx) {
     try {
         const { name } = data.payload;
         const result = await assistant.deleteConversation(name);
-        ws.send(JSON.stringify({ type: 'conversation-deleted', payload: result }));
+        wsSend(ws, 'conversation-deleted', result);
         if (result.deleted) {
             const conversations = await assistant.listConversations();
             broadcast('conversation-list', conversations);
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to delete conversation: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to delete conversation: ${err.message}` }));
+        wsSendError(ws, `Failed to delete conversation: ${err.message}`);
     }
 }
 
@@ -86,15 +87,15 @@ async function handleRenameConversation(data, ctx) {
         const { oldName, newName } = data.payload;
         const result = await assistant.renameConversation(oldName, newName);
         if (result.success) {
-            ws.send(JSON.stringify({ type: 'conversation-renamed', payload: { oldName: result.oldName, newName: result.newName } }));
+            wsSend(ws, 'conversation-renamed', { oldName: result.oldName, newName: result.newName });
             const conversations = await assistant.listConversations();
             broadcast('conversation-list', conversations);
         } else {
-            ws.send(JSON.stringify({ type: 'error', payload: { message: result.error } }));
+            wsSend(ws, 'error', { message: result.error });
         }
     } catch (err) {
         consoleStyler.log('error', `Failed to rename conversation: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: { message: err.message } }));
+        wsSend(ws, 'error', { message: err.message });
     }
 }
 

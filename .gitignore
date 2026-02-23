@@ -44,3 +44,9 @@ public/
 analysis_result.json
 analysis_result_v2.json
 line_count.txt
+
+# Runtime-generated data
+facts.json
+
+# Browser profile data
+puppeteer_data/

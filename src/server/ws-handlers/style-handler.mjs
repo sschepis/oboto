@@ -1,3 +1,5 @@
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
+
 /**
  * Handles: set-ui-theme, set-ui-tokens, reset-ui-style, get-ui-style-state
  */
@@ -9,7 +11,7 @@ async function handleSetUITheme(data, ctx) {
         try {
             await uiStyleHandlers.setUITheme(data.payload);
         } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: { message: `Theme error: ${err.message}` } }));
+            wsSend(ws, 'error', { message: `Theme error: ${err.message}` });
         }
     }
 }
@@ -21,7 +23,7 @@ async function handleSetUITokens(data, ctx) {
         try {
             await uiStyleHandlers.setUITokens(data.payload);
         } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: { message: `Token error: ${err.message}` } }));
+            wsSend(ws, 'error', { message: `Token error: ${err.message}` });
         }
     }
 }
@@ -33,7 +35,7 @@ async function handleResetUIStyle(data, ctx) {
         try {
             await uiStyleHandlers.resetUIStyle();
         } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: { message: `Reset error: ${err.message}` } }));
+            wsSend(ws, 'error', { message: `Reset error: ${err.message}` });
         }
     }
 }
@@ -43,7 +45,7 @@ async function handleGetUIStyleState(data, ctx) {
     const uiStyleHandlers = assistant.toolExecutor?.uiStyleHandlers;
     if (uiStyleHandlers) {
         const state = await uiStyleHandlers.getUIStyleState();
-        ws.send(JSON.stringify({ type: 'ui-style-state', payload: JSON.parse(state) }));
+        wsSend(ws, 'ui-style-state', JSON.parse(state));
     }
 }
 

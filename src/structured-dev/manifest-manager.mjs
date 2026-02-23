@@ -1,10 +1,13 @@
 // Manifest Manager
 // Handles the creation, reading, and updating of the SYSTEM_MAP.md file
 // This file serves as the "Living Manifest" for the structured development process
+// Refactored to extend BaseManifest (see docs/DUPLICATE_CODE_ANALYSIS.md — DUP-2)
 
 import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { BaseManifest } from '../lib/base-manifest.mjs';
+import { extractColumns } from '../lib/markdown-utils.mjs';
 
 const CURSOR_RULES_TEMPLATE = `# Structured Development Rules
 
@@ -25,16 +28,9 @@ READ \`SYSTEM_MAP.md\` BEFORE any coding request.
 \`read_manifest\`, \`submit_technical_design\`, \`approve_design\`, \`lock_interfaces\`, \`submit_critique\`
 `;
 
-export class ManifestManager {
+export class ManifestManager extends BaseManifest {
     constructor(workingDir) {
-        this.workingDir = workingDir;
-        this.manifestPath = path.join(workingDir, 'SYSTEM_MAP.md');
-        this.snapshotsDir = path.join(workingDir, '.snapshots');
-    }
-
-    // Check if the manifest exists
-    hasManifest() {
-        return fs.existsSync(this.manifestPath);
+        super(workingDir, 'SYSTEM_MAP.md', '.snapshots');
     }
 
     // Initialize the manifest with a template
@@ -69,8 +65,6 @@ Last Updated: ${new Date().toISOString()}
 - [${new Date().toISOString()}] Initial State Created
 `;
 
-        const cursorRulesTemplate = CURSOR_RULES_TEMPLATE;
-
         // Create example hooks file
         const hooksExample = {
             "on_lock": "echo 'Feature locked!'",
@@ -83,15 +77,11 @@ Last Updated: ${new Date().toISOString()}
         await fs.promises.writeFile(path.join(hooksDir, 'hooks.json.example'), JSON.stringify(hooksExample, null, 2), 'utf8');
 
         try {
-            await fs.promises.writeFile(this.manifestPath, template, 'utf8');
+            await this.writeManifest(template);
             consoleStyler.log('system', 'Created SYSTEM_MAP.md');
             
             // Also create .cursorrules
-            const cursorRulesPath = path.join(this.workingDir, '.cursorrules');
-            if (!fs.existsSync(cursorRulesPath)) {
-                await fs.promises.writeFile(cursorRulesPath, cursorRulesTemplate, 'utf8');
-                consoleStyler.log('system', 'Created .cursorrules');
-            }
+            await this._writeCursorRules();
 
             await this.createSnapshot('Initial Init');
 
@@ -159,8 +149,6 @@ ${depGraph.trimEnd()}
 - [${new Date().toISOString()}] Initial State Created (bootstrapped from design document)
 `;
 
-        const cursorRulesTemplate = CURSOR_RULES_TEMPLATE;
-
         // Create .ai-man directory and hooks example
         const hooksExample = {
             "on_lock": "echo 'Feature locked!'",
@@ -173,15 +161,11 @@ ${depGraph.trimEnd()}
         await fs.promises.writeFile(path.join(hooksDir, 'hooks.json.example'), JSON.stringify(hooksExample, null, 2), 'utf8');
 
         try {
-            await fs.promises.writeFile(this.manifestPath, template, 'utf8');
+            await this.writeManifest(template);
             consoleStyler.log('system', 'Created SYSTEM_MAP.md (bootstrapped from design document)');
 
             // Also create .cursorrules
-            const cursorRulesPath = path.join(this.workingDir, '.cursorrules');
-            if (!fs.existsSync(cursorRulesPath)) {
-                await fs.promises.writeFile(cursorRulesPath, cursorRulesTemplate, 'utf8');
-                consoleStyler.log('system', 'Created .cursorrules');
-            }
+            await this._writeCursorRules();
 
             await this.createSnapshot('Initial Init (bootstrapped)');
 
@@ -189,6 +173,15 @@ ${depGraph.trimEnd()}
         } catch (error) {
             consoleStyler.log('error', `Failed to create manifest: ${error.message}`);
             throw error;
+        }
+    }
+
+    // Write .cursorrules file if it doesn't exist
+    async _writeCursorRules() {
+        const cursorRulesPath = path.join(this.workingDir, '.cursorrules');
+        if (!fs.existsSync(cursorRulesPath)) {
+            await fs.promises.writeFile(cursorRulesPath, CURSOR_RULES_TEMPLATE, 'utf8');
+            consoleStyler.log('system', 'Created .cursorrules');
         }
     }
 
@@ -215,7 +208,7 @@ ${depGraph.trimEnd()}
         for (let i = startIndex; i < rows.length; i++) {
             const row = rows[i];
             if (!row.startsWith('|')) continue;
-            const cols = row.split('|').map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+            const cols = extractColumns(row);
             if (cols.length > 0) {
                 while (cols.length < 3) cols.push('-');
                 invariantMap.set(cols[0], cols);
@@ -233,53 +226,6 @@ ${depGraph.trimEnd()}
 
         await this.updateSection('1. Global Invariants', newTable);
         return `Invariant ${id} added/updated.`;
-    }
-
-    // Read the manifest content
-    async readManifest() {
-        if (!this.hasManifest()) {
-            return null;
-        }
-
-        try {
-            return await fs.promises.readFile(this.manifestPath, 'utf8');
-        } catch (error) {
-            consoleStyler.log('error', `Failed to read manifest: ${error.message}`);
-            throw error;
-        }
-    }
-
-    // Update a specific section of the manifest
-    async updateSection(sectionName, newContent) {
-        if (!this.hasManifest()) {
-            throw new Error("Manifest not found. Please initialize structured development first.");
-        }
-
-        // Create snapshot before update
-        await this.createSnapshot(`Pre-update: ${sectionName}`);
-
-        let content = await this.readManifest();
-        const sectionRegex = new RegExp(`## ${sectionName}[\\s\\S]*?(?=## |$)`, 'g');
-        
-        if (!sectionRegex.test(content)) {
-            // Section doesn't exist, append it
-            content += `\n\n## ${sectionName}\n${newContent}`;
-        } else {
-            // Replace existing section
-            content = content.replace(sectionRegex, `## ${sectionName}\n${newContent}\n`);
-        }
-
-        // Update timestamp
-        content = content.replace(/Last Updated: .*/, `Last Updated: ${new Date().toISOString()}`);
-
-        try {
-            await fs.promises.writeFile(this.manifestPath, content, 'utf8');
-            consoleStyler.log('system', `Updated section: ${sectionName}`);
-            return `Section '${sectionName}' updated successfully.`;
-        } catch (error) {
-            consoleStyler.log('error', `Failed to update manifest: ${error.message}`);
-            throw error;
-        }
     }
 
     // Add a feature to the registry (Robust Parsing Implementation)
@@ -308,7 +254,7 @@ ${depGraph.trimEnd()}
             const row = rows[i];
             if (!row.startsWith('|')) continue;
             
-            const cols = row.split('|').map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+            const cols = extractColumns(row);
             if (cols.length > 0) {
                 // Handle legacy rows by padding
                 while (cols.length < 7) cols.push('-');
@@ -330,71 +276,26 @@ ${depGraph.trimEnd()}
         return `Feature ${id} added/updated in registry.`;
     }
 
-    // Create a snapshot of the current manifest
-    async createSnapshot(description) {
-        if (!this.hasManifest()) return;
-
-        try {
-            if (!fs.existsSync(this.snapshotsDir)) {
-                await fs.promises.mkdir(this.snapshotsDir, { recursive: true });
-            }
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const snapshotFilename = `SYSTEM_MAP.${timestamp}.md`;
-            const snapshotPath = path.join(this.snapshotsDir, snapshotFilename);
-            
-            await fs.promises.copyFile(this.manifestPath, snapshotPath);
-            
-            // Append to State Snapshots section (without triggering another snapshot)
-            // We read file directly to avoid loop
-            let content = await fs.promises.readFile(this.manifestPath, 'utf8');
-            const snapshotLog = `- [${new Date().toISOString()}] Snapshot: ${description} (${snapshotFilename})`;
-            
-            const snapshotsRegex = /## 4. State Snapshots([\s\S]*?)$/;
-            if (snapshotsRegex.test(content)) {
-                content = content.replace(snapshotsRegex, (match, p1) => {
-                     return `## 4. State Snapshots${p1.trimEnd()}\n${snapshotLog}\n`;
-                });
-            }
-             await fs.promises.writeFile(this.manifestPath, content, 'utf8');
-
-        } catch (error) {
-            consoleStyler.log('error', `Failed to create snapshot: ${error.message}`);
+    // Override _appendSnapshotLog for SYSTEM_MAP's specific section header
+    async _appendSnapshotLog(description, snapshotFilename) {
+        let content = await fs.promises.readFile(this.manifestPath, 'utf8');
+        const snapshotLog = `- [${new Date().toISOString()}] Snapshot: ${description} (${snapshotFilename})`;
+        
+        const snapshotsRegex = /## 4. State Snapshots([\s\S]*?)$/;
+        if (snapshotsRegex.test(content)) {
+            content = content.replace(snapshotsRegex, (match, p1) => {
+                 return `## 4. State Snapshots${p1.trimEnd()}\n${snapshotLog}\n`;
+            });
         }
+        await fs.promises.writeFile(this.manifestPath, content, 'utf8');
     }
 
-    // Restore a snapshot
+    // Override restoreSnapshot to log via consoleStyler
     async restoreSnapshot(snapshotId) {
-        // If snapshotId is not full path, look in dir
-        let targetPath = snapshotId;
-        if (!path.isAbsolute(snapshotId) && !snapshotId.includes('/')) {
-             targetPath = path.join(this.snapshotsDir, snapshotId);
+        const result = await super.restoreSnapshot(snapshotId);
+        if (result.success) {
+            consoleStyler.log('system', result.message);
         }
-
-        if (!fs.existsSync(targetPath)) {
-             // Try searching for file containing timestamp if partial ID provided
-             const files = await fs.promises.readdir(this.snapshotsDir);
-             const match = files.find(f => f.includes(snapshotId));
-             if (match) {
-                 targetPath = path.join(this.snapshotsDir, match);
-             } else {
-                 return `Error: Snapshot ${snapshotId} not found.`;
-             }
-        }
-
-        try {
-            await fs.promises.copyFile(targetPath, this.manifestPath);
-            consoleStyler.log('system', `Restored manifest from ${path.basename(targetPath)}`);
-            return `System restored to state from ${path.basename(targetPath)}`;
-        } catch (error) {
-            return `Error restoring snapshot: ${error.message}`;
-        }
-    }
-
-    // List available snapshots
-    async listSnapshots() {
-        if (!fs.existsSync(this.snapshotsDir)) return [];
-        const files = await fs.promises.readdir(this.snapshotsDir);
-        return files.filter(f => f.endsWith('.md')).sort().reverse();
+        return result;
     }
 }

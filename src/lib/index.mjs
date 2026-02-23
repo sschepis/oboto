@@ -1,4 +1,4 @@
-import { AssistantFacade as MiniAIAssistant } from '../core/assistant-facade.mjs';
+import { EventicFacade as MiniAIAssistant } from '../core/eventic-facade.mjs';
 import { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 import { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
 import { consoleStyler } from '../ui/console-styler.mjs';
@@ -363,7 +363,7 @@ export class AiMan {
 // Re-export adapters and core types for convenience
 export { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 export { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
-export { AssistantFacade, AssistantFacade as MiniAIAssistant } from '../core/assistant-facade.mjs';
+export { EventicFacade as AssistantFacade, EventicFacade as MiniAIAssistant } from '../core/eventic-facade.mjs';
 export { config } from '../config.mjs';
 export { consoleStyler } from '../ui/console-styler.mjs';
 export { AiManEventBus } from './event-bus.mjs';
@@ -381,6 +381,11 @@ export { CancellationError } from './cancellation-error.mjs';
 export { DesignResult } from './design-result.mjs';
 export { WorkflowService } from '../services/workflow-service.mjs';
 export { MemoryAdapter } from './adapters/memory-adapter.mjs';
+
+// Task checkpoint system (crash recovery)
+export { TaskManager } from '../core/task-manager.mjs';
+export { TaskCheckpointManager } from '../core/task-checkpoint-manager.mjs';
+export { CheckpointStore } from '../core/checkpoint-store.mjs';
 
 /**
  * Alias for AiMan, emphasizing the robotic developer persona.

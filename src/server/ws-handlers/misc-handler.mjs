@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { convertHistoryToUIMessages, parseJestJsonOutput } from '../ws-helpers.mjs';
+import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: get-history, delete-message, run-tests, code-completion-request, tool-confirmation-response
@@ -11,10 +12,10 @@ async function handleGetHistory(data, ctx) {
     try {
         const history = assistant.historyManager.getHistory();
         const uiMessages = convertHistoryToUIMessages(history);
-        ws.send(JSON.stringify({ type: 'history-loaded', payload: uiMessages }));
+        wsSend(ws, 'history-loaded', uiMessages);
     } catch (err) {
         consoleStyler.log('error', `Failed to get history: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: err.message }));
+        wsSendError(ws, err.message);
     }
 }
 
@@ -25,7 +26,6 @@ async function handleDeleteMessage(data, ctx) {
         const deleted = assistant.historyManager.deleteMessage(id);
         if (deleted) {
             await assistant.saveConversation();
-            // Broadcast updated history to all clients
             const history = assistant.historyManager.getHistory();
             const uiMessages = convertHistoryToUIMessages(history);
             broadcast('history-loaded', uiMessages);
@@ -44,19 +44,14 @@ async function handleRunTests(data, ctx) {
 
         consoleStyler.log('system', `Running tests: ${testCommand} in ${cwd}`);
 
-        // Send a status message so the UI knows tests are running
-        ws.send(JSON.stringify({
-            type: 'message',
-            payload: {
-                id: `test-run-${Date.now()}`,
-                role: 'ai',
-                type: 'text',
-                content: `🧪 Running tests: \`${testCommand}\`…`,
-                timestamp: new Date().toLocaleTimeString()
-            }
-        }));
+        wsSend(ws, 'message', {
+            id: `test-run-${Date.now()}`,
+            role: 'ai',
+            type: 'text',
+            content: `🧪 Running tests: \`${testCommand}\`…`,
+            timestamp: new Date().toLocaleTimeString()
+        });
 
-        // Split command for execFile
         const parts = testCommand.split(/\s+/);
         const bin = parts[0];
         const args = parts.slice(1);
@@ -66,11 +61,9 @@ async function handleRunTests(data, ctx) {
             let testResults;
 
             try {
-                // Jest --json prints JSON to stdout
                 const jestOutput = JSON.parse(stdout);
                 testResults = parseJestJsonOutput(jestOutput, testCommand, exitCode, stderr || stdout);
             } catch {
-                // Fallback: couldn't parse JSON — send raw output
                 testResults = {
                     suites: [],
                     totalPassed: 0,
@@ -83,14 +76,11 @@ async function handleRunTests(data, ctx) {
                 };
             }
 
-            ws.send(JSON.stringify({
-                type: 'test-results',
-                payload: testResults
-            }));
+            wsSend(ws, 'test-results', testResults);
         });
     } catch (err) {
         consoleStyler.log('error', `Failed to run tests: ${err.message}`);
-        ws.send(JSON.stringify({ type: 'error', payload: `Failed to run tests: ${err.message}` }));
+        wsSendError(ws, `Failed to run tests: ${err.message}`);
     }
 }
 
@@ -98,23 +88,13 @@ async function handleCodeCompletionRequest(data, ctx) {
     const { ws, assistant } = ctx;
     const { id, payload } = data;
     try {
-        // Delegate to assistant
-        // If method doesn't exist yet, return null
         const completion = assistant.generateCodeCompletion 
             ? await assistant.generateCodeCompletion(payload.content, payload.cursorOffset, payload.filePath)
             : null;
             
-        ws.send(JSON.stringify({
-            type: 'code-completion-response',
-            id,
-            payload: { completion }
-        }));
+        wsSend(ws, 'code-completion-response', { completion });
     } catch (e) {
-         ws.send(JSON.stringify({
-            type: 'code-completion-response',
-            id,
-            payload: { completion: null }
-        }));
+        wsSend(ws, 'code-completion-response', { completion: null });
     }
 }
 

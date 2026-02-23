@@ -1,141 +1,78 @@
-import { consoleStyler } from '../../ui/console-styler.mjs';
+import { wsSend, wsHandler } from '../../lib/ws-utils.mjs';
 
 /**
  * Handles: get-skills, search-clawhub, install-clawhub-skill, install-npm-skill, uninstall-skill
  */
 
-function getSkillsManager(ctx) {
-    const sm = ctx.assistant?.toolExecutor?.skillsManager;
-    if (!sm) {
-        throw new Error('Skills manager not available');
+const SK = 'toolExecutor.skillsManager';
+const SK_LABEL = 'Skills manager';
+
+const handleGetSkills = wsHandler(async (data, ctx, svc) => {
+    await svc.ensureInitialized();
+    const skills = svc.listSkills();
+    const clawHubAvailable = await svc.isClawHubAvailable();
+    wsSend(ctx.ws, 'skills-list', { skills, clawHubAvailable });
+}, { require: SK, requireLabel: SK_LABEL, errorType: 'skill-error', errorPrefix: 'Failed to get skills' });
+
+const handleSearchClawHub = wsHandler(async (data, ctx, svc) => {
+    const query = data.payload?.query || '';
+    if (!query.trim()) {
+        wsSend(ctx.ws, 'clawhub-search-results', []);
+        return;
     }
-    return sm;
-}
+    const results = await svc.searchClawHub(query);
+    wsSend(ctx.ws, 'clawhub-search-results', results);
+}, { require: SK, requireLabel: SK_LABEL, errorType: 'skill-error', errorPrefix: 'ClawHub search failed' });
 
-async function handleGetSkills(data, ctx) {
-    const { ws } = ctx;
-    try {
-        const sm = getSkillsManager(ctx);
-        await sm.ensureInitialized();
-        const skills = sm.listSkills();
-        const clawHubAvailable = await sm.isClawHubAvailable();
-        ws.send(JSON.stringify({
-            type: 'skills-list',
-            payload: { skills, clawHubAvailable }
-        }));
-    } catch (error) {
-        consoleStyler.log('error', `Failed to get skills: ${error.message}`);
-        ws.send(JSON.stringify({ type: 'skill-error', payload: { message: error.message } }));
+const handleInstallClawHub = wsHandler(async (data, ctx, svc) => {
+    const { slug, version } = data.payload || {};
+    if (!slug) {
+        wsSend(ctx.ws, 'skill-error', { message: 'No skill slug provided' });
+        return;
     }
-}
 
-async function handleSearchClawHub(data, ctx) {
-    const { ws } = ctx;
-    try {
-        const sm = getSkillsManager(ctx);
-        const query = data.payload?.query || '';
-        if (!query.trim()) {
-            ws.send(JSON.stringify({ type: 'clawhub-search-results', payload: [] }));
-            return;
-        }
-        const results = await sm.searchClawHub(query);
-        ws.send(JSON.stringify({ type: 'clawhub-search-results', payload: results }));
-    } catch (error) {
-        consoleStyler.log('error', `ClawHub search failed: ${error.message}`);
-        ws.send(JSON.stringify({ type: 'skill-error', payload: { message: error.message } }));
+    wsSend(ctx.ws, 'skill-install-progress', { status: 'installing', message: `Installing '${slug}' from ClawHub...` });
+
+    const result = await svc.installFromClawHub(slug, version);
+
+    // Broadcast updated skills list to all clients
+    const skills = svc.listSkills();
+    const clawHubAvailable = await svc.isClawHubAvailable();
+    ctx.broadcast('skills-list', { skills, clawHubAvailable });
+    wsSend(ctx.ws, 'skill-installed', { name: slug, source: 'clawhub', message: result });
+}, { require: SK, requireLabel: SK_LABEL, errorType: 'skill-error', errorPrefix: 'ClawHub install failed' });
+
+const handleInstallNpm = wsHandler(async (data, ctx, svc) => {
+    const { packageName } = data.payload || {};
+    if (!packageName) {
+        wsSend(ctx.ws, 'skill-error', { message: 'No package name provided' });
+        return;
     }
-}
 
-async function handleInstallClawHub(data, ctx) {
-    const { ws, broadcast } = ctx;
-    try {
-        const sm = getSkillsManager(ctx);
-        const { slug, version } = data.payload || {};
-        if (!slug) {
-            ws.send(JSON.stringify({ type: 'skill-error', payload: { message: 'No skill slug provided' } }));
-            return;
-        }
+    wsSend(ctx.ws, 'skill-install-progress', { status: 'installing', message: `Installing npm package '${packageName}'...` });
 
-        ws.send(JSON.stringify({
-            type: 'skill-install-progress',
-            payload: { status: 'installing', message: `Installing '${slug}' from ClawHub...` }
-        }));
+    const result = await svc.installNpmGlobal(packageName);
 
-        const result = await sm.installFromClawHub(slug, version);
-        consoleStyler.log('system', result);
+    const skills = svc.listSkills();
+    const clawHubAvailable = await svc.isClawHubAvailable();
+    ctx.broadcast('skills-list', { skills, clawHubAvailable });
+    wsSend(ctx.ws, 'skill-installed', { name: packageName, source: 'npm', message: result });
+}, { require: SK, requireLabel: SK_LABEL, errorType: 'skill-error', errorPrefix: 'NPM skill install failed' });
 
-        // Broadcast updated skills list to all clients
-        const skills = sm.listSkills();
-        const clawHubAvailable = await sm.isClawHubAvailable();
-        broadcast('skills-list', { skills, clawHubAvailable });
-        ws.send(JSON.stringify({
-            type: 'skill-installed',
-            payload: { name: slug, source: 'clawhub', message: result }
-        }));
-    } catch (error) {
-        consoleStyler.log('error', `ClawHub install failed: ${error.message}`);
-        ws.send(JSON.stringify({ type: 'skill-error', payload: { message: error.message } }));
+const handleUninstallSkill = wsHandler(async (data, ctx, svc) => {
+    const { name } = data.payload || {};
+    if (!name) {
+        wsSend(ctx.ws, 'skill-error', { message: 'No skill name provided' });
+        return;
     }
-}
 
-async function handleInstallNpm(data, ctx) {
-    const { ws, broadcast } = ctx;
-    try {
-        const sm = getSkillsManager(ctx);
-        const { packageName } = data.payload || {};
-        if (!packageName) {
-            ws.send(JSON.stringify({ type: 'skill-error', payload: { message: 'No package name provided' } }));
-            return;
-        }
+    const result = await svc.uninstallSkill(name);
 
-        ws.send(JSON.stringify({
-            type: 'skill-install-progress',
-            payload: { status: 'installing', message: `Installing npm package '${packageName}'...` }
-        }));
-
-        const result = await sm.installNpmGlobal(packageName);
-        consoleStyler.log('system', result);
-
-        // Broadcast updated skills list to all clients
-        const skills = sm.listSkills();
-        const clawHubAvailable = await sm.isClawHubAvailable();
-        broadcast('skills-list', { skills, clawHubAvailable });
-        ws.send(JSON.stringify({
-            type: 'skill-installed',
-            payload: { name: packageName, source: 'npm', message: result }
-        }));
-    } catch (error) {
-        consoleStyler.log('error', `NPM skill install failed: ${error.message}`);
-        ws.send(JSON.stringify({ type: 'skill-error', payload: { message: error.message } }));
-    }
-}
-
-async function handleUninstallSkill(data, ctx) {
-    const { ws, broadcast } = ctx;
-    try {
-        const sm = getSkillsManager(ctx);
-        const { name } = data.payload || {};
-        if (!name) {
-            ws.send(JSON.stringify({ type: 'skill-error', payload: { message: 'No skill name provided' } }));
-            return;
-        }
-
-        const result = await sm.uninstallSkill(name);
-        consoleStyler.log('system', result);
-
-        // Broadcast updated skills list to all clients
-        const skills = sm.listSkills();
-        const clawHubAvailable = await sm.isClawHubAvailable();
-        broadcast('skills-list', { skills, clawHubAvailable });
-        ws.send(JSON.stringify({
-            type: 'skill-uninstalled',
-            payload: { name, message: result }
-        }));
-    } catch (error) {
-        consoleStyler.log('error', `Skill uninstall failed: ${error.message}`);
-        ws.send(JSON.stringify({ type: 'skill-error', payload: { message: error.message } }));
-    }
-}
+    const skills = svc.listSkills();
+    const clawHubAvailable = await svc.isClawHubAvailable();
+    ctx.broadcast('skills-list', { skills, clawHubAvailable });
+    wsSend(ctx.ws, 'skill-uninstalled', { name, message: result });
+}, { require: SK, requireLabel: SK_LABEL, errorType: 'skill-error', errorPrefix: 'Skill uninstall failed' });
 
 export const handlers = {
     'get-skills': handleGetSkills,

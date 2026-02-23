@@ -46,8 +46,8 @@ export function convertHistoryToUIMessages(history) {
                 id: baseId,
                 role: 'user',
                 type: 'text',
-                content: msg.content || '',
-                timestamp: ''
+                content: processContentForUI(msg.content || ''),
+                timestamp: msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''
             });
             i++;
         } else if (msg.role === 'assistant') {
@@ -110,8 +110,8 @@ export function convertHistoryToUIMessages(history) {
                 id: baseId,
                 role: 'ai',
                 type: 'text',
-                content: finalContent,
-                timestamp: '',
+                content: processContentForUI(finalContent),
+                timestamp: history[i-1]?.timestamp ? new Date(history[i-1].timestamp).toLocaleString() : '',
             };
             
             if (collectedToolCalls.length > 0) {
@@ -126,6 +126,23 @@ export function convertHistoryToUIMessages(history) {
     }
     
     return uiMessages;
+}
+
+/**
+ * Process text content for UI display.
+ * Converts special markers like [attached: filename] to Markdown images.
+ * @param {string} content
+ * @returns {string}
+ */
+export function processContentForUI(content) {
+    if (!content) return '';
+    
+    // Convert [attached: filename] to markdown image
+    // Assume images are served from /generated-images/ if it's a local filename
+    return content.replace(/\[attached:\s*(.*?)\]/g, (match, filename) => {
+        const url = filename.match(/^https?:\/\//) ? filename : `/generated-images/${filename.trim()}`;
+        return `\n\n![${filename}](${url})\n\n`;
+    });
 }
 
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'target', '.snapshots', '__pycache__', '.cache']);

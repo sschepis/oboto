@@ -1,71 +1,37 @@
+import { wsSend, wsSendError, wsHandler } from '../../lib/ws-utils.mjs';
+
 /**
  * Handles: start-workflow, submit-interaction, cancel-workflow,
  *          get-workflow-status, list-workflows
  */
 
-async function handleStartWorkflow(data, ctx) {
-    const { ws, assistant } = ctx;
-    const workflowService = assistant.toolExecutor?.workflowService;
-    if (workflowService) {
-        try {
-            const { surfaceId, flowScript, flowName } = data.payload;
-            const result = await workflowService.startWorkflow(surfaceId, flowScript, flowName);
-            ws.send(JSON.stringify({ type: 'workflow-started', payload: result }));
-        } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to start workflow: ${err.message}` }));
-        }
-    } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Workflow service not available' }));
-    }
-}
+const handleStartWorkflow = wsHandler(async (data, ctx, svc) => {
+    const { ws } = ctx;
+    const { surfaceId, flowScript, flowName } = data.payload;
+    const result = await svc.startWorkflow(surfaceId, flowScript, flowName);
+    wsSend(ws, 'workflow-started', result);
+}, { require: 'toolExecutor.workflowService', requireLabel: 'Workflow service', errorPrefix: 'Failed to start workflow' });
 
-async function handleSubmitInteraction(data, ctx) {
-    const { ws, assistant } = ctx;
-    const workflowService = assistant.toolExecutor?.workflowService;
-    if (workflowService) {
-        try {
-            const { workflowId, interactionId, data: interactionData } = data.payload;
-            const result = await workflowService.submitInteraction(workflowId, interactionId, interactionData);
-            ws.send(JSON.stringify({ type: 'workflow-interaction-submitted', payload: result }));
-        } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to submit interaction: ${err.message}` }));
-        }
-    } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Workflow service not available' }));
-    }
-}
+const handleSubmitInteraction = wsHandler(async (data, ctx, svc) => {
+    const { ws } = ctx;
+    const { workflowId, interactionId, data: interactionData } = data.payload;
+    const result = await svc.submitInteraction(workflowId, interactionId, interactionData);
+    wsSend(ws, 'workflow-interaction-submitted', result);
+}, { require: 'toolExecutor.workflowService', requireLabel: 'Workflow service', errorPrefix: 'Failed to submit interaction' });
 
-async function handleCancelWorkflow(data, ctx) {
-    const { ws, assistant } = ctx;
-    const workflowService = assistant.toolExecutor?.workflowService;
-    if (workflowService) {
-        try {
-            const { workflowId } = data.payload;
-            const result = await workflowService.cancelWorkflow(workflowId);
-            ws.send(JSON.stringify({ type: 'workflow-cancelled', payload: result }));
-        } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to cancel workflow: ${err.message}` }));
-        }
-    } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Workflow service not available' }));
-    }
-}
+const handleCancelWorkflow = wsHandler(async (data, ctx, svc) => {
+    const { ws } = ctx;
+    const { workflowId } = data.payload;
+    const result = await svc.cancelWorkflow(workflowId);
+    wsSend(ws, 'workflow-cancelled', result);
+}, { require: 'toolExecutor.workflowService', requireLabel: 'Workflow service', errorPrefix: 'Failed to cancel workflow' });
 
-async function handleGetWorkflowStatus(data, ctx) {
-    const { ws, assistant } = ctx;
-    const workflowService = assistant.toolExecutor?.workflowService;
-    if (workflowService) {
-        try {
-            const { workflowId } = data.payload;
-            const status = await workflowService.getWorkflowStatus(workflowId);
-            ws.send(JSON.stringify({ type: 'workflow-status', payload: status }));
-        } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to get workflow status: ${err.message}` }));
-        }
-    } else {
-        ws.send(JSON.stringify({ type: 'error', payload: 'Workflow service not available' }));
-    }
-}
+const handleGetWorkflowStatus = wsHandler(async (data, ctx, svc) => {
+    const { ws } = ctx;
+    const { workflowId } = data.payload;
+    const status = await svc.getWorkflowStatus(workflowId);
+    wsSend(ws, 'workflow-status', status);
+}, { require: 'toolExecutor.workflowService', requireLabel: 'Workflow service', errorPrefix: 'Failed to get workflow status' });
 
 async function handleListWorkflows(data, ctx) {
     const { ws, assistant } = ctx;
@@ -73,12 +39,12 @@ async function handleListWorkflows(data, ctx) {
     if (workflowService) {
         try {
             const result = await workflowService.listWorkflows();
-            ws.send(JSON.stringify({ type: 'workflow-list', payload: result }));
+            wsSend(ws, 'workflow-list', result);
         } catch (err) {
-            ws.send(JSON.stringify({ type: 'error', payload: `Failed to list workflows: ${err.message}` }));
+            wsSendError(ws, `Failed to list workflows: ${err.message}`);
         }
     } else {
-        ws.send(JSON.stringify({ type: 'workflow-list', payload: [] }));
+        wsSend(ws, 'workflow-list', []);
     }
 }
 

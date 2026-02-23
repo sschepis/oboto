@@ -2,6 +2,7 @@
 // Handles persistent workspace data for complex multi-step tasks
 
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { readJsonFileSync, writeJsonFileSync } from '../lib/json-file-utils.mjs';
 
 export class WorkspaceManager {
     constructor() {
@@ -177,13 +178,11 @@ export class WorkspaceManager {
         }
 
         try {
-            const fs = await import('fs');
-            const data = {
+            writeJsonFileSync(filePath, {
                 timestamp: new Date().toISOString(),
                 workspace: this.workspace,
                 workspaceActive: this.workspaceActive
-            };
-            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+            });
             return true;
         } catch (error) {
             consoleStyler.log('error', `Failed to save workspace: ${error.message}`);
@@ -194,12 +193,8 @@ export class WorkspaceManager {
     // Load workspace from a file
     async load(filePath) {
         try {
-            const fs = await import('fs');
-            if (!fs.existsSync(filePath)) {
-                return false;
-            }
-            
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const data = readJsonFileSync(filePath);
+            if (!data) return false;
             
             if (data.workspace) {
                 this.workspace = data.workspace;

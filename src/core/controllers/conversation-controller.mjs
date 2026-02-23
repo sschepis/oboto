@@ -52,10 +52,6 @@ export class ConversationController {
             this.assistant.refreshServices(); // Sync services with new history manager
             await this.assistant.updateSystemPrompt();
 
-            await this.assistant.symbolicContinuity.initialize(
-                this.manager.getActiveConversationName()
-            );
-
             if (this.eventBus) {
                 this.eventBus.emit('server:history-loaded', this.assistant.historyManager.getHistory());
                 this.eventBus.emit('server:conversation-switched', {

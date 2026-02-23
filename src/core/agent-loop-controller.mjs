@@ -24,7 +24,7 @@ export class AgentLoopController {
      * @param {object} deps
      * @param {import('./scheduler-service.mjs').SchedulerService} deps.schedulerService — for reading active schedules (context only)
      * @param {import('./task-manager.mjs').TaskManager} deps.taskManager
-     * @param {import('./assistant-facade.mjs').AssistantFacade} deps.assistant  — the *foreground* assistant (read-only for context)
+     * @param {import('./eventic-facade.mjs').EventicFacade} deps.assistant  — the *foreground* assistant (read-only for context)
      * @param {AiManEventBus} deps.eventBus
      * @param {Function} deps.aiAssistantClass — constructor for spawning background tasks
      * @param {object} [opts]
@@ -106,7 +106,7 @@ export class AgentLoopController {
             role: 'ai',
             type: 'text',
             content: agentMessage,
-            timestamp: new Date().toLocaleTimeString(),
+            timestamp: new Date().toLocaleString(),
             isAgentLoop: true,
             invocationNumber: task.metadata?.invocationNumber || null
         });
@@ -142,7 +142,7 @@ export class AgentLoopController {
             questionId,
             question,
             taskId,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: new Date().toLocaleString()
         });
     }
 
