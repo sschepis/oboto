@@ -50,7 +50,8 @@ function App() {
     regenerateFromAI, activityLog, allLogs, logPanelOpen, setLogPanelOpen, clearAllLogs, 
     isConnected, openClawStatus, configureOpenClaw, deployOpenClaw, confirmationRequest, 
     respondToConfirmation, selectedModel, setSelectedModel, conversations, activeConversation, 
-    createConversation, switchConversation, deleteConversation, renameConversation 
+    createConversation, switchConversation, deleteConversation, renameConversation, clearConversation,
+    agenticProviders, activeAgenticProvider, switchAgenticProvider,
   } = useChat();
 
   const { 
@@ -246,6 +247,9 @@ function App() {
           onUninstallSkill: skills.uninstallSkill,
           onClearError: skills.clearError,
         }}
+        agenticProviders={agenticProviders}
+        activeAgenticProvider={activeAgenticProvider}
+        onSwitchAgenticProvider={switchAgenticProvider}
       />
 
       <DirectoryPicker
@@ -361,6 +365,7 @@ function App() {
             onSwitchConversation={switchConversation}
             onRenameConversation={renameConversation}
             onDeleteConversation={deleteConversation}
+            onClearConversation={clearConversation}
           />
 
           <div className="flex-1 flex min-h-0 min-w-0 relative">

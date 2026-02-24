@@ -445,6 +445,20 @@ class WSService {
     }
   }
 
+  clearConversation(name?: string) {
+    this.sendMessage('clear-conversation', { name: name || null });
+  }
+
+  // --- Agentic Provider methods ---
+
+  getAgenticProviders() {
+    this.sendMessage('get-agentic-providers');
+  }
+
+  setAgenticProvider(providerId: string) {
+    this.sendMessage('set-agentic-provider', { providerId });
+  }
+
   // --- Cloud methods ---
 
   cloudLogin(email: string, password: string) {

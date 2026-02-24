@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
+import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon } from 'lucide-react';
 import type { ConversationInfo } from '../../hooks/useChat';
 
 export interface EditorTab {
@@ -34,6 +34,7 @@ interface TabBarProps {
   onSwitchConversation?: (name: string) => void;
   onRenameConversation?: (oldName: string, newName: string) => void;
   onDeleteConversation?: (name: string) => void;
+  onClearConversation?: (name: string) => void;
 }
 
 const TabBar: React.FC<TabBarProps> = ({
@@ -49,6 +50,7 @@ const TabBar: React.FC<TabBarProps> = ({
   onSwitchConversation,
   onRenameConversation,
   onDeleteConversation,
+  onClearConversation,
 }) => {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, tabId: '', isMainChat: false });
@@ -175,6 +177,16 @@ const TabBar: React.FC<TabBarProps> = ({
   const handleRenameBlur = () => {
     setEditingTabId(null);
     setEditValue('');
+  };
+
+  // Handle clear from context menu
+  const handleClearConversation = (tabId: string) => {
+    setContextMenu(prev => ({ ...prev, visible: false }));
+    const convTab = conversationTabs.find(t => t.id === tabId);
+    if (convTab && convTab.conversationName) {
+      if (!window.confirm(`Clear all messages in "${convTab.conversationName}"? This cannot be undone.`)) return;
+      onClearConversation?.(convTab.conversationName);
+    }
   };
 
   // Handle delete from context menu
@@ -452,6 +464,14 @@ const TabBar: React.FC<TabBarProps> = ({
           className="fixed z-[99999] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl shadow-black/50 py-1 min-w-[140px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer text-zinc-300 hover:bg-zinc-700/60 hover:text-zinc-100"
+            onClick={() => handleClearConversation(contextMenu.tabId)}
+          >
+            <Eraser size={12} className="text-zinc-400" />
+            Clear Conversation
+          </button>
+          <div className="border-t border-zinc-700/50 my-0.5" />
           <button
             className={`
               w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left

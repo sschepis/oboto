@@ -529,6 +529,7 @@ export class EventicFacade {
         }
         return result;
     }
+    async clearConversation(name) { return await this.conversationController.clearConversation(name); }
     async deleteConversation(name) { return await this.conversationController.deleteConversation(name); }
     async renameConversation(oldName, newName) { return await this.conversationController.renameConversation(oldName, newName); }
     

@@ -111,6 +111,32 @@ export class ConversationController {
         return result;
     }
 
+    async clearConversation(name = null) {
+        const result = await this.manager.clearConversation(name);
+
+        if (result.cleared) {
+            // If we cleared the active conversation, refresh the history manager
+            const activeName = this.manager.getActiveConversationName();
+            if (name == null || result.name === activeName) {
+                this.assistant.historyManager = this.manager.getActiveHistoryManager();
+                this.assistant.refreshServices();
+                // Also clear the AI provider's in-memory conversation history
+                this.assistant.aiProvider?.clearHistory?.();
+                // Re-inject the system prompt so the next turn has proper context
+                await this.assistant.updateSystemPrompt();
+
+                // Emit cleared history only when the active conversation was cleared
+                if (this.eventBus) {
+                    this.eventBus.emit('server:history-loaded', this.assistant.historyManager.getHistory());
+                }
+            }
+            // Note: conversation-list is broadcast by the WS handler after this returns;
+            // we intentionally do NOT emit server:conversation-list here to avoid duplicates.
+        }
+
+        return result;
+    }
+
     async reportToParent(summary, metadata = {}) {
         const childName = this.manager.getActiveConversationName();
         return await this.manager.reportToParent(childName, summary, metadata);

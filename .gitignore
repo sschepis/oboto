@@ -48,6 +48,10 @@ line_count.txt
 
 # Runtime-generated data
 facts.json
+osint-incidents.json
+telemetry.json
+fetch_telemetry.js
+regional-news.json
 
 # Browser profile data
 puppeteer_data/

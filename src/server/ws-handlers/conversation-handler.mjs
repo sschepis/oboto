@@ -81,6 +81,25 @@ async function handleDeleteConversation(data, ctx) {
     }
 }
 
+async function handleClearConversation(data, ctx) {
+    const { ws, assistant, broadcast } = ctx;
+    try {
+        const { name } = data.payload || {};
+        const result = await assistant.clearConversation(name || null);
+        wsSend(ws, 'conversation-cleared', result);
+        if (result.cleared) {
+            // history-loaded is already emitted by ConversationController via eventBus
+            // (forwarded through web-server.mjs with proper formatting).
+            // Only broadcast the conversation list to update message counts in sidebar.
+            const conversations = await assistant.listConversations();
+            broadcast('conversation-list', conversations);
+        }
+    } catch (err) {
+        consoleStyler.log('error', `Failed to clear conversation: ${err.message}`);
+        wsSendError(ws, `Failed to clear conversation: ${err.message}`);
+    }
+}
+
 async function handleRenameConversation(data, ctx) {
     const { ws, assistant, broadcast } = ctx;
     try {
@@ -103,6 +122,7 @@ export const handlers = {
     'list-conversations': handleListConversations,
     'create-conversation': handleCreateConversation,
     'switch-conversation': handleSwitchConversation,
+    'clear-conversation': handleClearConversation,
     'delete-conversation': handleDeleteConversation,
     'rename-conversation': handleRenameConversation
 };

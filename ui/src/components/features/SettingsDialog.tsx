@@ -4,10 +4,12 @@ import type { OpenClawStatus } from '../../types';
 import { PropertyGrid, type PropertyItem } from './settings/PropertyGrid';
 import { AIProviderSettings, type AIProviderConfig, type ProviderConfig, type AIProviderType } from './settings/AIProviderSettings';
 import { ModelRoutingSettings } from './settings/ModelRoutingSettings';
+import { AgenticProviderSettings } from './settings/AgenticProviderSettings';
 import SkillsSettings from './settings/SkillsSettings';
 import CloudSettings from './settings/CloudSettings';
 import type { SecretItem } from '../../hooks/useSecrets';
 import type { SkillInfo, ClawHubSkill } from '../../hooks/useSkills';
+import type { AgenticProviderInfo } from '../../hooks/useChat';
 
 interface ModelCapabilities {
   id: string;
@@ -44,6 +46,10 @@ interface SettingsDialogProps {
   onOpenSecrets?: () => void;
   /** Callback to launch the setup wizard */
   onRunSetupWizard?: () => void;
+  /** Agentic provider management props */
+  agenticProviders?: AgenticProviderInfo[];
+  activeAgenticProvider?: string | null;
+  onSwitchAgenticProvider?: (providerId: string) => void;
   /** Skills management props */
   skills?: {
     installedSkills: SkillInfo[];
@@ -63,7 +69,7 @@ interface SettingsDialogProps {
 }
 
 type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills' | 'cloud';
-type AISubTab = 'config' | 'routing';
+type AISubTab = 'config' | 'routing' | 'agentic';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ 
   isOpen, 
@@ -76,6 +82,9 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
   secrets,
   onOpenSecrets,
   onRunSetupWizard,
+  agenticProviders,
+  activeAgenticProvider,
+  onSwitchAgenticProvider,
   skills: skillsProps,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -196,6 +205,16 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                 >
                   Model Routing
                 </button>
+                <button
+                  onClick={() => setAISubTab('agentic')}
+                  className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
+                    aiSubTab === 'agentic'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  Agent Mode
+                </button>
               </div>
 
               {aiSubTab === 'config' ? (
@@ -207,12 +226,18 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   onOpenSecrets={() => { onClose(); onOpenSecrets?.(); }}
                   modelRegistry={settings.modelRegistry || {}}
                 />
-              ) : (
-                <ModelRoutingSettings 
-                  routing={settings.routing || {}} 
+              ) : aiSubTab === 'routing' ? (
+                <ModelRoutingSettings
+                  routing={settings.routing || {}}
                   modelRegistry={settings.modelRegistry || {}}
                   onChange={handleRoutingChange}
                   providers={settings.ai?.providers as Record<AIProviderType, ProviderConfig> | undefined}
+                />
+              ) : (
+                <AgenticProviderSettings
+                  providers={agenticProviders || []}
+                  activeId={activeAgenticProvider || null}
+                  onSwitch={(id) => onSwitchAgenticProvider?.(id)}
                 />
               )}
             </div>

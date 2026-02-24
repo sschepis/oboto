@@ -270,10 +270,28 @@ export class ConversationManager {
      */
     async clearConversation(name = null) {
         const target = name ? this._sanitizeName(name) : this._activeConversation;
+        if (!target) {
+            return { cleared: false, name, error: 'Invalid conversation name.' };
+        }
         const hm = this._conversations.get(target);
         if (hm) {
             hm.reset();
-            await this._saveToDisk(target);
+            // _saveToDisk skips empty histories, so force-write the cleared state
+            const history = hm.getHistory();
+            if (history.length === 0) {
+                const filePath = path.join(this._conversationsDir, `${target}.json`);
+                try {
+                    await fs.promises.writeFile(filePath, JSON.stringify({
+                        name: target,
+                        timestamp: new Date().toISOString(),
+                        history: []
+                    }, null, 2), 'utf8');
+                } catch (err) {
+                    consoleStyler.log('error', `Failed to persist cleared conversation "${target}": ${err.message}`);
+                }
+            } else {
+                await this._saveToDisk(target);
+            }
             return { cleared: true, name: target };
         }
         return { cleared: false, name: target, error: 'Conversation not found.' };

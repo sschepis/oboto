@@ -23,6 +23,13 @@ export interface ActivityLogEntry {
   timestamp: string;
 }
 
+export interface AgenticProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+}
+
 export interface ConversationInfo {
   name: string;
   isDefault: boolean;
@@ -49,6 +56,8 @@ export const useChat = () => {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [activeConversation, setActiveConversation] = useState<string>('chat');
+  const [agenticProviders, setAgenticProviders] = useState<AgenticProviderInfo[]>([]);
+  const [activeAgenticProvider, setActiveAgenticProvider] = useState<string | null>(null);
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
   const switchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef<string[]>([]);
@@ -80,6 +89,7 @@ export const useChat = () => {
         wsService.getSettings();
         wsService.getFiles();
         wsService.getOpenClawStatus();
+        wsService.getAgenticProviders();
       }),
       wsService.on('disconnected', () => setIsConnected(false)),
       wsService.on('status', (payload: unknown) => {
@@ -286,6 +296,17 @@ export const useChat = () => {
       }),
       wsService.on('conversation-renamed', () => {
         wsService.listConversations();
+      }),
+      wsService.on('conversation-cleared', (payload: unknown) => {
+        const result = payload as { cleared: boolean; name: string; error?: string };
+        if (!result.cleared) {
+          console.warn('Failed to clear conversation:', result.error);
+        }
+      }),
+      wsService.on('agentic-providers', (payload: unknown) => {
+        const p = payload as { providers: AgenticProviderInfo[]; activeId: string | null };
+        setAgenticProviders(p.providers || []);
+        setActiveAgenticProvider(p.activeId);
       }),
     ];
 
@@ -499,6 +520,15 @@ export const useChat = () => {
     wsService.renameConversation(oldName, newName);
   };
 
+  const clearConversation = (name?: string) => {
+    wsService.clearConversation(name);
+    // Messages will be cleared reactively when 'history-loaded' arrives with empty array
+  };
+
+  const switchAgenticProvider = (providerId: string) => {
+    wsService.setAgenticProvider(providerId);
+  };
+
   const refreshConversations = () => {
     wsService.listConversations();
   };
@@ -538,8 +568,13 @@ export const useChat = () => {
     activeConversation,
     createConversation,
     switchConversation,
+    clearConversation,
     deleteConversation,
     renameConversation,
     refreshConversations,
+    // Agentic provider management
+    agenticProviders,
+    activeAgenticProvider,
+    switchAgenticProvider,
   };
 };
