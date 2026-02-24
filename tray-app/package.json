@@ -20,7 +20,12 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
-      "target": ["dmg", "zip"]
+      "target": ["dmg", "zip"],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": true
     },
     "win": {
       "icon": "assets/icon.ico",
@@ -41,9 +46,12 @@
           "src/**/*",
           "ui/dist/**/*",
           "themes.json",
-          "package.json",
-          "node_modules/**/*"
+          "package.json"
         ]
+      },
+      {
+        "from": "../.backend-modules",
+        "to": "backend/node_modules"
       }
     ]
   },
