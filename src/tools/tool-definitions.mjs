@@ -18,6 +18,7 @@ export { OPENCLAW_TOOLS } from './definitions/openclaw-tools.mjs';
 export { SURFACE_TOOLS } from './definitions/surface-tools.mjs';
 export { WORKFLOW_SURFACE_TOOLS } from './definitions/workflow-surface-tools.mjs';
 export { PERSONA_TOOLS } from './definitions/persona-tools.mjs';
+export { SKILL_TOOLS } from './definitions/skill-tools.mjs';
 
 export { BROWSER_TOOLS } from './definitions/browser-tools.mjs';
 export { CHROME_EXT_TOOLS } from './definitions/chrome-ext-tools.mjs';
@@ -43,6 +44,7 @@ import { CHROME_EXT_TOOLS } from './definitions/chrome-ext-tools.mjs';
 import { SURFACE_TOOLS } from './definitions/surface-tools.mjs';
 import { WORKFLOW_SURFACE_TOOLS } from './definitions/workflow-surface-tools.mjs';
 import { PERSONA_TOOLS } from './definitions/persona-tools.mjs';
+import { SKILL_TOOLS } from './definitions/skill-tools.mjs';
 import { UI_STYLE_TOOLS } from './definitions/ui-style-tools.mjs';
 import { MATH_TOOLS } from './definitions/math-tools.mjs';
 import { IMAGE_TOOLS } from './definitions/image-tools.mjs';
@@ -68,6 +70,7 @@ export const TOOLS = [
     ...SURFACE_TOOLS,
     ...WORKFLOW_SURFACE_TOOLS,
     ...PERSONA_TOOLS,
+    ...SKILL_TOOLS,
     ...UI_STYLE_TOOLS,
     ...MATH_TOOLS,
     ...IMAGE_TOOLS,

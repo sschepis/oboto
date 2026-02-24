@@ -40,6 +40,11 @@ export class ConsciousnessProcessor {
         await this.factEngine.initialize();
     }
 
+    /** Persist any pending facts to disk (best-effort, safe to call before teardown). */
+    async persist() {
+        await this.factEngine.persist();
+    }
+
     // ── Pre-Input Processing ─────────────────────────────────────────────────
 
     /**

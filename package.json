@@ -45,9 +45,15 @@
   },
   "typesVersions": {
     "*": {
-      ".": ["src/lib/interfaces.d.ts"],
-      "lib": ["src/lib/interfaces.d.ts"],
-      "adapters": ["src/lib/interfaces.d.ts"]
+      ".": [
+        "src/lib/interfaces.d.ts"
+      ],
+      "lib": [
+        "src/lib/interfaces.d.ts"
+      ],
+      "adapters": [
+        "src/lib/interfaces.d.ts"
+      ]
     }
   },
   "files": [
@@ -83,7 +89,7 @@
     "prepublishOnly": "npm run check:deps && npm run check:exports"
   },
   "dependencies": {
-    "@aleph-ai/tinyaleph": "^1.7.2",
+    "@aleph-ai/tinyaleph": "^1.7.3",
     "@anthropic-ai/vertex-sdk": "^0.14.3",
     "@google/genai": "^1.41.0",
     "@mlc-ai/web-llm": "^0.2.81",
@@ -93,6 +99,7 @@
     "body-parser": "^2.2.2",
     "boxen": "^8.0.1",
     "chalk": "^5.5.0",
+    "cheerio": "^1.2.0",
     "chokidar": "^5.0.0",
     "cli-spinners": "^3.2.0",
     "dotenv": "^17.3.1",
@@ -119,6 +126,29 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "canvas",
+      "esbuild",
+      "node-pty",
+      "protobufjs",
+      "puppeteer",
+      "sharp",
+      "unrs-resolver"
+    ],
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@langchain/core"
+      ],
+      "allowAny": [
+        "dotenv",
+        "openai",
+        "@mendable/firecrawl-js",
+        "pdf-parse",
+        "typescript"
+      ]
+    }
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

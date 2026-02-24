@@ -45,7 +45,7 @@ import { globalActions, inlineCommands } from './constants/commands';
 function App() {
   // Core Domain Hooks
   const { 
-    messages, isWorking, queueCount, send, stop, projectStatus, setCwd, nextSteps, 
+    messages, isWorking, workspaceSwitching, queueCount, send, stop, projectStatus, setCwd, nextSteps, 
     settings, updateSettings, fileTree, deleteMessage, editAndRerun, rerunFromUser, 
     regenerateFromAI, activityLog, allLogs, logPanelOpen, setLogPanelOpen, clearAllLogs, 
     isConnected, openClawStatus, configureOpenClaw, deployOpenClaw, confirmationRequest, 
@@ -366,14 +366,26 @@ function App() {
           <div className="flex-1 flex min-h-0 min-w-0 relative">
             <div className="flex-1 flex flex-col min-h-0 min-w-0">
               <div className={`flex-1 flex flex-col min-h-0 ${isChat ? '' : 'hidden'}`}>
-                <MessageList
-                  messages={messages}
-                  isAgentWorking={isWorking}
-                  messageActions={messageActions}
-                  activityLog={activityLog}
-                  userLabel={userLabel}
-                  agentLabel={agentLabel}
-                />
+                {workspaceSwitching ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3 text-zinc-400 animate-fade-in">
+                      <svg className="animate-spin h-6 w-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span className="text-sm">Switching workspace…</span>
+                    </div>
+                  </div>
+                ) : (
+                  <MessageList
+                    messages={messages}
+                    isAgentWorking={isWorking}
+                    messageActions={messageActions}
+                    activityLog={activityLog}
+                    userLabel={userLabel}
+                    agentLabel={agentLabel}
+                  />
+                )}
               </div>
 
             {tabManager.tabs.filter(t => t.type === 'file').map(tab => (

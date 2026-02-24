@@ -1,18 +1,16 @@
 /**
  * ComponentWrapper — Compiles and renders a single surface component.
- * Handles compilation errors with auto-fix, wraps in ErrorBoundary for runtime errors.
+ * Handles compilation errors with a manual "Fix…" button, wraps in ErrorBoundary for runtime errors.
  */
-import React, { useMemo, useEffect, Suspense } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import React, { useMemo, useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { Loader2, AlertTriangle, Wrench } from 'lucide-react';
 import type { SurfaceComponent } from '../../../hooks/useSurface';
 import { wsService } from '../../../services/wsService';
 import { compileComponent } from './surfaceCompiler';
 import { SurfaceErrorBoundary } from './SurfaceErrorBoundary';
 
 const MAX_COMP_FIX_ATTEMPTS = 3;
-
-/** Module-level tracker to deduplicate auto-fix requests across renders */
-const _compFixTracker = new Map<string, { attempts: number; lastError: string }>();
+const FIX_TIMEOUT_MS = 30_000; // Fallback timeout if server never responds
 
 export const ComponentWrapper: React.FC<{
   component: SurfaceComponent;
@@ -30,36 +28,78 @@ export const ComponentWrapper: React.FC<{
     }
   }, [source, component.name, useSurfaceLifecycle]);
 
-  const fixTrackerKey = `${surfaceId}:${component.name}`;
+  // Key fix state on source so it resets automatically when new code arrives.
+  const [fixState, setFixState] = useState<{ source: string; attempts: number; fixing: boolean }>({
+    source, attempts: 0, fixing: false
+  });
 
-  // Send compilation errors to server for auto-fix
+  // Derive current values, resetting when source changes.
+  // Safety invariant: when source changes, derived values fall back to 0/false here;
+  // the setter callbacks below always stamp the current `source` into state, so any
+  // update (e.g. from a WebSocket event) will re-sync the key automatically.
+  const fixAttempts = fixState.source === source ? fixState.attempts : 0;
+  const fixing = fixState.source === source ? fixState.fixing : false;
+
+  const setFixAttempts = useCallback((n: number) => setFixState(s => ({ ...s, source, attempts: n })), [source]);
+  const setFixing = useCallback((v: boolean) => setFixState(s => ({ ...s, source, fixing: v })), [source]);
+
+  // Listen for surface-updated to clear the fixing spinner
   useEffect(() => {
-    if (!error) return;
-    const tracker = _compFixTracker.get(fixTrackerKey);
-    if (tracker?.lastError === error || (tracker?.attempts ?? 0) >= MAX_COMP_FIX_ATTEMPTS) return;
+    const unsub = wsService.on('surface-updated', (payload: unknown) => {
+      const p = payload as { surfaceId: string; component?: { name: string; deleted?: boolean } };
+      if (p.surfaceId === surfaceId && p.component?.name === component.name && !p.component?.deleted) {
+        setFixing(false);
+      }
+    });
+    return unsub;
+  }, [surfaceId, component.name, setFixing]);
 
-    const newAttempts = (tracker?.attempts ?? 0) + 1;
-    _compFixTracker.set(fixTrackerKey, { attempts: newAttempts, lastError: error });
+  // Listen for auto-fix failure
+  useEffect(() => {
+    const unsub = wsService.on('surface-auto-fix-failed', (payload: unknown) => {
+      const p = payload as { surfaceId: string; componentName: string };
+      if (p.surfaceId === surfaceId && p.componentName === component.name) {
+        setFixing(false);
+      }
+    });
+    return unsub;
+  }, [surfaceId, component.name, setFixing]);
+
+  // Timeout ref so we can clear it on unmount or when fix completes
+  const fixTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timeout when fixing becomes false (success or failure event received)
+  useEffect(() => {
+    if (!fixing && fixTimeoutRef.current) {
+      clearTimeout(fixTimeoutRef.current);
+      fixTimeoutRef.current = null;
+    }
+  }, [fixing]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => { if (fixTimeoutRef.current) clearTimeout(fixTimeoutRef.current); };
+  }, []);
+
+  const handleFix = () => {
+    const attempt = fixAttempts + 1;
+    setFixAttempts(attempt);
+    setFixing(true);
+    // Clear any lingering timeout first (defensive)
+    if (fixTimeoutRef.current) clearTimeout(fixTimeoutRef.current);
+    // Fallback: if server never responds, stop the spinner after FIX_TIMEOUT_MS
+    fixTimeoutRef.current = setTimeout(() => setFixing(false), FIX_TIMEOUT_MS);
     wsService.sendMessage('surface-auto-fix', {
       surfaceId,
       componentName: component.name,
       errorType: 'compilation',
       error,
       source,
-      attempt: newAttempts
+      attempt
     });
-  }, [error, component.name, surfaceId, source, fixTrackerKey]);
-
-  // Reset tracker when source changes (new code arrived)
-  useEffect(() => {
-    _compFixTracker.delete(fixTrackerKey);
-  }, [source, fixTrackerKey]);
+  };
 
   if (error) {
-    const tracker = _compFixTracker.get(fixTrackerKey);
-    const attempts = tracker?.attempts ?? 0;
-    const fixing = attempts > 0 && attempts < MAX_COMP_FIX_ATTEMPTS;
-
     return (
       <div className="p-4 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg text-sm font-mono whitespace-pre-wrap">
         <div className="flex items-center justify-between mb-2">
@@ -70,28 +110,19 @@ export const ComponentWrapper: React.FC<{
           {fixing && (
             <div className="flex items-center gap-1.5 text-amber-400 text-xs">
               <Loader2 size={12} className="animate-spin" />
-              Auto-fixing (attempt {attempts}/{MAX_COMP_FIX_ATTEMPTS})...
+              Fixing (attempt {fixAttempts}/{MAX_COMP_FIX_ATTEMPTS})…
             </div>
           )}
         </div>
         <div className="text-red-400/80 text-xs max-h-[120px] overflow-y-auto">{error}</div>
-        {!fixing && attempts >= MAX_COMP_FIX_ATTEMPTS && (
+        {!fixing && (
           <button
-            onClick={() => {
-              _compFixTracker.delete(fixTrackerKey);
-              wsService.sendMessage('surface-auto-fix', {
-                surfaceId,
-                componentName: component.name,
-                errorType: 'compilation',
-                error,
-                source,
-                attempt: 1
-              });
-              _compFixTracker.set(fixTrackerKey, { attempts: 1, lastError: error });
-            }}
-            className="mt-2 px-3 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors"
+            onClick={handleFix}
+            disabled={fixAttempts >= MAX_COMP_FIX_ATTEMPTS}
+            className="mt-2 px-3 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Retry Auto-Fix
+            <Wrench size={12} />
+            {fixAttempts >= MAX_COMP_FIX_ATTEMPTS ? 'Max fix attempts reached' : 'Fix…'}
           </button>
         )}
       </div>

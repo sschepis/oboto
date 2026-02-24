@@ -65,5 +65,69 @@ export const SKILL_TOOLS = [
                 required: ["packages"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "create_skill",
+            description: "Create a new skill by writing a SKILL.md file. Skills contain domain-specific instructions, strategies, and tool-usage guides that teach the agent how to handle specialized tasks. Use this to extend your own capabilities by codifying knowledge for future reuse.",
+            parameters: {
+                type: "object",
+                properties: {
+                    name: {
+                        type: "string",
+                        description: "Skill name (alphanumeric, hyphens, underscores). Used as the directory name."
+                    },
+                    content: {
+                        type: "string",
+                        description: "Full SKILL.md content. May include YAML frontmatter (---\\nname: ...\\n---) followed by markdown instructions. If frontmatter is omitted, it will be auto-generated."
+                    },
+                    scope: {
+                        type: "string",
+                        enum: ["workspace", "global"],
+                        description: "Where to create the skill. 'workspace' stores in .skills/ (project-specific), 'global' stores in the application skills/ dir (shared across workspaces). Default: workspace."
+                    }
+                },
+                required: ["name", "content"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "edit_skill",
+            description: "Edit an existing skill's content by replacing its SKILL.md file. Use this to update, improve, or extend skill instructions. Cannot edit npm-sourced skills.",
+            parameters: {
+                type: "object",
+                properties: {
+                    name: {
+                        type: "string",
+                        description: "Name of the skill to edit (must already exist)"
+                    },
+                    content: {
+                        type: "string",
+                        description: "New full SKILL.md content to replace the existing content"
+                    }
+                },
+                required: ["name", "content"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "delete_skill",
+            description: "Delete an existing skill by name. Removes the skill directory and its SKILL.md file. Cannot delete npm-sourced skills.",
+            parameters: {
+                type: "object",
+                properties: {
+                    name: {
+                        type: "string",
+                        description: "Name of the skill to delete"
+                    }
+                },
+                required: ["name"]
+            }
+        }
     }
 ];

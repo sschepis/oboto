@@ -21,9 +21,9 @@ function sendAiMessage(ws, content, extra = {}) {
 
 async function handleChat(data, ctx) {
     const { ws, assistant, broadcast, agentLoopController, activeController: activeRef } = ctx;
-    const userInput = data.payload;
+    const userInput = typeof data.payload === 'string' ? data.payload : (data.payload?.message || '');
     const activeSurfaceId = data.surfaceId || null;
-    const modelOverride = data.model || null;
+    const modelOverride = data.model || (typeof data.payload === 'object' ? data.payload?.model : null) || null;
     consoleStyler.log('user', `Web User: ${userInput}${activeSurfaceId ? ` [surface: ${activeSurfaceId}]` : ''}${modelOverride ? ` [model: ${modelOverride}]` : ''}`);
 
     // Detect natural language requests to create a new conversation
@@ -149,5 +149,7 @@ async function handleInterrupt(data, ctx) {
 
 export const handlers = {
     'chat': handleChat,
-    'interrupt': handleInterrupt
+    'interrupt': handleInterrupt,
+    'stop': handleInterrupt,
+    'cancel': handleInterrupt
 };

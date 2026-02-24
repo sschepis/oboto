@@ -47,6 +47,30 @@ export class EventicAIProvider {
         }
         
         messages.push({ role: 'user', content: fullPrompt });
+
+        return this._sendRequest(messages, prompt, options);
+    }
+
+    /**
+     * Send a request with a pre-built messages array — does NOT touch
+     * `this.conversationHistory`.  Use this when the caller manages its
+     * own history (e.g. CognitiveAgent) to avoid mutating shared state.
+     *
+     * @param {Array<{role: string, content: string}>} messages - Full messages array
+     * @param {Object} options - Same as ask() (format, system, schema, tools, signal, etc.)
+     * @returns {Promise<any>}
+     */
+    async askWithMessages(messages, options = {}) {
+        // Ensure history is never written — caller manages its own.
+        return this._sendRequest(messages, null, { ...options, recordHistory: false });
+    }
+
+    /**
+     * Internal: send a prepared messages array to the LLM provider.
+     * @private
+     */
+    async _sendRequest(messages, prompt, options = {}) {
+        const { format = 'text', schema = null, tools = null } = options;
         
         const requestBody = {
             model: this.model,
@@ -172,8 +196,8 @@ export class EventicAIProvider {
 
             cleanup();
             
-            // Update history if requested
-            if (options.recordHistory !== false) {
+            // Update history if requested (guard against null prompt from askWithMessages)
+            if (options.recordHistory !== false && prompt != null) {
                 this.conversationHistory.push({ role: 'user', content: prompt });
                 this.conversationHistory.push(message || { role: 'assistant', content });
             }

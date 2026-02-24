@@ -25,7 +25,7 @@ export async function mountDynamicRoutes(app, workingDir) {
     const routes = [];
     
     // Only scan designated route directories, NOT the workspace root
-    // This prevents importing application files (ai.mjs, test-exports.mjs, etc.)
+    // This prevents importing application files (ai.mjs, etc.)
     // which cause side-effect noise during startup
     const ROUTE_DIRS = ['routes', 'api'];
     const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'ui', 'src', 'scripts', 'chrome-extension', 'tray-app', 'docs', 'plans', 'logs', 'puppeteer_data', 'skills']);

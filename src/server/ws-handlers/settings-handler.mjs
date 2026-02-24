@@ -190,10 +190,51 @@ async function handleGetSettings(data, ctx) {
 }
 
 async function handleUpdateSettings(data, ctx) {
-    const { ws, assistant, broadcast } = ctx;
+    const { ws, assistant, broadcast, schedulerService } = ctx;
     const settings = data.payload;
     if (settings.maxTurns) assistant.maxTurns = parseInt(settings.maxTurns, 10);
     if (settings.maxSubagents) assistant.maxSubagents = parseInt(settings.maxSubagents, 10);
+
+    // ── Handle workingDirectory change at runtime ────────────────────────
+    if (settings.workingDirectory && typeof settings.workingDirectory === 'string') {
+        try {
+            const resolvedNew = path.resolve(settings.workingDirectory);
+            const currentDir = assistant.workingDir ? path.resolve(assistant.workingDir) : null;
+            if (currentDir !== resolvedNew) {
+                consoleStyler.log('system', `🔄 update-settings: switching workspace to ${resolvedNew}`);
+                const actualPath = await assistant.changeWorkingDirectory(settings.workingDirectory);
+
+                // Restore AI settings for the new workspace
+                restoreAISettings(actualPath, assistant);
+
+                // Reload conversation state
+                try {
+                    await assistant.loadConversation();
+                    const convList = await assistant.listConversations();
+                    wsSend(ws, 'conversation-list', convList);
+                } catch (e) {
+                    consoleStyler.log('warning', `Failed to load conversation after workspace switch: ${e.message}`);
+                    wsSend(ws, 'history-loaded', []);
+                }
+
+                // Update scheduler if available
+                if (schedulerService) {
+                    await schedulerService.switchWorkspace(actualPath);
+                }
+
+                // Send updated project info and file tree
+                const info = await getProjectInfo(actualPath);
+                wsSend(ws, 'status-update', info);
+                const tree = await getDirectoryTree(actualPath, 2);
+                wsSend(ws, 'file-tree', tree);
+
+                consoleStyler.log('system', `✅ update-settings: workspace switched to ${actualPath}`);
+            }
+        } catch (err) {
+            consoleStyler.log('error', `update-settings workspace switch failed: ${err.message}`);
+            wsSendError(ws, `Failed to switch workspace: ${err.message}`);
+        }
+    }
 
     // Persist AI provider config to process.env + live config
     if (settings.ai) {
@@ -320,6 +361,17 @@ async function handleSetCwd(data, ctx) {
             } catch (e) {
                 // Non-fatal — the UI will just show what it has
             }
+            // Still load conversation state on browser reload
+            try {
+                await assistant.loadConversation();
+                const convList = await assistant.listConversations();
+                wsSend(ws, 'conversation-list', convList);
+            } catch (e) {
+                // Non-fatal — conversation loading on reload failed, UI can still function.
+                // Send empty history so the client exits any workspace-switching spinner.
+                consoleStyler.log('warning', `Failed to load conversation on reload: ${e.message}`);
+                wsSend(ws, 'history-loaded', []);
+            }
             return;
         }
 
@@ -327,6 +379,18 @@ async function handleSetCwd(data, ctx) {
 
         // Restore AI settings saved for this workspace
         restoreAISettings(actualPath, assistant);
+
+        // Load workspace conversation (emits history-loaded + conversation-switched via eventBus)
+        try {
+            await assistant.loadConversation();
+            const convList = await assistant.listConversations();
+            wsSend(ws, 'conversation-list', convList);
+        } catch (e) {
+            // Non-fatal — conversation loading on workspace switch failed, UI can still function.
+            // Send empty history so the client exits any workspace-switching spinner.
+            consoleStyler.log('warning', `Failed to load conversation on workspace switch: ${e.message}`);
+            wsSend(ws, 'history-loaded', []);
+        }
 
         wsSend(ws, 'status', `Changed working directory to ${actualPath}`);
         
@@ -396,11 +460,68 @@ async function handleRefreshProviderModels(data, ctx) {
     }
 }
 
+// ── Agentic Provider Management ─────────────────────────────────────────
+
+async function handleGetAgenticProviders(data, ctx) {
+    const { ws, assistant } = ctx;
+    try {
+        const providers = assistant.listAgenticProviders();
+        const active = assistant.getActiveAgenticProvider();
+        wsSend(ws, 'agentic-providers', {
+            providers,
+            activeId: active?.id || null
+        });
+    } catch (err) {
+        consoleStyler.log('error', `handleGetAgenticProviders failed: ${err.message}`);
+        wsSendError(ws, `Failed to list agentic providers: ${err.message}`);
+    }
+}
+
+async function handleSetAgenticProvider(data, ctx) {
+    const { ws, assistant, broadcast } = ctx;
+    const providerId = data.payload?.providerId || data.payload;
+    if (!providerId) {
+        wsSendError(ws, 'Missing providerId in set-agentic-provider request');
+        return;
+    }
+    try {
+        await assistant.switchAgenticProvider(providerId);
+        const active = assistant.getActiveAgenticProvider();
+        const providers = assistant.listAgenticProviders();
+        wsSend(ws, 'status', `Switched agentic provider to: ${active?.name || providerId}`);
+        broadcast('agentic-providers', {
+            providers,
+            activeId: active?.id || null
+        });
+    } catch (err) {
+        consoleStyler.log('error', `handleSetAgenticProvider failed: ${err.message}`);
+        wsSendError(ws, `Failed to switch agentic provider: ${err.message}`);
+    }
+}
+
+async function handleGetAgenticProvider(data, ctx) {
+    const { ws, assistant } = ctx;
+    try {
+        const active = assistant.getActiveAgenticProvider();
+        wsSend(ws, 'agentic-provider', {
+            id: active?.id || null,
+            name: active?.name || null,
+            description: active?.description || null
+        });
+    } catch (err) {
+        consoleStyler.log('error', `handleGetAgenticProvider failed: ${err.message}`);
+        wsSendError(ws, `Failed to get active agentic provider: ${err.message}`);
+    }
+}
+
 export const handlers = {
     'get-settings': handleGetSettings,
     'update-settings': handleUpdateSettings,
     'get-status': handleGetStatus,
     'set-cwd': handleSetCwd,
     'refresh-models': handleRefreshModels,
-    'refresh-provider-models': handleRefreshProviderModels
+    'refresh-provider-models': handleRefreshProviderModels,
+    'get-agentic-providers': handleGetAgenticProviders,
+    'set-agentic-provider': handleSetAgenticProvider,
+    'get-agentic-provider': handleGetAgenticProvider
 };

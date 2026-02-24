@@ -122,10 +122,23 @@ export const EventicAgentLoopPlugin = {
                 ctx.consciousness.initialized = true;
             }
 
-            // Pre-process with consciousness (somatic/fact tracking)
+            // Pre-process with consciousness (somatic/fact tracking).
+            // preProcess returns system messages (e.g. somatic self-awareness) that
+            // should be injected into the conversation history so the AI can see them.
+            // Wrapped in try/catch because consciousness is non-critical — a crash
+            // here must not prevent the agent loop from running.
             if (ctx.consciousness) {
-                const history = engine.ai ? engine.ai.conversationHistory || [] : [];
-                ctx.consciousness.preProcess(input, { history });
+                try {
+                    const history = engine.ai ? engine.ai.conversationHistory || [] : [];
+                    const { messages: consciousnessMessages } = ctx.consciousness.preProcess(input, { history });
+                    if (consciousnessMessages?.length > 0 && engine.ai?.conversationHistory) {
+                        for (const msg of consciousnessMessages) {
+                            engine.ai.conversationHistory.push(msg);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[AGENT_START] Consciousness preProcess failed:', e);
+                }
             }
 
             ctx.turnNumber = 0;
@@ -234,6 +247,19 @@ export const EventicAgentLoopPlugin = {
             let prompt;
             if (ctx.turnNumber === 1) {
                 prompt = input;
+
+                // Inject relevant facts from the inference engine into the first turn
+                // so the model benefits from previously inferred knowledge.
+                if (ctx.consciousness) {
+                    try {
+                        const factContext = ctx.consciousness.renderFactContext(input);
+                        if (factContext) {
+                            prompt += `\n\n${factContext}`;
+                        }
+                    } catch (e) {
+                        console.error('[ACTOR_CRITIC_LOOP] renderFactContext failed:', e);
+                    }
+                }
             } else {
                 // Build context-aware continuation prompt with full task awareness
                 const parts = [];

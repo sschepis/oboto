@@ -1,7 +1,7 @@
 import { wsSend, wsHandler } from '../../lib/ws-utils.mjs';
 
 /**
- * Handles: get-skills, search-clawhub, install-clawhub-skill, install-npm-skill, uninstall-skill
+ * Handles: get-skills, list-skills, search-clawhub, install-clawhub-skill, install-npm-skill, uninstall-skill
  */
 
 const SK = 'toolExecutor.skillsManager';
@@ -76,6 +76,7 @@ const handleUninstallSkill = wsHandler(async (data, ctx, svc) => {
 
 export const handlers = {
     'get-skills': handleGetSkills,
+    'list-skills': handleGetSkills,
     'search-clawhub': handleSearchClawHub,
     'install-clawhub-skill': handleInstallClawHub,
     'install-npm-skill': handleInstallNpm,

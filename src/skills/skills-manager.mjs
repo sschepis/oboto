@@ -1,10 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import util from 'util';
 
 const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class SkillsManager {
@@ -119,13 +120,11 @@ export class SkillsManager {
             }, null, 2));
         }
 
-        // Install packages
-        const packageList = packages.join(' ');
-        
+        // Install packages — use execFile to avoid shell injection via crafted package names
         try {
-             await execAsync(`npm install ${packageList}`, { cwd: this.workspaceRoot });
+             await execFileAsync('npm', ['install', ...packages], { cwd: this.workspaceRoot });
         } catch (error) {
-            throw new Error(`Failed to install packages (${packageList}): ${error.message}`);
+            throw new Error(`Failed to install packages (${packages.join(', ')}): ${error.message}`);
         }
 
         // Reload skills to pick up new ones
@@ -268,7 +267,7 @@ export class SkillsManager {
         }
 
         try {
-            const { stdout } = await execAsync(`clawdhub search "${query.replace(/"/g, '\\"')}" --json`, {
+            const { stdout } = await execFileAsync('clawdhub', ['search', query, '--json'], {
                 timeout: 30000
             });
             const results = JSON.parse(stdout);
@@ -302,12 +301,11 @@ export class SkillsManager {
             throw new Error('ClawHub CLI (clawdhub) is not installed. Run: npm install -g clawdhub');
         }
 
-        const versionFlag = version ? ` --version ${version}` : '';
         try {
-            await execAsync(
-                `clawdhub install ${slug}${versionFlag} --workdir "${this.globalSkillsDir}" --dir "${this.globalSkillsDir}"`,
-                { timeout: 60000 }
-            );
+            const args = ['install', slug];
+            if (version) args.push('--version', version);
+            args.push('--workdir', this.globalSkillsDir, '--dir', this.globalSkillsDir);
+            await execFileAsync('clawdhub', args, { timeout: 60000 });
         } catch (error) {
             throw new Error(`Failed to install skill '${slug}' from ClawHub: ${error.message}`);
         }
@@ -324,9 +322,13 @@ export class SkillsManager {
      * @returns {Promise<string>} Success message
      */
     async installNpmGlobal(packageName) {
+        // Validate npm package name format to prevent path traversal
+        if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(packageName)) {
+            throw new Error(`Invalid npm package name: '${packageName}'`);
+        }
         // Install globally
         try {
-            await execAsync(`npm install -g ${packageName}`, { timeout: 120000 });
+            await execFileAsync('npm', ['install', '-g', packageName], { timeout: 120000 });
         } catch (error) {
             throw new Error(`Failed to install npm package '${packageName}': ${error.message}`);
         }
@@ -398,6 +400,129 @@ export class SkillsManager {
     }
 
     /**
+     * Create a new skill from content.
+     * @param {string} name - Skill name (used as directory name)
+     * @param {string} content - Full SKILL.md content (including optional frontmatter)
+     * @param {'workspace'|'global'} [scope='workspace'] - Where to create the skill
+     * @returns {Promise<string>} Success message
+     */
+    async createSkill(name, content, scope = 'workspace') {
+        await this.ensureInitialized();
+
+        // Validate name: alphanumeric + hyphens only
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) {
+            throw new Error(`Invalid skill name '${name}'. Use alphanumeric characters, hyphens, and underscores only.`);
+        }
+
+        // Check for collision
+        if (this.skills.has(name)) {
+            throw new Error(`Skill '${name}' already exists (source: ${this.skills.get(name).source}). Use edit_skill to modify it, or delete_skill first.`);
+        }
+
+        const baseDir = scope === 'global' ? this.globalSkillsDir : this.workspaceSkillsDir;
+        const skillDir = path.join(baseDir, name);
+        const skillPath = path.join(skillDir, 'SKILL.md');
+
+        // Ensure the content has frontmatter with at least a name
+        let finalContent = content;
+        if (!content.trimStart().startsWith('---')) {
+            finalContent = `---\nname: ${name}\n---\n\n${content}`;
+        }
+
+        await fs.mkdir(skillDir, { recursive: true });
+        await fs.writeFile(skillPath, finalContent, 'utf8');
+
+        // Reload to pick up the new skill
+        await this.loadSkills();
+        this.initialized = true;
+
+        return `Created skill '${name}' at ${skillPath}`;
+    }
+
+    /**
+     * Edit an existing skill's content (full replacement).
+     * @param {string} name - Skill name
+     * @param {string} content - New SKILL.md content
+     * @returns {Promise<string>} Success message
+     */
+    async editSkill(name, content) {
+        await this.ensureInitialized();
+
+        const skill = this.skills.get(name);
+        if (!skill) {
+            throw new Error(`Skill '${name}' not found. Use list_skills to see available skills.`);
+        }
+
+        if (skill.source === 'npm') {
+            throw new Error(`Cannot edit npm skill '${name}'. npm skills are derived from installed packages.`);
+        }
+
+        // Ensure the content has frontmatter with at least a name
+        let finalContent = content;
+        if (!content.trimStart().startsWith('---')) {
+            finalContent = `---\nname: ${name}\n---\n\n${content}`;
+        }
+
+        await fs.writeFile(skill.path, finalContent, 'utf8');
+
+        // Reload to pick up changes
+        await this.loadSkills();
+        this.initialized = true;
+
+        return `Updated skill '${name}' at ${skill.path}`;
+    }
+
+    /**
+     * Delete a skill by name.
+     * @param {string} name - Skill name to delete
+     * @returns {Promise<string>} Success message
+     */
+    async deleteSkill(name) {
+        await this.ensureInitialized();
+        const skill = this.skills.get(name);
+
+        if (!skill) {
+            throw new Error(`Skill '${name}' not found`);
+        }
+
+        if (skill.source === 'npm') {
+            throw new Error(`Cannot delete npm skill '${name}'. Uninstall the npm package instead.`);
+        }
+
+        let skillDir;
+        let isSingleFile = false;
+        const baseDir = skill.source === 'global' ? this.globalSkillsDir : this.workspaceSkillsDir;
+
+        if (skill.path) {
+            skillDir = path.dirname(skill.path);
+            // Single file skill (e.g., skills/my-skill.md)
+            if (skillDir === baseDir && skill.path.endsWith('.md')) {
+                isSingleFile = true;
+                skillDir = skill.path;
+            }
+        } else {
+            skillDir = path.join(baseDir, name);
+        }
+
+        // Defense-in-depth: ensure the resolved path is strictly inside the expected base directory
+        // (never allow deleting the base directory itself)
+        const resolvedTarget = path.resolve(skillDir);
+        const resolvedBase = path.resolve(baseDir);
+        if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+            throw new Error(`Refusing to delete '${name}': resolved path ${resolvedTarget} is outside ${resolvedBase}`);
+        }
+
+        if (isSingleFile) {
+            await fs.unlink(skillDir);
+        } else {
+            await fs.rm(skillDir, { recursive: true, force: true });
+        }
+
+        this.skills.delete(name);
+        return `Deleted skill '${name}'`;
+    }
+
+    /**
      * Uninstall a skill by name. Removes it from the global skills directory.
      * @param {string} name - Skill name to uninstall
      * @returns {Promise<string>} Success message
@@ -443,7 +568,7 @@ export class SkillsManager {
                 if (npmSource.packageName) {
                     try {
                         // Uninstall globally
-                        await execAsync(`npm uninstall -g ${npmSource.packageName}`, { timeout: 30000 });
+                        await execFileAsync('npm', ['uninstall', '-g', npmSource.packageName], { timeout: 30000 });
                     } catch (e) {
                         console.error(`Warning: npm uninstall -g ${npmSource.packageName} failed: ${e.message}`);
                     }

@@ -283,6 +283,10 @@ export class ToolExecutor {
         this.registerTool('list_skills', this.skillHandlers.listSkills.bind(this.skillHandlers));
         this.registerTool('read_skill', this.skillHandlers.readSkill.bind(this.skillHandlers));
         this.registerTool('use_skill', this.skillHandlers.useSkill.bind(this.skillHandlers));
+        this.registerTool('add_npm_skill', this.skillHandlers.addNpmSkill.bind(this.skillHandlers));
+        this.registerTool('create_skill', this.skillHandlers.createSkill.bind(this.skillHandlers));
+        this.registerTool('edit_skill', this.skillHandlers.editSkill.bind(this.skillHandlers));
+        this.registerTool('delete_skill', this.skillHandlers.deleteSkill.bind(this.skillHandlers));
 
         // Custom Tools
         this.registerTool('list_custom_tools', this.listCustomTools.bind(this));
@@ -484,6 +488,18 @@ export class ToolExecutor {
 
     registerTool(name, handler, outputSchema = null) {
         this.toolRegistry.set(name, { handler, outputSchema });
+    }
+
+    /**
+     * Get the raw handler function for a registered tool by name.
+     * Returns null if the tool is not found.
+     * @param {string} name — tool name
+     * @returns {Function|null}
+     */
+    getToolFunction(name) {
+        const entry = this.toolRegistry.get(name);
+        if (!entry) return null;
+        return typeof entry === 'function' ? entry : entry.handler;
     }
 
     async executeTool(toolCall, options = {}) {

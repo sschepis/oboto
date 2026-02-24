@@ -58,11 +58,6 @@ This document lists every source file in the project, what it does, and which ot
 **Used by**: Most modules throughout the codebase — [`src/core/ai-provider.mjs`](src/core/ai-provider.mjs), [`src/core/eventic-facade.mjs`](src/core/eventic-facade.mjs), [`src/core/prompt-router.mjs`](src/core/prompt-router.mjs), [`src/core/model-registry.mjs`](src/core/model-registry.mjs), [`src/server/web-server.mjs`](src/server/web-server.mjs), [`src/tools/file-tools.mjs`](src/tools/file-tools.mjs), [`src/execution/tool-executor.mjs`](src/execution/tool-executor.mjs), and many more.  
 **Depends on**: Environment variables (`.env`)
 
-### `test-exports.mjs`
-**Purpose**: Smoke test script that imports from the library entry point (`src/lib/index.mjs`) and verifies all named exports are present. Run manually to validate the npm package surface.  
-**Used by**: Developer testing only.  
-**Depends on**: [`src/lib/index.mjs`](src/lib/index.mjs)
-
 ---
 
 ## 2. Core Engine (`src/core/`)
@@ -572,7 +567,7 @@ All handlers follow the pattern: `async function handleXxx(data, ctx)` where `ct
 
 ### `src/lib/index.mjs`
 **Purpose**: Main npm package entry point (~15K chars). Exports `AiMan` and `Oboto` classes (wrappers around `EventicFacade`), plus all adapters, middleware, workflows, event bus, and utility classes. This is what consumers get when they `import '@sschepis/oboto'`.  
-**Used by**: External npm consumers, [`test-exports.mjs`](test-exports.mjs)  
+**Used by**: External npm consumers
 **Depends on**: [`src/core/eventic-facade.mjs`](src/core/eventic-facade.mjs), [`src/lib/event-bus.mjs`](src/lib/event-bus.mjs), [`src/lib/middleware.mjs`](src/lib/middleware.mjs), [`src/lib/workflows.mjs`](src/lib/workflows.mjs), [`src/lib/adapters/index.mjs`](src/lib/adapters/index.mjs), [`src/lib/cancellation-error.mjs`](src/lib/cancellation-error.mjs), [`src/lib/design-result.mjs`](src/lib/design-result.mjs), [`src/config.mjs`](src/config.mjs)
 
 ### `src/lib/event-bus.mjs`

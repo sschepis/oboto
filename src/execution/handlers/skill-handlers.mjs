@@ -86,4 +86,52 @@ STEPS:
             return `Error adding npm skills: ${error.message}`;
         }
     }
+
+    async createSkill(args) {
+        const { name, content, scope } = args;
+        if (!name || !content) {
+            return "Error: Both 'name' and 'content' are required to create a skill.";
+        }
+
+        try {
+            consoleStyler.log('system', `Creating skill '${name}' (scope: ${scope || 'workspace'})…`);
+            const result = await this.skillsManager.createSkill(name, content, scope || 'workspace');
+            return result;
+        } catch (error) {
+            consoleStyler.log('error', `Failed to create skill: ${error.message}`);
+            return `Error creating skill: ${error.message}`;
+        }
+    }
+
+    async editSkill(args) {
+        const { name, content } = args;
+        if (!name || !content) {
+            return "Error: Both 'name' and 'content' are required to edit a skill.";
+        }
+
+        try {
+            consoleStyler.log('system', `Editing skill '${name}'…`);
+            const result = await this.skillsManager.editSkill(name, content);
+            return result;
+        } catch (error) {
+            consoleStyler.log('error', `Failed to edit skill: ${error.message}`);
+            return `Error editing skill: ${error.message}`;
+        }
+    }
+
+    async deleteSkill(args) {
+        const { name } = args;
+        if (!name) {
+            return "Error: 'name' is required to delete a skill.";
+        }
+
+        try {
+            consoleStyler.log('system', `Deleting skill '${name}'…`);
+            const result = await this.skillsManager.deleteSkill(name);
+            return result;
+        } catch (error) {
+            consoleStyler.log('error', `Failed to delete skill: ${error.message}`);
+            return `Error deleting skill: ${error.message}`;
+        }
+    }
 }

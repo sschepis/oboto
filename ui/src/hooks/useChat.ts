@@ -49,6 +49,8 @@ export const useChat = () => {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [activeConversation, setActiveConversation] = useState<string>('chat');
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const switchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef<string[]>([]);
   const logIdRef = useRef(0);
   const allLogIdRef = useRef(0);
@@ -140,6 +142,13 @@ export const useChat = () => {
       }),
       wsService.on('history-loaded', (payload: unknown) => {
         setMessages(payload as Message[]);
+        // Clear workspace-switching state once the server has sent the new history
+        setWorkspaceSwitching(false);
+        // Cancel the safety timeout since we got a real response
+        if (switchTimeoutRef.current) {
+          clearTimeout(switchTimeoutRef.current);
+          switchTimeoutRef.current = null;
+        }
       }),
       wsService.on('file-tree', (payload: unknown) => {
         setFileTree(payload as FileNode[]);
@@ -280,7 +289,13 @@ export const useChat = () => {
       }),
     ];
 
-    return () => unsubs.forEach(u => u());
+    return () => {
+      unsubs.forEach(u => u());
+      if (switchTimeoutRef.current) {
+        clearTimeout(switchTimeoutRef.current);
+        switchTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const send = (text: string, activeSurfaceId?: string) => {
@@ -365,6 +380,16 @@ export const useChat = () => {
     // Persist immediately so it survives page refresh even before server confirms
     localStorage.setItem(LS_CWD_KEY, path);
     if (isConnected) {
+      // Optimistically clear conversation state — server will send the new workspace's data.
+      // Set workspaceSwitching so the UI can show a loading indicator instead of an empty chat.
+      setWorkspaceSwitching(true);
+      setMessages([]);
+      setConversations([]);
+      setActiveConversation('chat');
+      // Clear any previous timeout
+      if (switchTimeoutRef.current) clearTimeout(switchTimeoutRef.current);
+      // Fallback: clear switching state if server never responds (e.g. loadConversation failure)
+      switchTimeoutRef.current = setTimeout(() => setWorkspaceSwitching(false), 10_000);
       wsService.setCwd(path);
     }
   };
@@ -481,6 +506,7 @@ export const useChat = () => {
   return {
     messages,
     isWorking,
+    workspaceSwitching,
     queueCount: messageQueue.length,
     send,
     stop,

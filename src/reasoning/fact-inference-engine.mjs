@@ -239,6 +239,16 @@ export class FactInferenceEngine {
     }
   }
 
+  /**
+   * Persist all facts and custom rules to disk (safe to call before teardown).
+   * No-op if the engine hasn't been initialized yet.
+   */
+  async persist() {
+    if (this._initialized) {
+      await this._save();
+    }
+  }
+
   // ── Core Operations ────────────────────────────────────────────────
 
   /**

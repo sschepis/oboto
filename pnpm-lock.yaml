@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@aleph-ai/tinyaleph':
-        specifier: ^1.7.2
-        version: 1.7.2
+        specifier: ^1.7.3
+        version: 1.7.3
       '@anthropic-ai/vertex-sdk':
         specifier: ^0.14.3
         version: 0.14.3(encoding@0.1.13)(zod@3.25.76)
@@ -38,6 +38,9 @@ importers:
       chalk:
         specifier: ^5.5.0
         version: 5.6.2
+      cheerio:
+        specifier: ^1.2.0
+        version: 1.2.0
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -123,10 +126,10 @@ importers:
     optionalDependencies:
       '@bubblelab/bubble-core':
         specifier: '*'
-        version: 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
+        version: 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(cheerio@1.2.0)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
       '@bubblelab/bubble-runtime':
         specifier: '*'
-        version: 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
+        version: 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(cheerio@1.2.0)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
       '@bubblelab/shared-schemas':
         specifier: '*'
         version: 0.1.170(hono@4.11.9)
@@ -293,8 +296,8 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@aleph-ai/tinyaleph@1.7.2':
-    resolution: {integrity: sha512-BKcg48g9PtOKxW9+2N4pMPcU3d0VZQ09mbKPlbR8pOZBm2nbtK7c22trceOoCMsJc6xcLYyB8HQ8FTWxvWxvKw==}
+  '@aleph-ai/tinyaleph@1.7.3':
+    resolution: {integrity: sha512-7xTm1CP3RB/eiYyWdgzgjsnPMlwonpcs99XxOeJ5HvUa5F2iIhtJ+oYxr+F+UsbBLutBZQbsuGZmwPEqmMn4xQ==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
       '@tensorflow/tfjs': ^4.0.0
@@ -3779,6 +3782,9 @@ packages:
     resolution: {integrity: sha512-oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA==}
     engines: {node: '>=18'}
 
+  boolbase@1.0.0:
+    resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
+
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
@@ -3908,6 +3914,13 @@ packages:
     resolution: {integrity: sha512-+Lc5phRWjb+UxAIiQpKgvOaG6Mw276YQx2jl2BrxoUtI3A4RYTZuGM5Dq+s4ReYmCY42WEPSR6viF3lDSTxpvw==}
     peerDependencies:
       chart.js: ^4.4.8
+
+  cheerio-select@2.1.0:
+    resolution: {integrity: sha512-9v9kG0LvzrlcungtnJtpGNxY+fzECQKhK4EGJX2vByejiMX84MFNQw4UxPJl3bFbTMw+Dfs37XaIkCwTZfLh4g==}
+
+  cheerio@1.2.0:
+    resolution: {integrity: sha512-WDrybc/gKFpTYQutKIK6UvfcuxijIZfMfXaYm8NMsPQxSYvf+13fXUJ4rztGGbJcBQ/GF55gvrZ0Bc0bj/mqvg==}
+    engines: {node: '>=20.18.1'}
 
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
@@ -4047,6 +4060,13 @@ packages:
 
   css-line-break@2.1.0:
     resolution: {integrity: sha512-FHcKFCZcAha3LwfVBhCQbW2nCNbkZXn7KVUJcsT5/P8YmfsVja0FMPJr0B903j/E69HUphKiV9iQArX8SDYA4w==}
+
+  css-select@5.2.2:
+    resolution: {integrity: sha512-TizTzUddG/xYLA3NXodFM0fSbNizXjOKhqiQQwvhlspadZokn1KDy0NZFS0wuEubIYAV5/c1/lAr0TaaFXEXzw==}
+
+  css-what@6.2.2:
+    resolution: {integrity: sha512-u/O3vwbptzhMs3L1fQE82ZSLHQQfto5gyZzwteVIEyeaY5Fc7R4dapF/BvRoSYFeqfBk4m0V1Vafq5Pjv25wvA==}
+    engines: {node: '>= 6'}
 
   css.escape@1.5.1:
     resolution: {integrity: sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==}
@@ -4267,6 +4287,9 @@ packages:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
 
+  encoding-sniffer@0.2.1:
+    resolution: {integrity: sha512-5gvq20T6vfpekVtqrYQsSCFZ1wEg5+wW0/QaZMWkFr6BqD3NfKs0rLCx4rrVlSWJeZb5NBJgVLswK/w2MWU+Gw==}
+
   encoding@0.1.13:
     resolution: {integrity: sha512-ETBauow1T35Y/WZMkio9jiM0Z5xjHHmJ4XmjZOq1l/dXz3lr2sRn87nJy20RupqSh1F2m3HHPSp8ShIPQJrJ3A==}
 
@@ -4283,6 +4306,10 @@ packages:
 
   entities@6.0.1:
     resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
+    engines: {node: '>=0.12'}
+
+  entities@7.0.1:
+    resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
     engines: {node: '>=0.12'}
 
   env-paths@2.2.1:
@@ -4879,6 +4906,9 @@ packages:
   html2canvas@1.4.1:
     resolution: {integrity: sha512-fPU6BHNpsyIhr8yyMpTLLxAbkaK8ArIBcmZIRiBLiDhjeqvXolaEmDGmELFuX9I4xDcaKKcJl+TKZLqruBbmWA==}
     engines: {node: '>=8.0.0'}
+
+  htmlparser2@10.1.0:
+    resolution: {integrity: sha512-VTZkM9GWRAtEpveh7MSF6SjjrpNVNNVJfFup7xTY3UpFtm67foy9HDVXneLtFVt4pMz5kZtgNcvCniNFb1hlEQ==}
 
   htmlparser2@8.0.2:
     resolution: {integrity: sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA==}
@@ -5973,6 +6003,9 @@ packages:
     resolution: {integrity: sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==}
     engines: {node: '>=8'}
 
+  nth-check@2.1.1:
+    resolution: {integrity: sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==}
+
   nwsapi@2.2.23:
     resolution: {integrity: sha512-7wfH4sLbt4M0gCDzGE6vzQBo0bfTKjU7Sfpqy/7gs1qBfYz2vEJH6vXcBKpO3+6Yu1telwd0t9HpyOoLEQQbIQ==}
 
@@ -6120,6 +6153,12 @@ packages:
   parse-json@5.2.0:
     resolution: {integrity: sha512-ayCKvm/phCGxOkYRSCM82iDwct8/EonSEgCSxWxD7ve6jHggsFl4fZVQBPRNgQoKiuV/odhFrGzQXZwbifC8Rg==}
     engines: {node: '>=8'}
+
+  parse5-htmlparser2-tree-adapter@7.1.0:
+    resolution: {integrity: sha512-ruw5xyKs6lrpo9x9rCZqZZnIUntICjQAd0Wsmp396Ul9lN/h+ifgVV1x1gZHi8euej6wTfpqX8j+BFQxF0NS/g==}
+
+  parse5-parser-stream@7.1.2:
+    resolution: {integrity: sha512-JyeQc9iwFLn5TbvvqACIF/VXG6abODeB3Fwmv/TGdLk2LfbWkaySGY72at4+Ty7EkPZj854u4CrICqNk2qIbow==}
 
   parse5@7.3.0:
     resolution: {integrity: sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw==}
@@ -7070,6 +7109,10 @@ packages:
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
+  undici@7.22.0:
+    resolution: {integrity: sha512-RqslV2Us5BrllB+JeiZnK4peryVTndy9Dnqq62S3yYRRTj0tFQCwEniUy2167skdGOy3vqRzEvl1Dm4sV2ReDg==}
+    engines: {node: '>=20.18.1'}
+
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
 
@@ -7426,7 +7469,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@aleph-ai/tinyaleph@1.7.2':
+  '@aleph-ai/tinyaleph@1.7.3':
     dependencies:
       '@noble/curves': 1.9.7
       '@sschepis/resolang': 0.4.1
@@ -8268,14 +8311,14 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@bubblelab/bubble-core@0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))':
+  '@bubblelab/bubble-core@0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(cheerio@1.2.0)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))':
     dependencies:
       '@aws-sdk/client-s3': 3.991.0
       '@aws-sdk/s3-request-presigner': 3.991.0
       '@bubblelab/shared-schemas': 0.1.170(hono@4.11.9)
       '@google/generative-ai': 0.24.1
       '@langchain/anthropic': 0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76)
-      '@langchain/community': 0.3.59(7ee9fd13107dfc741a31911afeec1952)
+      '@langchain/community': 0.3.59(00bb502e1f0eae6a020b410c8dc97768)
       '@langchain/core': 0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))
       '@langchain/google-genai': 1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))
       '@langchain/langgraph': 0.3.12(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod-to-json-schema@3.25.1(zod@3.25.76))
@@ -8449,9 +8492,9 @@ snapshots:
       - zod-to-json-schema
     optional: true
 
-  '@bubblelab/bubble-runtime@0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))':
+  '@bubblelab/bubble-runtime@0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(cheerio@1.2.0)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))':
     dependencies:
-      '@bubblelab/bubble-core': 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
+      '@bubblelab/bubble-core': 0.1.170(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/credential-provider-node@3.972.9)(@browserbasehq/sdk@2.6.0(encoding@0.1.13))(@browserbasehq/stagehand@1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.7)(@mlc-ai/web-llm@0.2.81)(@smithy/util-utf8@2.3.0)(axios@1.13.5)(canvas@3.2.1)(cheerio@1.2.0)(encoding@0.1.13)(fast-xml-parser@5.3.4)(google-auth-library@10.5.0)(handlebars@4.7.8)(hono@4.11.9)(html-to-text@9.0.5)(ibm-cloud-sdk-core@5.4.6)(ignore@5.3.2)(jsdom@26.1.0(canvas@3.2.1))(jsonwebtoken@9.0.3)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(pdf-parse@1.1.4)(playwright@1.58.2)(puppeteer@24.37.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(weaviate-client@3.11.0(encoding@0.1.13))(ws@8.19.0)(zod-to-json-schema@3.25.1(zod@3.25.76))
       '@bubblelab/shared-schemas': 0.1.170(hono@4.11.9)
       '@bubblelab/ts-scope-manager': 0.1.169(typescript@5.9.3)
       '@typescript-eslint/typescript-estree': 8.43.0(typescript@5.9.3)
@@ -9449,7 +9492,7 @@ snapshots:
       - zod
     optional: true
 
-  '@langchain/community@0.3.59(7ee9fd13107dfc741a31911afeec1952)':
+  '@langchain/community@0.3.59(00bb502e1f0eae6a020b410c8dc97768)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.58.2)(deepmerge@4.3.1)(dotenv@17.3.1)(encoding@0.1.13)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(zod@3.25.76)
       '@ibm-cloud/watsonx-ai': 1.7.7
@@ -9460,7 +9503,7 @@ snapshots:
       flat: 5.0.2
       ibm-cloud-sdk-core: 5.4.6
       js-yaml: 4.1.1
-      langchain: 0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(@langchain/google-genai@1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))))(axios@1.13.5)(handlebars@4.7.8)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(ws@8.19.0)
+      langchain: 0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(@langchain/google-genai@1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))))(axios@1.13.5)(cheerio@1.2.0)(handlebars@4.7.8)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(ws@8.19.0)
       langsmith: 0.3.87(openai@5.12.2(ws@8.19.0)(zod@3.25.76))
       math-expression-evaluator: 2.0.7
       openai: 5.12.2(ws@8.19.0)(zod@3.25.76)
@@ -9474,6 +9517,7 @@ snapshots:
       '@mendable/firecrawl-js': 4.13.0
       '@mlc-ai/web-llm': 0.2.81
       '@smithy/util-utf8': 2.3.0
+      cheerio: 1.2.0
       fast-xml-parser: 5.3.4
       google-auth-library: 10.5.0
       html-to-text: 9.0.5
@@ -10857,7 +10901,7 @@ snapshots:
 
   '@sschepis/resolang@0.5.0':
     dependencies:
-      '@aleph-ai/tinyaleph': 1.7.2
+      '@aleph-ai/tinyaleph': 1.7.3
     transitivePeerDependencies:
       - '@tensorflow/tfjs'
       - '@tensorflow/tfjs-node'
@@ -11678,6 +11722,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  boolbase@1.0.0: {}
+
   bowser@2.14.1:
     optional: true
 
@@ -11828,6 +11874,29 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  cheerio-select@2.1.0:
+    dependencies:
+      boolbase: 1.0.0
+      css-select: 5.2.2
+      css-what: 6.2.2
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+
+  cheerio@1.2.0:
+    dependencies:
+      cheerio-select: 2.1.0
+      dom-serializer: 2.0.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      encoding-sniffer: 0.2.1
+      htmlparser2: 10.1.0
+      parse5: 7.3.0
+      parse5-htmlparser2-tree-adapter: 7.1.0
+      parse5-parser-stream: 7.1.2
+      undici: 7.22.0
+      whatwg-mimetype: 4.0.0
+
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.0.0
@@ -11953,6 +12022,16 @@ snapshots:
   css-line-break@2.1.0:
     dependencies:
       utrie: 1.0.2
+
+  css-select@5.2.2:
+    dependencies:
+      boolbase: 1.0.0
+      css-what: 6.2.2
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      nth-check: 2.1.1
+
+  css-what@6.2.2: {}
 
   css.escape@1.5.1: {}
 
@@ -12082,17 +12161,14 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
       entities: 4.5.0
-    optional: true
 
   dom-walk@0.1.2: {}
 
-  domelementtype@2.3.0:
-    optional: true
+  domelementtype@2.3.0: {}
 
   domhandler@5.0.3:
     dependencies:
       domelementtype: 2.3.0
-    optional: true
 
   dompurify@3.2.7:
     optionalDependencies:
@@ -12103,7 +12179,6 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
-    optional: true
 
   dotenv@16.6.1:
     optional: true
@@ -12136,6 +12211,11 @@ snapshots:
 
   encodeurl@2.0.0: {}
 
+  encoding-sniffer@0.2.1:
+    dependencies:
+      iconv-lite: 0.6.3
+      whatwg-encoding: 3.1.1
+
   encoding@0.1.13:
     dependencies:
       iconv-lite: 0.6.3
@@ -12150,10 +12230,11 @@ snapshots:
       graceful-fs: 4.2.11
       tapable: 2.3.0
 
-  entities@4.5.0:
-    optional: true
+  entities@4.5.0: {}
 
   entities@6.0.1: {}
+
+  entities@7.0.1: {}
 
   env-paths@2.2.1: {}
 
@@ -12946,6 +13027,13 @@ snapshots:
       css-line-break: 2.1.0
       text-segmentation: 1.0.3
 
+  htmlparser2@10.1.0:
+    dependencies:
+      domelementtype: 2.3.0
+      domhandler: 5.0.3
+      domutils: 3.2.2
+      entities: 7.0.1
+
   htmlparser2@8.0.2:
     dependencies:
       domelementtype: 2.3.0
@@ -13642,7 +13730,7 @@ snapshots:
       graceful-fs: 4.2.11
     optional: true
 
-  langchain@0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(@langchain/google-genai@1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))))(axios@1.13.5)(handlebars@4.7.8)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(ws@8.19.0):
+  langchain@0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(@langchain/google-genai@1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))))(axios@1.13.5)(cheerio@1.2.0)(handlebars@4.7.8)(openai@5.12.2(ws@8.19.0)(zod@3.25.76))(ws@8.19.0):
     dependencies:
       '@langchain/core': 0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76))
       '@langchain/openai': 0.6.17(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(ws@8.19.0)
@@ -13660,6 +13748,7 @@ snapshots:
       '@langchain/anthropic': 0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))(zod@3.25.76)
       '@langchain/google-genai': 1.0.3(@langchain/core@0.3.80(openai@5.12.2(ws@8.19.0)(zod@3.25.76)))
       axios: 1.13.5(debug@4.4.3)
+      cheerio: 1.2.0
       handlebars: 4.7.8
     transitivePeerDependencies:
       - '@opentelemetry/api'
@@ -14435,6 +14524,10 @@ snapshots:
     dependencies:
       path-key: 3.1.1
 
+  nth-check@2.1.1:
+    dependencies:
+      boolbase: 1.0.0
+
   nwsapi@2.2.23: {}
 
   object-assign@4.1.1: {}
@@ -14603,6 +14696,15 @@ snapshots:
       error-ex: 1.3.4
       json-parse-even-better-errors: 2.3.1
       lines-and-columns: 1.2.4
+
+  parse5-htmlparser2-tree-adapter@7.1.0:
+    dependencies:
+      domhandler: 5.0.3
+      parse5: 7.3.0
+
+  parse5-parser-stream@7.1.2:
+    dependencies:
+      parse5: 7.3.0
 
   parse5@7.3.0:
     dependencies:
@@ -15759,6 +15861,8 @@ snapshots:
     optional: true
 
   undici-types@7.16.0: {}
+
+  undici@7.22.0: {}
 
   unified@11.0.5:
     dependencies:

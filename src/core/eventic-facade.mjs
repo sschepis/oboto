@@ -3,11 +3,13 @@ import path from 'path';
 import { Eventic, defaultTools } from './eventic.mjs';
 import { EventicAIProvider } from './eventic-ai-plugin.mjs';
 import { EventicToolsPlugin } from './eventic-tools-plugin.mjs';
-import { EventicAgentLoopPlugin } from './eventic-agent-loop-plugin.mjs';
 import { EventicStatePlugin } from './eventic-state-plugin.mjs';
 import { TaskCheckpointManager } from './task-checkpoint-manager.mjs';
 import { createSystemPrompt } from './system-prompt.mjs';
 import { config } from '../config.mjs';
+
+// Agentic provider system
+import { AgenticProviderRegistry, EventicProvider, CognitiveProvider } from './agentic/index.mjs';
 
 // Managers needed for ToolExecutor
 import { ToolExecutor } from '../execution/tool-executor.mjs';
@@ -130,8 +132,33 @@ export class EventicFacade {
         });
         this.engine.use(this.statePlugin);
 
-        this.engine.use(EventicAgentLoopPlugin);
-        
+        // ── Agentic Provider Registry ──────────────────────────────────────
+        // Register available agentic providers. The active provider handles
+        // the AGENT_START dispatch in run()/runStream().
+        this.agenticRegistry = new AgenticProviderRegistry();
+
+        // Default: Eventic agent loop (identical to previous behavior)
+        const eventicProvider = new EventicProvider();
+        eventicProvider.install(this.engine); // registers AGENT_START etc.
+        this.agenticRegistry.register(eventicProvider);
+
+        // Alternate: TinyAleph cognitive agent loop
+        const cognitiveProvider = new CognitiveProvider();
+        this.agenticRegistry.register(cognitiveProvider);
+
+        // Activate the configured provider (default: eventic)
+        const defaultAgenticProvider = config?.ai?.agenticProvider || 'eventic';
+        this._agenticInitPromise = this.agenticRegistry.setActive(
+            defaultAgenticProvider,
+            this._getAgenticDeps()
+        ).catch(err => {
+            console.warn(`[EventicFacade] Failed to activate agentic provider "${defaultAgenticProvider}", falling back to eventic:`, err.message);
+            return this.agenticRegistry.setActive('eventic', this._getAgenticDeps());
+        }).catch(err => {
+            // Both primary and fallback failed — log and let run()/runStream() handle the null provider
+            console.error(`[EventicFacade] All agentic providers failed to initialize:`, err.message);
+        });
+
         // Track the facade's busy state
         this._isBusy = false;
         
@@ -148,61 +175,97 @@ export class EventicFacade {
     }
 
     /**
-     * Main entry point - processes user input through the new Eventic engine.
+     * Build the shared dependencies object for agentic providers.
+     * @returns {Object}
+     * @private
+     */
+    _getAgenticDeps() {
+        return {
+            aiProvider: this.aiProvider,
+            toolExecutor: this.toolExecutor,
+            historyManager: this.historyManager,
+            eventBus: this.eventBus,
+            consciousness: this.consciousness,
+            workingDir: this.workingDir,
+            engine: this.engine,
+            facade: this
+        };
+    }
+
+    /**
+     * Main entry point - processes user input through the active agentic provider.
      */
     async run(userInput, options = {}) {
-        // Ensure checkpoint manager is initialized before first run
+        // Ensure checkpoint manager and agentic provider are initialized
         if (this._checkpointInitPromise) {
             await this._checkpointInitPromise;
             this._checkpointInitPromise = null;
         }
-        this._isBusy = true;
-        const originalModel = this.aiProvider.model;
-        if (options.model) {
-            this.aiProvider.model = options.model;
+        if (this._agenticInitPromise) {
+            await this._agenticInitPromise;
+            this._agenticInitPromise = null;
         }
+        this._isBusy = true;
         
         try {
-            const result = await this.engine.dispatch('AGENT_START', { input: userInput, signal: options.signal });
-            return result.response || "No response generated.";
+            const provider = this.agenticRegistry.getActive();
+            if (!provider) {
+                throw new Error('No agentic provider is active. Initialization may have failed — check server logs.');
+            }
+            const result = await provider.run(userInput, {
+                signal: options.signal,
+                model: options.model
+            });
+            // Providers may return a string or { response, streamed }
+            return typeof result === 'string' ? result : (result.response || 'No response generated.');
         } catch (err) {
             console.error('[EventicFacade] Run error:', err);
-            throw err; // Re-throw so callers (e.g. chat-handler) can handle via their try/catch
+            throw err;
         } finally {
-            this.aiProvider.model = originalModel;
             this._isBusy = false;
         }
     }
 
     /**
-     * Streaming entry point - wraps Eventic's async agent loop.
-     * Currently mimics stream by resolving after generation.
+     * Streaming entry point - delegates to the active agentic provider.
      */
     async runStream(userInput, onChunk, options = {}) {
         if (this._checkpointInitPromise) {
             await this._checkpointInitPromise;
             this._checkpointInitPromise = null;
         }
-        this._isBusy = true;
-        const originalModel = this.aiProvider.model;
-        if (options.model) {
-            this.aiProvider.model = options.model;
+        if (this._agenticInitPromise) {
+            await this._agenticInitPromise;
+            this._agenticInitPromise = null;
         }
+        this._isBusy = true;
         
         try {
-            const result = await this.engine.dispatch('AGENT_START', { input: userInput, signal: options.signal, stream: true, onChunk });
-            const responseText = result.response || "No response generated.";
+            const provider = this.agenticRegistry.getActive();
+            if (!provider) {
+                throw new Error('No agentic provider is active. Initialization may have failed — check server logs.');
+            }
+            const result = await provider.run(userInput, {
+                signal: options.signal,
+                model: options.model,
+                stream: true,
+                onChunk
+            });
             
-            if (typeof onChunk === 'function') {
+            // Providers may return a string or { response, streamed }
+            const responseText = typeof result === 'string' ? result : (result?.response || '');
+            const alreadyStreamed = typeof result === 'object' && result?.streamed;
+            
+            // Only emit if the provider didn't already handle streaming itself
+            if (!alreadyStreamed && typeof onChunk === 'function' && responseText) {
                 onChunk(responseText);
             }
             
-            return responseText;
+            return responseText || 'No response generated.';
         } catch (err) {
             console.error('[EventicFacade] Stream error:', err);
             return `Error: ${err.message}`;
         } finally {
-            this.aiProvider.model = originalModel;
             this._isBusy = false;
         }
     }
@@ -309,6 +372,9 @@ export class EventicFacade {
     }
 
     async changeWorkingDirectory(newDir) {
+        if (this._isBusy) {
+            throw new Error('Cannot change workspace while the agent is processing a request. Wait for the current operation to finish.');
+        }
         const resolvedPath = path.resolve(newDir);
         this.workingDir = resolvedPath;
         try {
@@ -321,10 +387,47 @@ export class EventicFacade {
             await this.personaManager.switchWorkspace(this.workingDir);
         }
 
+        // Re-initialize workspace-scoped managers for the new directory
+        if (this.conversationManager) {
+            await this.conversationManager.switchWorkspace(this.workingDir);
+        }
+        // Reset history manager so it doesn't reference stale workspace data.
+        // loadConversation() (called by settings-handler after this method) will
+        // replace it with the new workspace's active history manager.
+        this.historyManager = new HistoryManager();
+        // Persist any pending facts from the old consciousness before replacing it
+        if (this.consciousness) {
+            try { await this.consciousness.persist(); } catch { /* best-effort */ }
+        }
+        this.consciousness = new ConsciousnessProcessor({ persistDir: this.workingDir });
+        this.resoLangService = new ResoLangService(this.workingDir);
+        this.memoryAdapter = this.resoLangService;
+        // Close existing MCP connections before replacing the manager to avoid
+        // leaking child processes spawned by StdioClientTransport.
+        if (this.mcpClientManager?.clients) {
+            for (const name of this.mcpClientManager.clients.keys()) {
+                try { await this.mcpClientManager.disconnect(name); } catch { /* best-effort */ }
+            }
+        }
+        this.mcpClientManager = new McpClientManager(this.workingDir);
+
+        // Update Eventic engine context
+        this.engine.context.workingDir = this.workingDir;
+        this.engine.context.consciousness = this.consciousness;
+
         this._initToolExecutor();
         // Update the tools plugin to point to the new executor
         if (this.toolsPlugin) {
             this.toolsPlugin.toolExecutor = this.toolExecutor;
+        }
+
+        // Re-initialize the active agentic provider with updated deps.
+        // Store the promise so run()/runStream() will await it before processing.
+        const activeProvider = this.agenticRegistry.getActive();
+        if (activeProvider) {
+            this._agenticInitPromise = activeProvider.initialize(this._getAgenticDeps()).catch(err => {
+                console.warn('[EventicFacade] Failed to re-initialize agentic provider after workspace change:', err.message);
+            });
         }
 
         return this.workingDir;
@@ -437,13 +540,56 @@ export class EventicFacade {
         return this.conversationController.getActiveConversationName();
     }
 
+    // ─── Agentic Provider Management ────────────────────────────────────────
+
+    /**
+     * List all registered agentic providers.
+     * @returns {Array<{id: string, name: string, description: string, active: boolean}>}
+     */
+    listAgenticProviders() {
+        return this.agenticRegistry.list();
+    }
+
+    /**
+     * Get the currently active agentic provider.
+     * @returns {{id: string, name: string, description: string}|null}
+     */
+    getActiveAgenticProvider() {
+        const active = this.agenticRegistry.getActive();
+        if (!active) return null;
+        return { id: active.id, name: active.name, description: active.description };
+    }
+
+    /**
+     * Switch the active agentic provider.
+     * @param {string} providerId — 'eventic' or 'cognitive'
+     * @returns {Promise<{id: string, name: string}>}
+     */
+    async switchAgenticProvider(providerId) {
+        const provider = await this.agenticRegistry.setActive(
+            providerId,
+            this._getAgenticDeps()
+        );
+
+        if (this.eventBus) {
+            this.eventBus.emitTyped('agentic:provider-changed', {
+                id: provider.id,
+                name: provider.name,
+                description: provider.description
+            });
+        }
+
+        return { id: provider.id, name: provider.name };
+    }
+
     getContext() {
         return {
             historyLength: this.aiProvider.conversationHistory.length,
             workspace: this.workingDir,
             currentTodos: this.toolExecutor?.getCurrentTodos() || [],
             errorHistory: this.toolExecutor?.getErrorHistory() || [],
-            consciousness: this.engine.context.consciousness?.getSnapshot() || {}
+            consciousness: this.engine.context.consciousness?.getSnapshot() || {},
+            agenticProvider: this.getActiveAgenticProvider()?.id || null
         };
     }
 
