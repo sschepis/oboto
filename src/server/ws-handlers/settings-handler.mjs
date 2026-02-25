@@ -1,28 +1,31 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider, listModels } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
 import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
 import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
+import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
 
 /**
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
  */
 
+// Global config directory for AI settings (not workspace-specific)
+const GLOBAL_CONFIG_DIR = path.join(os.homedir(), '.oboto');
+
 // ── AI Settings Persistence ─────────────────────────────────────────────
 
 /**
- * Save current AI/routing settings to .ai-man/ai-settings.json in the workspace.
- * @param {string} workingDir
+ * Save current AI/routing settings to ~/.oboto/ai-settings.json (global config).
+ * AI provider settings are global data, not workspace-specific.
  */
-async function persistAISettings(workingDir) {
-    if (!workingDir) return;
+async function persistAISettings() {
     try {
-        const dir = path.join(workingDir, '.ai-man');
-        if (!fs.existsSync(dir)) {
-            await fs.promises.mkdir(dir, { recursive: true });
+        if (!fs.existsSync(GLOBAL_CONFIG_DIR)) {
+            await fs.promises.mkdir(GLOBAL_CONFIG_DIR, { recursive: true });
         }
         const settings = {
             model: config.ai.model,
@@ -33,7 +36,7 @@ async function persistAISettings(workingDir) {
             updatedAt: new Date().toISOString()
         };
         await fs.promises.writeFile(
-            path.join(dir, 'ai-settings.json'),
+            path.join(GLOBAL_CONFIG_DIR, 'ai-settings.json'),
             JSON.stringify(settings, null, 2)
         );
     } catch (err) {
@@ -42,14 +45,12 @@ async function persistAISettings(workingDir) {
 }
 
 /**
- * Restore AI/routing settings from .ai-man/ai-settings.json in a workspace.
- * @param {string} workingDir
+ * Restore AI/routing settings from ~/.oboto/ai-settings.json (global config).
  * @param {Object} assistant - The assistant facade
  * @returns {boolean} True if settings were restored
  */
-function restoreAISettings(workingDir, assistant) {
-    if (!workingDir) return false;
-    const settingsPath = path.join(workingDir, '.ai-man', 'ai-settings.json');
+function restoreAISettings(assistant) {
+    const settingsPath = path.join(GLOBAL_CONFIG_DIR, 'ai-settings.json');
     try {
         if (!fs.existsSync(settingsPath)) return false;
         const data = readJsonFileSync(settingsPath);
@@ -83,7 +84,7 @@ function restoreAISettings(workingDir, assistant) {
             Object.assign(config.routing, data.routing);
         }
 
-        consoleStyler.log('system', `⚙️  Restored AI settings from ${settingsPath} (model: ${data.model})`);
+        consoleStyler.log('system', `⚙️  Restored AI settings from global config (model: ${data.model})`);
         return true;
     } catch (err) {
         consoleStyler.log('warning', `Failed to restore AI settings: ${err.message}`);
@@ -204,8 +205,11 @@ async function handleUpdateSettings(data, ctx) {
                 consoleStyler.log('system', `🔄 update-settings: switching workspace to ${resolvedNew}`);
                 const actualPath = await assistant.changeWorkingDirectory(settings.workingDirectory);
 
-                // Restore AI settings for the new workspace
-                restoreAISettings(actualPath, assistant);
+                // Migrate legacy .ai-man → .oboto in the new workspace if needed
+                migrateWorkspaceConfig(actualPath);
+
+                // Global AI settings are already loaded at startup and don't
+                // vary per workspace, so there's no need to re-read them here.
 
                 // Reload conversation state
                 try {
@@ -220,6 +224,11 @@ async function handleUpdateSettings(data, ctx) {
                 // Update scheduler if available
                 if (schedulerService) {
                     await schedulerService.switchWorkspace(actualPath);
+                }
+
+                // Reload UI theme/settings from the new workspace
+                if (assistant.toolExecutor?.uiStyleHandlers) {
+                    assistant.toolExecutor.uiStyleHandlers.switchWorkspace(actualPath);
                 }
 
                 // Send updated project info and file tree
@@ -323,8 +332,8 @@ async function handleUpdateSettings(data, ctx) {
     // Broadcast new settings back
     wsSend(ws, 'settings', buildSettingsPayload(assistant, ctx));
 
-    // Persist to workspace so settings survive restarts
-    persistAISettings(assistant.workingDir);
+    // Persist to global config so settings survive restarts
+    persistAISettings();
 }
 
 async function handleGetStatus(data, ctx) {
@@ -377,8 +386,13 @@ async function handleSetCwd(data, ctx) {
 
         const actualPath = await assistant.changeWorkingDirectory(newPath);
 
-        // Restore AI settings saved for this workspace
-        restoreAISettings(actualPath, assistant);
+        // Migrate legacy .ai-man → .oboto in the new workspace if needed
+        migrateWorkspaceConfig(actualPath);
+
+        // Restore global AI settings (model, provider, routing) from
+        // ~/.oboto/ai-settings.json. This is especially important on the
+        // first set-cwd after server startup, which acts as initialization.
+        restoreAISettings(assistant);
 
         // Load workspace conversation (emits history-loaded + conversation-switched via eventBus)
         try {
@@ -404,6 +418,11 @@ async function handleSetCwd(data, ctx) {
             await schedulerService.switchWorkspace(actualPath);
             const schedules = schedulerService.listSchedules();
             broadcast('schedule-list', schedules);
+        }
+
+        // Reload UI theme/settings from the new workspace
+        if (assistant.toolExecutor?.uiStyleHandlers) {
+            assistant.toolExecutor.uiStyleHandlers.switchWorkspace(actualPath);
         }
 
         if (assistant.toolExecutor?.surfaceManager) {

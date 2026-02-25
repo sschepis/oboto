@@ -1,7 +1,7 @@
 /**
  * Preferences manager for Oboto tray app.
  *
- * Persists configuration to ~/.oboto-service/preferences.json
+ * Persists configuration to ~/.oboto/preferences.json
  * using electron-store (or a plain JSON fallback when running outside Electron).
  */
 
@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const PREFS_DIR = path.join(os.homedir(), '.oboto-service');
+const PREFS_DIR = path.join(os.homedir(), '.oboto');
 const PREFS_FILE = path.join(PREFS_DIR, 'preferences.json');
 
 const DEFAULTS = {

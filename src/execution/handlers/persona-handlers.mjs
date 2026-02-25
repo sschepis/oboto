@@ -47,7 +47,7 @@ export function registerPersonaHandlers(handlers, context) {
 
         if (personas.length === 0) {
             return JSON.stringify({
-                message: 'No personas found. Create one with create_persona or add .json files to .ai-man/personas/',
+                message: 'No personas found. Create one with create_persona or add .json files to .oboto/personas/',
                 personas: []
             }, null, 2);
         }

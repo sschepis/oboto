@@ -21,13 +21,13 @@ export class SchedulerService {
         this.schedules = new Map(); // scheduleId -> ScheduleRecord
         this.intervals = new Map(); // scheduleId -> NodeJS.Timeout
         
-        this.persistenceFile = path.join(workingDir, '.ai-man', 'schedules.json');
+        this.persistenceFile = path.join(workingDir, '.oboto', 'schedules.json');
         
-        // Ensure .ai-man directory exists
-        const aiManDir = path.dirname(this.persistenceFile);
-        if (!fs.existsSync(aiManDir)) {
+        // Ensure .oboto directory exists
+        const configDir = path.dirname(this.persistenceFile);
+        if (!fs.existsSync(configDir)) {
             try {
-                fs.mkdirSync(aiManDir, { recursive: true });
+                fs.mkdirSync(configDir, { recursive: true });
             } catch (e) {
                 // Ignore if exists
             }
@@ -254,7 +254,7 @@ export class SchedulerService {
      * Switch to a new workspace directory.
      * Stops all running schedule timers, persists current schedules,
      * clears in-memory state, updates workingDir + persistence path,
-     * and restores schedules from the new workspace's .ai-man/schedules.json.
+     * and restores schedules from the new workspace's .oboto/schedules.json.
      */
     async switchWorkspace(newWorkingDir) {
         // 1. Persist current schedules before leaving
@@ -271,13 +271,13 @@ export class SchedulerService {
 
         // 4. Update working dir and persistence path
         this.workingDir = newWorkingDir;
-        this.persistenceFile = path.join(newWorkingDir, '.ai-man', 'schedules.json');
+        this.persistenceFile = path.join(newWorkingDir, '.oboto', 'schedules.json');
 
-        // Ensure .ai-man directory exists in new workspace
-        const aiManDir = path.dirname(this.persistenceFile);
-        if (!fs.existsSync(aiManDir)) {
+        // Ensure .oboto directory exists in new workspace
+        const configDir = path.dirname(this.persistenceFile);
+        if (!fs.existsSync(configDir)) {
             try {
-                fs.mkdirSync(aiManDir, { recursive: true });
+                fs.mkdirSync(configDir, { recursive: true });
             } catch (e) {
                 // Ignore if exists
             }

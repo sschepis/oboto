@@ -18,7 +18,11 @@ export const DEFAULT_COGNITIVE_CONFIG = {
     initTicks: 10
   },
   agent: {
-    maxToolRounds: 3,
+    // Maximum sequential tool-call rounds before forcing a text response.
+    // Set to 6 to accommodate multi-step workflows (e.g. read→search→write→verify).
+    // NOTE: The agent makes one additional "force text" LLM call after tool rounds
+    // exhaust without producing content, so worst-case LLM calls = maxToolRounds + 1.
+    maxToolRounds: 6,
     maxHistory: 50,
     systemPrompt: `You are an AI agent with cognitive awareness and tool-calling capabilities. You have access to tools for reading/writing files, listing directories, running commands, checking your cognitive state, and recalling memories.
 

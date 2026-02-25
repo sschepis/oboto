@@ -38,7 +38,7 @@ describe('CheckpointStore', () => {
     });
 
     test('creates checkpoints directory on construction', () => {
-        const checkpointsDir = path.join(testDir, '.ai-man', 'checkpoints');
+        const checkpointsDir = path.join(testDir, '.oboto', 'checkpoints');
         expect(fs.existsSync(checkpointsDir)).toBe(true);
     });
 
@@ -124,7 +124,7 @@ describe('CheckpointStore', () => {
 
     test('WAL replay recovers from partial writes', async () => {
         // Manually create a WAL entry
-        const walPath = path.join(testDir, '.ai-man', 'checkpoints', 'wal.json');
+        const walPath = path.join(testDir, '.oboto', 'checkpoints', 'wal.json');
         const walEntry = [{
             operation: 'write',
             taskId: 'wal-test',

@@ -15,7 +15,12 @@ npm-debug.log*
 Thumbs.db
 
 # Workspace
+.oboto/
+.skills/
 .ai-man/
+.ai-man.migrated/
+.oboto-service.migrated/
+.secrets.enc.migrated
 .ai-session.history.json
 .ai-session.workspace.json
 temp_speech.mp3

@@ -50,7 +50,7 @@ export class FlowManager {
 
     // Initialize Default Hooks
     async initHooks() {
-        const hooksDir = path.join(this.manifestManager.workingDir, '.ai-man');
+        const hooksDir = path.join(this.manifestManager.workingDir, '.oboto');
         const hooksPath = path.join(hooksDir, 'hooks.json.example');
         
         if (!fs.existsSync(hooksDir)) {
@@ -67,7 +67,7 @@ export class FlowManager {
                 ]
             };
             await fs.promises.writeFile(hooksPath, JSON.stringify(defaultHooks, null, 2), 'utf8');
-            return "Created .ai-man/hooks.json.example";
+            return "Created .oboto/hooks.json.example";
         }
         return "Hooks example already exists.";
     }
@@ -335,7 +335,7 @@ Include: current state + immediate next step.`;
 
     // Execute External Hooks
     async executeHooks(event, context) {
-        const hooksPath = path.join(this.manifestManager.workingDir, '.ai-man', 'hooks.json');
+        const hooksPath = path.join(this.manifestManager.workingDir, '.oboto', 'hooks.json');
         if (!fs.existsSync(hooksPath)) return; // No hooks configured
 
         try {

@@ -55,7 +55,7 @@ export class ResoLangService {
 
             // 5. Initialize and Load Global Memory
             const homeDir = os.homedir();
-            const globalDir = path.join(homeDir, '.ai-man');
+            const globalDir = path.join(homeDir, '.oboto');
             
             if (!fs.existsSync(globalDir)) {
                 await fs.promises.mkdir(globalDir, { recursive: true });

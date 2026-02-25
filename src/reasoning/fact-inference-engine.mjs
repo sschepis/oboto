@@ -7,7 +7,7 @@
  * - Derivation chain tracing
  * - Semantic querying
  * 
- * Facts persist to .ai-man/reasoning/facts.json
+ * Facts persist to .oboto/reasoning/facts.json
  * 
  * @module reasoning/fact-inference-engine
  */
@@ -141,13 +141,13 @@ const DEFAULT_RULES = [
 export class FactInferenceEngine {
   /**
    * @param {Object} [opts]
-   * @param {string} [opts.persistDir] defaults to .ai-man/reasoning
+   * @param {string} [opts.persistDir] defaults to .oboto/reasoning
    * @param {number} [opts.matchThreshold] cosine threshold for premise matching (default 0.4)
    * @param {number} [opts.maxFacts] prune oldest beyond this (default 500)
    * @param {number} [opts.pruneAgeDays] prune low-confidence facts older than this (default 7)
    */
   constructor(opts = {}) {
-    this.persistDir = opts.persistDir || path.join(process.cwd(), '.ai-man', 'reasoning');
+    this.persistDir = opts.persistDir || path.join(process.cwd(), '.oboto', 'reasoning');
     this.matchThreshold = opts.matchThreshold ?? 0.4;
     this.maxFacts = opts.maxFacts ?? 500;
     this.pruneAgeDays = opts.pruneAgeDays ?? 7;
@@ -482,11 +482,24 @@ export class FactInferenceEngine {
 
     let relevant = [];
     if (contextQuery) {
-      relevant = this.query(contextQuery, 0.35, 3).map(r => r.fact);
+      // Exclude raw user-input facts — they just echo the query back and add
+      // no new knowledge.  Only include inferred / observation / tool facts.
+      relevant = this.query(contextQuery, 0.35, 5)
+        .filter(r => r.fact.source !== 'input')
+        .slice(0, 3)
+        .map(r => r.fact);
+    }
+
+    // Only emit context if there's something meaningful beyond bare stats.
+    // A stats-only line with no inferences or relevant knowledge just adds
+    // noise and can confuse the model into echoing it as a response.
+    if (recentInferences.length === 0 && relevant.length === 0) {
+      return '';
     }
 
     const parts = [
-      `[Reasoning State]: ${stats.totalFacts} facts (${stats.inferred} inferred), ${stats.ruleCount} rules`,
+      `[Internal Reasoning Context — do not include in your response]`,
+      `State: ${stats.totalFacts} facts (${stats.inferred} inferred), ${stats.ruleCount} rules`,
     ];
 
     if (recentInferences.length > 0) {

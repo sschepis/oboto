@@ -50,8 +50,10 @@ export class EventicStatePlugin {
             return;
         }
         
-        // Deep clone or set history to keep HistoryManager up to date
-        this.historyManager.setHistory(engine.ai.conversationHistory);
+        // Strip transient messages (e.g. fact-context injections) before
+        // persisting so they don't accumulate across conversations.
+        const persistable = engine.ai.conversationHistory.filter(m => !m._transient);
+        this.historyManager.setHistory(persistable);
         
         // Save conversation immediately (per user requirement)
         if (this.conversationManager) {

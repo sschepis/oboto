@@ -248,13 +248,19 @@ export const EventicAgentLoopPlugin = {
             if (ctx.turnNumber === 1) {
                 prompt = input;
 
-                // Inject relevant facts from the inference engine into the first turn
-                // so the model benefits from previously inferred knowledge.
+                // Inject relevant facts from the inference engine as a system
+                // message so the model treats them as internal context rather than
+                // part of the user's request.  Appending to the user prompt caused
+                // the model to echo the reasoning state back verbatim.
                 if (ctx.consciousness) {
                     try {
                         const factContext = ctx.consciousness.renderFactContext(input);
-                        if (factContext) {
-                            prompt += `\n\n${factContext}`;
+                        if (factContext && engine.ai?.conversationHistory) {
+                            engine.ai.conversationHistory.push({
+                                role: 'system',
+                                content: factContext,
+                                _transient: true, // Strip during history persistence to prevent accumulation
+                            });
                         }
                     } catch (e) {
                         console.error('[ACTOR_CRITIC_LOOP] renderFactContext failed:', e);

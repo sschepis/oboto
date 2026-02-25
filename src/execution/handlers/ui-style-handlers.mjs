@@ -402,7 +402,7 @@ export class UIStyleHandlers {
     constructor(eventBus, workspaceRoot) {
         this.eventBus = eventBus;
         this.workspaceRoot = workspaceRoot || process.cwd();
-        this.settingsPath = path.join(this.workspaceRoot, '.ai-man', 'ui-settings.json');
+        this.settingsPath = path.join(this.workspaceRoot, '.oboto', 'ui-settings.json');
 
         // Track current style state server-side
         this.currentTheme = 'midnight'; // default
@@ -534,6 +534,37 @@ export class UIStyleHandlers {
         consoleStyler.log('system', `🏷️  Display names updated: ${parts.join(', ')}`);
         await this._saveSettings();
         return `Display names updated: ${parts.join(', ')}.`;
+    }
+
+    /** Switch to a new workspace — reload persisted settings and broadcast the restored theme. */
+    switchWorkspace(newWorkspaceRoot) {
+        this.workspaceRoot = newWorkspaceRoot;
+        this.settingsPath = path.join(this.workspaceRoot, '.oboto', 'ui-settings.json');
+
+        // Reset to defaults before loading
+        this.currentTheme = 'midnight';
+        this.activeTokenOverrides = {};
+        this.injectedCSS = '';
+        this.displayNames = { userName: null, agentName: null };
+
+        this._loadSettings();
+
+        // Broadcast restored theme to all clients.
+        // For custom themes, use the loaded token overrides; fall back to
+        // the midnight preset if neither a preset nor overrides are available
+        // (prevents clients from receiving an empty tokens object).
+        const preset = THEME_PRESETS[this.currentTheme];
+        const tokens = preset
+            || (Object.keys(this.activeTokenOverrides).length > 0 ? this.activeTokenOverrides : THEME_PRESETS.midnight);
+        if (tokens && Object.keys(tokens).length > 0) {
+            this._broadcast('ui-style:theme', { theme: this.currentTheme, tokens });
+        }
+        if (this.injectedCSS) {
+            this._broadcast('ui-style:css', { css: this.injectedCSS, mode: 'replace' });
+        }
+        if (this.displayNames.userName || this.displayNames.agentName) {
+            this._broadcast('ui-display-names', { ...this.displayNames });
+        }
     }
 
     /** Load persisted settings from disk. */

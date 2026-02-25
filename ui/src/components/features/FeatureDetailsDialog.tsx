@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, Layers, GitBranch, Lock, Activity, Link } from 'lucide-react';
 import type { StructuredDevFeature } from './ProjectStatus';
 
@@ -22,7 +23,7 @@ export const FeatureDetailsDialog: React.FC<FeatureDetailsDialogProps> = ({ isOp
 
   const phaseColor = PHASE_COLORS[feature.phase] || 'text-zinc-400 bg-zinc-800/30 border-zinc-700/30';
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
       <div 
         className="w-full max-w-lg bg-[#09090b] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
@@ -117,6 +118,7 @@ export const FeatureDetailsDialog: React.FC<FeatureDetailsDialogProps> = ({ isOp
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

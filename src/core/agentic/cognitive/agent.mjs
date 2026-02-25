@@ -166,6 +166,36 @@ class CognitiveAgent {
       ) {
         toolRounds++;
 
+        // Build the assistant message for ALL tool calls in this round.
+        // For Gemini thinking models, we MUST preserve _geminiParts (which
+        // contain thought/thoughtSignature fields) or the API will reject
+        // subsequent turns with "missing thought_signature" errors.
+        const rawMsg = response.rawMessage;
+        const assistantMsg = {
+          role: 'assistant',
+          content: null,
+          tool_calls: response.toolCalls.map(tc => ({
+            id: tc.id || `call_${toolRounds}_${tc.function.name}`,
+            type: 'function',
+            function: {
+              name: tc.function.name,
+              arguments: typeof tc.function.arguments === 'string'
+                ? tc.function.arguments
+                : JSON.stringify(tc.function.arguments)
+            },
+            // Preserve thoughtSignature for Gemini round-tripping
+            _thoughtSignature: tc._thoughtSignature || undefined
+          }))
+        };
+
+        // Preserve full Gemini parts for faithful round-trip reconstruction
+        if (rawMsg && rawMsg._geminiParts) {
+          assistantMsg._geminiParts = rawMsg._geminiParts;
+        }
+
+        messages.push(assistantMsg);
+
+        // Execute each tool and push results
         for (const toolCall of response.toolCalls) {
           const result = await this._executeTool(
             toolCall.function.name,
@@ -173,30 +203,27 @@ class CognitiveAgent {
           );
           toolResults.push({ tool: toolCall.function.name, result });
 
-          // Add tool result to messages
-          messages.push({
-            role: 'assistant',
-            content: null,
-            tool_calls: [{
-              id: toolCall.id || `call_${toolRounds}_${toolCall.function.name}`,
-              type: 'function',
-              function: {
-                name: toolCall.function.name,
-                arguments: typeof toolCall.function.arguments === 'string'
-                  ? toolCall.function.arguments
-                  : JSON.stringify(toolCall.function.arguments)
-              }
-            }]
-          });
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id || `call_${toolRounds}_${toolCall.function.name}`,
+            name: toolCall.function.name,
             content: JSON.stringify(result)
           });
         }
 
         // Call LLM again with tool results
         response = await this._callLLM(messages, toolDefs, options);
+      }
+
+      // If the tool loop finished but the final response is still empty
+      // (common with Gemini thinking models that return only thought parts),
+      // make one more LLM call WITHOUT tools to force a text-only summary.
+      if (!response.content && toolRounds > 0) {
+        messages.push({
+          role: 'system',
+          content: 'The tool loop has completed. Synthesize all tool results above into a final, complete response for the user. Do NOT call any more tools.'
+        });
+        response = await this._callLLM(messages, [], options);
       }
     } catch (e) {
       response = {
@@ -300,7 +327,7 @@ class CognitiveAgent {
    * @param {Array} messages
    * @param {Array} tools
    * @param {Object} options
-   * @returns {Promise<{content: string, toolCalls: Array|null}>}
+   * @returns {Promise<{content: string, toolCalls: Array|null, rawMessage: Object|null}>}
    * @private
    */
   async _callLLM(messages, tools, options = {}) {
@@ -312,17 +339,18 @@ class CognitiveAgent {
 
       // Handle the response format
       if (typeof response === 'string') {
-        return { content: response, toolCalls: null };
+        return { content: response, toolCalls: null, rawMessage: null };
       }
 
       if (response && response.toolCalls) {
         return {
           content: response.content || '',
-          toolCalls: response.toolCalls
+          toolCalls: response.toolCalls,
+          rawMessage: response.rawMessage || null
         };
       }
 
-      return { content: response?.content || String(response), toolCalls: null };
+      return { content: response?.content || String(response), toolCalls: null, rawMessage: null };
     } catch (e) {
       // Re-throw — callers handle errors (turn() wraps in try/catch)
       throw e;

@@ -1,17 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import os from 'os';
 import { wsSend } from '../../lib/ws-utils.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
 
-const SETUP_FILE = '.ai-man/setup.json';
+const GLOBAL_DIR = path.join(os.homedir(), '.oboto');
+const SETUP_FILE = path.join(GLOBAL_DIR, 'setup.json');
 
 async function handleGetSetupStatus(data, ctx) {
     const { ws } = ctx;
-    const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-    const filePath = path.join(projectRoot, SETUP_FILE);
     
-    const setupData = readJsonFileSync(filePath, null);
+    const setupData = readJsonFileSync(SETUP_FILE, null);
     const isFirstRun = setupData === null;
     
     wsSend(ws, 'setup-status', { isFirstRun, ...(setupData || {}) });
@@ -19,9 +18,8 @@ async function handleGetSetupStatus(data, ctx) {
 
 async function handleCompleteSetup(data, ctx) {
     const { ws } = ctx;
-    const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-    const dirPath = path.join(projectRoot, '.ai-man');
-    const filePath = path.join(dirPath, 'setup.json');
+    const dirPath = GLOBAL_DIR;
+    const filePath = SETUP_FILE;
     
     try {
         await fs.promises.mkdir(dirPath, { recursive: true });

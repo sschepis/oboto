@@ -7,7 +7,7 @@ import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
- * Manages AI persona configurations stored in .ai-man/personas/ directory.
+ * Manages AI persona configurations stored in .oboto/personas/ directory.
  * Personas are structured JSON files that define identity, mission, voice,
  * and behavioral directives that get injected into the system prompt.
  */
@@ -17,7 +17,7 @@ export class PersonaManager {
      */
     constructor(workingDir) {
         this.workingDir = workingDir;
-        this.personasDir = path.join(workingDir, '.ai-man', 'personas');
+        this.personasDir = path.join(workingDir, '.oboto', 'personas');
         this.personas = new Map(); // id -> persona config
         this.activePersonaId = null;
         this._initialized = false;
@@ -270,7 +270,7 @@ export class PersonaManager {
      */
     async switchWorkspace(newWorkingDir) {
         this.workingDir = newWorkingDir;
-        this.personasDir = path.join(newWorkingDir, '.ai-man', 'personas');
+        this.personasDir = path.join(newWorkingDir, '.oboto', 'personas');
         this.personas.clear();
         this.activePersonaId = null;
         this._initialized = false;

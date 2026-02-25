@@ -2,7 +2,7 @@
  * CheckpointStore — File-based persistence layer for task checkpoints.
  * 
  * Storage layout:
- *   .ai-man/checkpoints/
+ *   .oboto/checkpoints/
  *     task-{id}.checkpoint.json   - Individual task checkpoints
  *     wal.json                     - Write-ahead log for atomicity
  *     recovery-manifest.json       - Index of active checkpoints
@@ -12,7 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
-const CHECKPOINTS_DIR = '.ai-man/checkpoints';
+const CHECKPOINTS_DIR = '.oboto/checkpoints';
 const WAL_FILE = 'wal.json';
 const MANIFEST_FILE = 'recovery-manifest.json';
 

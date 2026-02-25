@@ -699,11 +699,21 @@ async function callGeminiSDK(ctx, requestBody) {
         generateConfig.systemInstruction = systemInstruction;
     }
 
-    const geminiResponse = await withRetry(() => ai.models.generateContent({
-        model: ctx.model,
-        contents: contents,
-        config: generateConfig,
-    }));
+    // Race each attempt against a 60s per-call timeout to prevent indefinite hangs
+    // when the network stalls without producing an error.
+    const PER_CALL_TIMEOUT = 60_000;
+    const geminiResponse = await withRetry(() => {
+        return Promise.race([
+            ai.models.generateContent({
+                model: ctx.model,
+                contents: contents,
+                config: generateConfig,
+            }),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('fetch failed: Gemini SDK call timed out')), PER_CALL_TIMEOUT)
+            ),
+        ]);
+    });
 
     // Translate response to OpenAI format
     return geminiResponseToOpenai(geminiResponse);
@@ -779,11 +789,19 @@ async function callGeminiSDKStream(ctx, requestBody) {
 async function callOpenAIREST(ctx, requestBody, signal) {
     const body = transformRequestBody(ctx.provider, requestBody);
 
+    // Combine caller-provided signal with a 60s per-call timeout so requests
+    // don't hang indefinitely even when no user-cancellation signal is present.
+    const PER_CALL_TIMEOUT = 60_000;
+    const timeoutSignal = AbortSignal.timeout(PER_CALL_TIMEOUT);
+    const combinedSignal = signal
+        ? AbortSignal.any([signal, timeoutSignal])
+        : timeoutSignal;
+
     const response = await withRetry(() => fetch(ctx.endpoint, {
         method: 'POST',
         headers: ctx.headers,
         body: JSON.stringify(body),
-        signal,
+        signal: combinedSignal,
     }));
 
     if (!response.ok) {
@@ -900,13 +918,22 @@ export function isCancellationError(err) {
 }
 
 /**
- * Retry helper for network operations
+ * Retry helper for network operations.
+ * Includes a hard wall-clock timeout so the caller never hangs indefinitely.
  * @param {Function} fn - Async function to retry
- * @param {number} retries - Max retries
- * @param {number} delay - Initial delay in ms
+ * @param {number} retries - Max retries (default 3)
+ * @param {number} delay - Initial delay in ms (default 2000)
+ * @param {number} totalTimeoutMs - Hard wall-clock timeout across all retries (default 90s)
  */
-async function withRetry(fn, retries = 3, delay = 2000) {
+async function withRetry(fn, retries = 3, delay = 2000, totalTimeoutMs = 90_000) {
+    const deadline = Date.now() + totalTimeoutMs;
+
     for (let i = 0; i < retries; i++) {
+        // Hard timeout: if we've exhausted our wall-clock budget, bail out
+        if (Date.now() >= deadline) {
+            throw new Error(`[AI Provider] Request timed out after ${totalTimeoutMs / 1000}s (exceeded retry budget)`);
+        }
+
         let result;
         try {
             result = await fn();
@@ -926,7 +953,10 @@ async function withRetry(fn, retries = 3, delay = 2000) {
 
             if (i === retries - 1 || !isRetryable) throw err;
             
-            const waitTime = delay * Math.pow(2, i);
+            const waitTime = Math.min(delay * Math.pow(2, i), deadline - Date.now());
+            if (waitTime <= 0) {
+                throw new Error(`[AI Provider] Request timed out after ${totalTimeoutMs / 1000}s (no time left for retry)`);
+            }
             console.warn(`[AI Provider] Request failed (${err.code || err.message}). Retrying in ${waitTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
             continue;
@@ -955,6 +985,12 @@ async function withRetry(fn, retries = 3, delay = 2000) {
                             }
                         }
                     }
+                }
+
+                // Clamp wait to remaining budget
+                waitTime = Math.min(waitTime, deadline - Date.now());
+                if (waitTime <= 0) {
+                    throw new Error(`[AI Provider] Request timed out after ${totalTimeoutMs / 1000}s (no time for rate-limit retry)`);
                 }
 
                 console.warn(`[AI Provider] HTTP ${status}. Retrying in ${waitTime}ms...`);

@@ -70,7 +70,7 @@ Last Updated: ${new Date().toISOString()}
             "on_lock": "echo 'Feature locked!'",
             "on_phase_change": "echo 'Phase changed'"
         };
-        const hooksDir = path.join(this.workingDir, '.ai-man');
+        const hooksDir = path.join(this.workingDir, '.oboto');
         if (!fs.existsSync(hooksDir)) {
             await fs.promises.mkdir(hooksDir, { recursive: true });
         }
@@ -149,12 +149,12 @@ ${depGraph.trimEnd()}
 - [${new Date().toISOString()}] Initial State Created (bootstrapped from design document)
 `;
 
-        // Create .ai-man directory and hooks example
+        // Create .oboto directory and hooks example
         const hooksExample = {
             "on_lock": "echo 'Feature locked!'",
             "on_phase_change": "echo 'Phase changed'"
         };
-        const hooksDir = path.join(this.workingDir, '.ai-man');
+        const hooksDir = path.join(this.workingDir, '.oboto');
         if (!fs.existsSync(hooksDir)) {
             await fs.promises.mkdir(hooksDir, { recursive: true });
         }

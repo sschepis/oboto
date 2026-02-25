@@ -9,10 +9,6 @@ import crypto from 'crypto';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // ─── Known Secret Definitions ────────────────────────────────────────────
 
@@ -97,16 +93,14 @@ const CATEGORIES = ['AI Providers', 'Integrations', 'Endpoints', 'Custom'];
 
 export class SecretsManager {
     /**
-     * @param {string} [workspaceDir] - Optional workspace directory.
-     *   The .secrets.enc file is stored at the Oboto project root,
-     *   NOT in the user's workspace.
+     * Secrets are stored globally in ~/.oboto/.secrets.enc.
      */
-    constructor(workspaceDir) {
-        // Store at project root (two levels up from src/server/)
-        this._projectRoot = path.resolve(__dirname, '..', '..');
-        this._filePath = path.join(this._projectRoot, '.secrets.enc');
-        this._backupPath = path.join(this._projectRoot, '.secrets.enc.bak');
-        this._tmpPath = path.join(this._projectRoot, '.secrets.enc.tmp');
+    constructor() {
+        // Store in ~/.oboto/ global config directory
+        this._globalDir = path.join(os.homedir(), '.oboto');
+        this._filePath = path.join(this._globalDir, '.secrets.enc');
+        this._backupPath = path.join(this._globalDir, '.secrets.enc.bak');
+        this._tmpPath = path.join(this._globalDir, '.secrets.enc.tmp');
         this._store = { version: 1, secrets: {} };
         this._key = this._deriveKey();
     }
@@ -137,6 +131,10 @@ export class SecretsManager {
      * @returns {Promise<void>}
      */
     async _save(store) {
+        // Ensure the global config directory exists (guards against set() before load())
+        if (!fs.existsSync(this._globalDir)) {
+            await fs.promises.mkdir(this._globalDir, { recursive: true });
+        }
         const plaintext = JSON.stringify(store, null, 2);
         const iv = crypto.randomBytes(16);
         const cipher = crypto.createCipheriv('aes-256-gcm', this._key, iv);
@@ -205,6 +203,10 @@ export class SecretsManager {
      */
     async load() {
         try {
+            // Ensure ~/.oboto directory exists
+            if (!fs.existsSync(this._globalDir)) {
+                await fs.promises.mkdir(this._globalDir, { recursive: true });
+            }
             const store = await this._read();
             if (store) {
                 this._store = store;

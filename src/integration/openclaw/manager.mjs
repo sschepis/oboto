@@ -79,7 +79,7 @@ export class OpenClawManager {
 
       // 2. Check Workspace Override
       if (workspaceDir) {
-          const localConfigPath = path.join(workspaceDir, '.ai-man', 'openclaw.json');
+          const localConfigPath = path.join(workspaceDir, '.oboto', 'openclaw.json');
           if (fs.existsSync(localConfigPath)) {
               try {
                   const content = await fs.promises.readFile(localConfigPath, 'utf8');
@@ -513,7 +513,7 @@ export class OpenClawManager {
         if (newConfig.path) await this.secretsManager.set('OPENCLAW_PATH', newConfig.path, 'Endpoints', 'Path to OpenClaw binary');
         console.log('[OpenClawManager] Global configuration saved to vault');
     } else if (scope === 'workspace' && workspaceDir) {
-        const configDir = path.join(workspaceDir, '.ai-man');
+        const configDir = path.join(workspaceDir, '.oboto');
         if (!fs.existsSync(configDir)) {
             await fs.promises.mkdir(configDir, { recursive: true });
         }

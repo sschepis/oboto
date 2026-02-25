@@ -504,13 +504,11 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                 if (names.userName || names.agentName) {
                     ws.send(JSON.stringify({ type: 'ui-display-names', payload: names }));
                 }
-                // Resend current theme if it's been changed from the default
-                if (handler.currentTheme !== 'midnight') {
-                    const preset = UIStyleHandlers.getPreset(handler.currentTheme);
-                    const tokens = preset || handler.activeTokenOverrides;
-                    if (tokens && Object.keys(tokens).length > 0) {
-                        ws.send(JSON.stringify({ type: 'ui-style-theme', payload: { theme: handler.currentTheme, tokens } }));
-                    }
+                // Always send the current theme so the client renders correctly
+                const preset = UIStyleHandlers.getPreset(handler.currentTheme);
+                const tokens = preset || handler.activeTokenOverrides;
+                if (tokens && Object.keys(tokens).length > 0) {
+                    ws.send(JSON.stringify({ type: 'ui-style-theme', payload: { theme: handler.currentTheme, tokens } }));
                 }
             } catch (e) {
                 // Ignore

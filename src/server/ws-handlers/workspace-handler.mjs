@@ -10,8 +10,8 @@
 import fs from 'fs';
 import path from 'path';
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { SecretsManager } from '../secrets-manager.mjs';
 import { wsSend } from '../../lib/ws-utils.mjs';
+import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
 
 /**
  * Switch the active workspace.  Re-initialises assistant, scheduler, and
@@ -36,13 +36,17 @@ async function handleWorkspaceSwitch(data, ctx) {
     try {
         consoleStyler.log('system', `🔄 Switching workspace to: ${resolved}`);
 
+        // Migrate legacy .ai-man → .oboto in the new workspace if needed
+        migrateWorkspaceConfig(resolved);
+
         if (agentLoopController) agentLoopController.stop();
         if (schedulerService) await schedulerService.switchWorkspace(resolved);
 
         if (secretsManager) {
-            const newSecrets = new SecretsManager(resolved);
-            await newSecrets.load();
-            newSecrets.applyToEnv();
+            // Secrets are global (~/.oboto/.secrets.enc), so just reload
+            // the existing instance rather than creating a throwaway new one.
+            await secretsManager.load();
+            secretsManager.applyToEnv();
         }
 
         assistant.workingDir = resolved;
@@ -50,6 +54,11 @@ async function handleWorkspaceSwitch(data, ctx) {
             assistant.conversationManager.workingDir = resolved;
         }
         await assistant.loadConversation();
+
+        // Reload UI theme/settings from the new workspace
+        if (assistant.toolExecutor?.uiStyleHandlers) {
+            assistant.toolExecutor.uiStyleHandlers.switchWorkspace(resolved);
+        }
 
         if (workspaceContentServer) {
             try {

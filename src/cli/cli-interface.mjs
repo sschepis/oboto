@@ -2,6 +2,8 @@
 // Handles command-line interaction and user input processing
 
 import readline from 'readline';
+import fs from 'fs';
+import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
 export class CLIInterface {
@@ -133,24 +135,40 @@ export class CLIInterface {
     // Parse command line arguments
     parseArguments() {
         const args = process.argv.slice(2);
-        const workingDir = process.cwd();
-        
-        // Check for flags
+        let workingDir = process.cwd();
+
+        // Extract --cwd <path> first (used by tray app's daemon manager).
+        // Splice it out before any other index lookups so subsequent
+        // indexOf calls see stable positions.
+        const cwdIndex = args.indexOf('--cwd');
+        let cwdOverride = null;
+        if (cwdIndex !== -1 && cwdIndex + 1 < args.length) {
+            cwdOverride = args[cwdIndex + 1];
+            args.splice(cwdIndex, 2); // Remove both --cwd and its value
+        }
+
+        // Also check WORKSPACE_ROOT env var as fallback
+        if (!cwdOverride && process.env.WORKSPACE_ROOT) {
+            cwdOverride = process.env.WORKSPACE_ROOT;
+        }
+
+        if (cwdOverride) {
+            cwdOverride = path.resolve(cwdOverride);
+            if (!fs.existsSync(cwdOverride) || !fs.statSync(cwdOverride).isDirectory()) {
+                console.error(`Error: --cwd path is not a valid directory: ${cwdOverride}`);
+                process.exit(1);
+            }
+            workingDir = cwdOverride;
+        }
+
+        // Now detect and remove --resume / --server flags
         const resumeIndex = args.indexOf('--resume');
         const resume = resumeIndex !== -1;
-        
+        if (resume) args.splice(resumeIndex, 1);
+
         const serverIndex = args.indexOf('--server');
         const isServer = serverIndex !== -1;
-        
-        // Remove flags from args
-        if (resume) {
-            const idx = args.indexOf('--resume'); // Re-find index as splice shifts
-            if (idx !== -1) args.splice(idx, 1);
-        }
-        if (isServer) {
-            const idx = args.indexOf('--server');
-            if (idx !== -1) args.splice(idx, 1);
-        }
+        if (isServer) args.splice(serverIndex, 1);
 
         return {
             args,

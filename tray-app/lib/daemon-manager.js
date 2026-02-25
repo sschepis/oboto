@@ -83,11 +83,15 @@ class DaemonManager extends EventEmitter {
             ...process.env,
             PORT: String(this.port),
             OBOTO_AUTO_ACTIVATE: this.preferences.get('autoActivateOnStart') ? 'true' : 'false',
+            WORKSPACE_ROOT: workspacePath,
         };
 
         try {
-            this.serverProcess = fork(aiMjsPath, ['--server'], {
-                cwd: workspacePath,
+            // Use projectRoot as cwd so relative imports in ai.mjs resolve correctly
+            // (e.g. ./src/main.mjs). The workspace path is passed as an argument
+            // and via WORKSPACE_ROOT env var.
+            this.serverProcess = fork(aiMjsPath, ['--server', '--cwd', workspacePath], {
+                cwd: projectRoot,
                 env,
                 stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
                 // silent: false would inherit parent stdio, but we want to capture it

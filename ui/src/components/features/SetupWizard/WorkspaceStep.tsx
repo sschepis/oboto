@@ -39,7 +39,7 @@ export default function WorkspaceStep({ config, onChange, onNext, onBack }: Work
             </Button>
           </div>
           <p className="text-xs text-zinc-500">
-            We'll create a <code>.ai-man</code> directory here to store project configuration.
+            We'll create a <code>.oboto</code> directory here to store project configuration.
           </p>
         </div>
       </div>

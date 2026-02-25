@@ -371,90 +371,90 @@ const TabBar: React.FC<TabBarProps> = ({
             </button>
           );
         })}
-      </div>
 
-      {/* Plus button with dropdown (Fixed on right, outside scroll container) */}
-      <div className="relative shrink-0 border-l border-zinc-800/30" ref={plusMenuRef}>
-        <button
-          onClick={() => setShowPlusMenu(prev => !prev)}
-          className={`
-            flex items-center justify-center px-2.5 py-2 text-zinc-500
-            hover:text-zinc-300 hover:bg-zinc-800/40 transition-all duration-200
-            cursor-pointer active:scale-90
-            ${showPlusMenu ? 'text-zinc-300 bg-zinc-800/40' : ''}
-          `}
-          title="Create new…"
-        >
-          <Plus size={14} />
-        </button>
+        {/* Plus button with dropdown (inline after last tab) */}
+        <div className="relative shrink-0" ref={plusMenuRef}>
+          <button
+            onClick={() => setShowPlusMenu(prev => !prev)}
+            className={`
+              flex items-center justify-center px-2.5 py-2 text-zinc-500
+              hover:text-zinc-300 hover:bg-zinc-800/40 transition-all duration-200
+              cursor-pointer active:scale-90
+              ${showPlusMenu ? 'text-zinc-300 bg-zinc-800/40' : ''}
+            `}
+            title="Create new…"
+          >
+            <Plus size={14} />
+          </button>
 
-        {/* Dropdown menu */}
-        {showPlusMenu && (
-          <div className="
-            absolute top-full right-0 mt-1 w-52 z-50
-            bg-[#111111] border border-zinc-800/60 rounded-xl shadow-2xl shadow-black/60
-            overflow-hidden animate-fade-in
-          ">
-            <div className="py-1">
-              {/* New Chat Conversation */}
-              <button
-                onClick={() => {
-                  setShowPlusMenu(false);
-                  onNewChat?.();
-                }}
-                className="
-                  flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
-                  hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
-                  cursor-pointer
-                "
-              >
-                <MessageSquarePlus size={13} className="text-indigo-400/70" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">New Chat</span>
-                  <span className="text-[9px] text-zinc-600">Start a new conversation</span>
-                </div>
-              </button>
+          {/* Dropdown menu */}
+          {showPlusMenu && (
+            <div className="
+              absolute top-full left-0 mt-1 w-52 z-50
+              bg-[#111111] border border-zinc-800/60 rounded-xl shadow-2xl shadow-black/60
+              overflow-hidden animate-fade-in
+            ">
+              <div className="py-1">
+                {/* New Chat Conversation */}
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    onNewChat?.();
+                  }}
+                  className="
+                    flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
+                    hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
+                    cursor-pointer
+                  "
+                >
+                  <MessageSquarePlus size={13} className="text-indigo-400/70" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">New Chat</span>
+                    <span className="text-[9px] text-zinc-600">Start a new conversation</span>
+                  </div>
+                </button>
 
-              {/* New Empty File */}
-              <button
-                onClick={() => {
-                  setShowPlusMenu(false);
-                  onNewFile?.();
-                }}
-                className="
-                  flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
-                  hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
-                  cursor-pointer
-                "
-              >
-                <FilePlus2 size={13} className="text-amber-400/70" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">New File</span>
-                  <span className="text-[9px] text-zinc-600">Create an empty file</span>
-                </div>
-              </button>
+                {/* New Empty File */}
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    onNewFile?.();
+                  }}
+                  className="
+                    flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
+                    hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
+                    cursor-pointer
+                  "
+                >
+                  <FilePlus2 size={13} className="text-amber-400/70" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">New File</span>
+                    <span className="text-[9px] text-zinc-600">Create an empty file</span>
+                  </div>
+                </button>
 
-              {/* New Surface */}
-              <button
-                onClick={() => {
-                  setShowPlusMenu(false);
-                  onNewSurface?.();
-                }}
-                className="
-                  flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
-                  hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
-                  cursor-pointer
-                "
-              >
-                <PanelTop size={13} className="text-purple-400/70" />
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">New Surface</span>
-                  <span className="text-[9px] text-zinc-600">Create a visual dashboard</span>
-                </div>
-              </button>
+                {/* New Surface */}
+                <button
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    onNewSurface?.();
+                  }}
+                  className="
+                    flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-400
+                    hover:bg-zinc-800/50 hover:text-zinc-200 transition-all duration-150
+                    cursor-pointer
+                  "
+                >
+                  <PanelTop size={13} className="text-purple-400/70" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium">New Surface</span>
+                    <span className="text-[9px] text-zinc-600">Create a visual dashboard</span>
+                  </div>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Context menu for conversation tabs */}

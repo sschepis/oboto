@@ -18,7 +18,7 @@ Thumbs.db
 
 # Local Dev / Workspaces
 node_modules/
-.ai-man/
+.oboto/
 .ai-session.history.json
 .ai-session.workspace.json
 .memory.json
@@ -93,8 +93,8 @@ src/service/
 
 # Static assets not needed in package
 surface.html
-bot256.png
-bot512.png
+icon256.png
+icon512.png
 
 # Logs
 *.log

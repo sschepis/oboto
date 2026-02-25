@@ -16,7 +16,7 @@ export function useWorkspaceState(
   useEffect(() => {
     const unsub = wsService.on('file-content', (payload: unknown) => {
       const p = payload as { path: string, content: string };
-      if (p.path === '.ai-man/ui-state.json') {
+      if (p.path === '.oboto/ui-state.json') {
         try {
           const state = JSON.parse(p.content);
           if (state.tabs && Array.isArray(state.tabs)) {
@@ -41,7 +41,7 @@ export function useWorkspaceState(
   useEffect(() => {
     if (cwd && isConnected) {
       // Request workspace state file
-      wsService.readFile('.ai-man/ui-state.json');
+      wsService.readFile('.oboto/ui-state.json');
     }
   }, [cwd, isConnected]);
 
@@ -53,7 +53,7 @@ export function useWorkspaceState(
     };
     
     // Fire-and-forget save (server handles dir creation now)
-    wsService.saveFile('.ai-man/ui-state.json', JSON.stringify(currentState, null, 2));
+    wsService.saveFile('.oboto/ui-state.json', JSON.stringify(currentState, null, 2));
     
     // 2. Close all non-chat tabs
     setTabs([CHAT_TAB]);

@@ -12,6 +12,7 @@ import { TaskCheckpointManager } from './core/task-checkpoint-manager.mjs';
 import { OpenClawManager } from './integration/openclaw/manager.mjs';
 import { SecretsManager } from './server/secrets-manager.mjs';
 import { WorkspaceContentServer } from './server/workspace-content-server.mjs';
+import { runMigrations } from './lib/migrate-config-dirs.mjs';
 
 let _globalEventBus = null;
 
@@ -30,8 +31,11 @@ async function main() {
         // Parse command line arguments
         const { args, workingDir, isInteractive, userInput, resume, isServer } = cli.parseArguments();
         
+        // Migrate legacy config directories (.ai-man → .oboto, ~/.oboto-service → ~/.oboto)
+        runMigrations(workingDir);
+
         // Load secrets early so vault values override .env before config is consumed
-        const secretsManager = new SecretsManager(workingDir);
+        const secretsManager = new SecretsManager();
         await secretsManager.load();
         secretsManager.applyToEnv();
 
