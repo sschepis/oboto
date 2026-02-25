@@ -1,0 +1,13 @@
+{
+  "name": "@oboto/plugin-chrome-ext",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Chrome extension bridge plugin for Oboto — controls real Chrome browser via WebSocket",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "chrome", "extension", "browser-control", "websocket"],
+  "author": "sschepis",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

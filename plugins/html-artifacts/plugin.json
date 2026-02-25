@@ -1,0 +1,6 @@
+{
+  "name": "html-artifacts",
+  "version": "1.0.0",
+  "description": "Generate, preview, and edit HTML/React artifacts",
+  "main": "index.mjs"
+}

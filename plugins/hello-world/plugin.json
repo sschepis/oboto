@@ -1,0 +1,21 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "Example plugin demonstrating the Oboto plugin system",
+  "author": "Oboto Team",
+  "main": "index.mjs",
+  "capabilities": {
+    "tools": true,
+    "ws": true,
+    "events": true
+  },
+  "ui": {
+    "tabs": [
+      {
+        "id": "hello",
+        "label": "Hello World",
+        "component": "components/HelloTab.jsx"
+      }
+    ]
+  }
+}

@@ -388,20 +388,8 @@ export { ApiDocSmith } from '../structured-dev/api-doc-smith.mjs';
 export { TutorialGenerator } from '../structured-dev/tutorial-generator.mjs';
 export { EnhancementGenerator } from '../structured-dev/enhancement-generator.mjs';
 
-/**
- * WorkflowService manages BubbleLab workflow executions bound to Surfaces.
- * Requires optional @bubblelab/* dependencies to be installed.
- */
-export declare class WorkflowService {
-  constructor(surfaceManager: any, eventBus: any, config?: Record<string, any>);
-  startWorkflow(flowScript: string, surfaceId: string, triggerPayload?: any): Promise<{ workflowId: string }>;
-  getWorkflowStatus(workflowId: string): { workflowId: string; surfaceId: string; status: string; startedAt: string; completedAt: string | null; error: string | null; hasPendingInteraction: boolean } | null;
-  listWorkflows(): Array<{ workflowId: string; surfaceId: string; status: string; startedAt: string }>;
-  cancelWorkflow(workflowId: string): Promise<{ success: boolean }>;
-  submitInteraction(workflowId: string, interactionId: string, data: any): Promise<{ success: boolean }>;
-  createInteraction(workflowId: string, surfaceId: string, componentName: string, timeoutMs?: number): Promise<any>;
-  cleanup(maxAgeMs?: number): void;
-}
+// WorkflowService has been extracted to plugins/workflows/workflow-service.mjs
+// See plugins/workflows/ for the plugin implementation.
 
 /**
  * Alias for AiMan, emphasizing the robotic developer persona.

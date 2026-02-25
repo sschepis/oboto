@@ -1,0 +1,12 @@
+{
+  "name": "tts",
+  "version": "1.0.0",
+  "description": "Text-to-speech via ElevenLabs API",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "settings": true },
+  "settings": {
+    "schema": {
+      "elevenlabsApiKey": { "type": "string", "label": "ElevenLabs API Key", "secret": true }
+    }
+  }
+}

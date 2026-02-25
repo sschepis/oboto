@@ -1,0 +1,7 @@
+{
+  "name": "embed",
+  "version": "1.0.0",
+  "description": "Rich media embedding — YouTube, Spotify, maps, and more inline in chat",
+  "main": "index.mjs",
+  "capabilities": { "tools": true }
+}

@@ -20,6 +20,15 @@ export class WsDispatcher {
     }
 
     /**
+     * Unregister a handler for a message type.
+     * @param {string} type
+     * @returns {boolean} true if the handler existed
+     */
+    unregister(type) {
+        return this._handlers.delete(type);
+    }
+
+    /**
      * Register all handlers exported by a handler module.
      * The module should export a `handlers` object mapping type → handler function.
      * @param {Record<string, (data: any, ctx: any) => Promise<void>>} handlerMap
@@ -39,7 +48,20 @@ export class WsDispatcher {
     async dispatch(data, ctx) {
         const handler = this._handlers.get(data.type);
         if (handler) {
-            await handler(data, ctx);
+            try {
+                await handler(data, ctx);
+            } catch (err) {
+                console.error(`[WsDispatcher] Error handling "${data.type}":`, err.message);
+                // Try to send error back to client
+                try {
+                    if (ctx.ws && ctx.ws.readyState === 1) {
+                        ctx.ws.send(JSON.stringify({
+                            type: 'error',
+                            payload: { error: err.message, source: data.type }
+                        }));
+                    }
+                } catch { /* ignore send failures */ }
+            }
             return true;
         }
         return false;

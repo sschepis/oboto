@@ -8,7 +8,6 @@ import { spawn } from 'child_process';
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { fetchRemoteModels } from '../core/model-registry.mjs';
 import { ChromeWsBridge } from './chrome-ws-bridge.mjs';
-import { UIStyleHandlers } from '../execution/handlers/ui-style-handlers.mjs';
 import { WsDispatcher } from './ws-dispatcher.mjs';
 import { convertHistoryToUIMessages, getDirectoryTree } from './ws-helpers.mjs';
 import { isLLMAuthError, buildLLMAuthErrorPayload } from './llm-error-detector.mjs';
@@ -30,6 +29,7 @@ import { handlers as miscHandlers } from './ws-handlers/misc-handler.mjs';
 import { handlers as workspaceHandlers } from './ws-handlers/workspace-handler.mjs';
 import { handlers as skillsHandlers } from './ws-handlers/skills-handler.mjs';
 import { handlers as cloudHandlers } from './ws-handlers/cloud-handler.mjs';
+import { handlers as pluginHandlers } from './ws-handlers/plugin-handler.mjs';
 import { mountDynamicRoutes } from './dynamic-router.mjs';
 
 // Dynamic import for node-pty (native addon)
@@ -65,6 +65,7 @@ function buildDispatcher() {
     dispatcher.registerAll(workspaceHandlers);
     dispatcher.registerAll(skillsHandlers);
     dispatcher.registerAll(cloudHandlers);
+    dispatcher.registerAll(pluginHandlers);
     return dispatcher;
 }
 
@@ -209,12 +210,9 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
         if (eventBus) eventBus.emit('chrome:connected');
     });
 
-    // Attach to assistant
+    // Attach to assistant (used by chrome-ext plugin if loaded)
     if (assistant) {
         assistant.chromeWsBridge = chromeWsBridge;
-        if (assistant.toolExecutor && assistant.toolExecutor.attachChromeBridge) {
-            assistant.toolExecutor.attachChromeBridge(chromeWsBridge);
-        }
     }
 
     // ── Terminal PTY WebSocket handler ──────────────────────────────────
@@ -410,6 +408,18 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     // Build the message dispatcher
     const dispatcher = buildDispatcher();
 
+    // ── Initialize Plugin Manager ──────────────────────────────────────
+    if (assistant.pluginManager) {
+        try {
+            assistant.pluginManager.setWsDispatcher(dispatcher);
+            assistant.pluginManager.setBroadcast(broadcast);
+            await assistant.pluginManager.initialize();
+            consoleStyler.log('system', '🔌 Plugin system initialized');
+        } catch (err) {
+            consoleStyler.log('warning', `Plugin system initialization failed: ${err.message}`);
+        }
+    }
+
     // ── Auto-activate agent loop for headless / service mode ────────────
     if (process.env.OBOTO_AUTO_ACTIVATE === 'true' && agentLoopController) {
         const autoActivateDelay = parseInt(process.env.OBOTO_AUTO_ACTIVATE_DELAY || '3000', 10);
@@ -421,7 +431,10 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
         }, autoActivateDelay);
     }
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+        // Store the HTTP upgrade request on the WebSocket for downstream handlers
+        // (e.g., isLocalRequest() in plugin-handler needs ws._req to check remote address)
+        ws._req = req;
         consoleStyler.log('system', 'Client connected');
 
         // Send connection status (not a chat message)
@@ -496,24 +509,8 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             }
         }
 
-        // Send current display names and theme to newly connected client
-        if (assistant.toolExecutor?.uiStyleHandlers) {
-            try {
-                const handler = assistant.toolExecutor.uiStyleHandlers;
-                const names = handler.displayNames;
-                if (names.userName || names.agentName) {
-                    ws.send(JSON.stringify({ type: 'ui-display-names', payload: names }));
-                }
-                // Always send the current theme so the client renders correctly
-                const preset = UIStyleHandlers.getPreset(handler.currentTheme);
-                const tokens = preset || handler.activeTokenOverrides;
-                if (tokens && Object.keys(tokens).length > 0) {
-                    ws.send(JSON.stringify({ type: 'ui-style-theme', payload: { theme: handler.currentTheme, tokens } }));
-                }
-            } catch (e) {
-                // Ignore
-            }
-        }
+        // Note: display names and theme are now managed by the ui-themes plugin.
+        // The plugin broadcasts theme state via eventBus events when clients connect.
 
         // Send workspace content server info to newly connected client
         if (workspaceContentServer) {
@@ -522,6 +519,18 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                     type: 'workspace:server-info', 
                     payload: { port: workspaceContentServer.getPort() } 
                 }));
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // Send plugin UI manifest to newly connected client
+        if (assistant.pluginManager) {
+            try {
+                const uiManifest = assistant.pluginManager.getAllUIComponents();
+                const pluginList = assistant.pluginManager.listPlugins();
+                ws.send(JSON.stringify({ type: 'plugin:ui-manifest', payload: uiManifest }));
+                ws.send(JSON.stringify({ type: 'plugin:list', payload: { plugins: pluginList } }));
             } catch (e) {
                 // Ignore
             }
@@ -555,6 +564,8 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
                     workspaceContentServer,
                     cloudSync: cloudSyncHolder.instance,
                     initCloudSync,
+                    pluginManager: assistant.pluginManager || null,
+                    dispatcher,
                 };
                 const handled = await dispatcher.dispatch(data, ctx);
                 if (!handled) {

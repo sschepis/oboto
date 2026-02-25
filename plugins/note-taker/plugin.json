@@ -1,0 +1,6 @@
+{
+  "name": "note-taker",
+  "version": "1.0.0",
+  "description": "Create, retrieve, and manage notes",
+  "main": "index.mjs"
+}

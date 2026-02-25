@@ -9,7 +9,9 @@ export function createSystemPrompt(workingDir, workspace = null, manifestContent
     chineseRoomMode = false,
     includeSurfaces = false,
     includeStyling = false,
-    includeWorkflows = false
+    includeWorkflows = false,
+    pluginsSummary = "",
+    dynamicRoutesEnabled = false
 } = {}) {
     let prompt = '';
 
@@ -249,7 +251,7 @@ Components can use the \`surfaceApi\` global to interact with the workspace and 
 - \`surfaceApi.callAgent(prompt)\` → Promise<string> — send free-text prompt, get unstructured response
 - \`surfaceApi.defineHandler({name, description, type, outputSchema})\` — register a typed handler
 - \`surfaceApi.invoke(handlerName, args?)\` → Promise<T> — invoke handler, get typed JSON response
-- \`surfaceApi.callTool(toolName, args?)\` → Promise<T> — call a server tool directly (whitelist: read_file, write_file, list_files, edit_file, read_many_files, write_many_files, search_web, evaluate_math, etc.)
+- \`surfaceApi.callTool(toolName, args?)\` → Promise<T> — call a server tool directly without going through the AI. Supports file ops (read_file, write_file, list_files, edit_file, read_many_files, write_many_files), search_web, evaluate_math, unit_conversion, get_image_info, list_surfaces, skill tools (list_skills, read_skill, use_skill, create_skill, edit_skill, delete_skill, add_npm_skill), scheduling (create_recurring_task, list_recurring_tasks, manage_recurring_task), background tasks (spawn_background_task, check_task_status), and plugin tools marked as surface-safe.
 
 *State & Messaging:*
 - \`surfaceApi.getState(key)\` / \`surfaceApi.setState(key, value)\` — persisted surface state
@@ -317,6 +319,34 @@ When a user asks you to **automate, monitor, track, dashboard, or manage** somet
 **This pattern applies to:** server monitoring, API uptime checks, deployment pipelines, data dashboards, expense tracking, notification systems, periodic reports, CI/CD status, log watching, social media monitoring, and any general automation the user describes.
 
 **Surfaces are the primary UI.** When the user needs to visualize data, interact with results, or control an automation — build a Surface rather than just returning text. Surfaces persist as tabs the user can revisit anytime.`;
+
+    // Add Plugin system awareness
+    if (pluginsSummary) {
+        prompt += `
+
+## Plugins
+The system supports plugins that extend functionality with additional tools, UI tabs, sidebar sections, and settings panels.
+
+${pluginsSummary}
+
+Plugins can register tools that become available to you and to surfaces (via \`surfaceApi.callTool()\`).
+Use plugin-provided tools just like any other tool — they appear in your tool list with their descriptions.`;
+    }
+
+    // Add Dynamic Routes awareness
+    if (dynamicRoutesEnabled) {
+        prompt += `
+
+## Dynamic Routes
+The workspace supports dynamic HTTP routes. To create an API endpoint:
+
+1. Create a \`.mjs\` or \`.js\` file in the \`routes/\` or \`api/\` directory of the workspace.
+2. Export a \`route\` function: \`export async function route(req, res) { ... }\`
+3. The file path determines the URL: \`routes/hello.mjs\` → \`/routes/hello\`, \`api/data/index.mjs\` → \`/api/data\`
+
+Dynamic routes handle all HTTP methods (GET, POST, PUT, DELETE, etc.) and have full access to Express req/res objects.
+Use this to create webhook endpoints, REST APIs, or custom data endpoints that surfaces and external systems can call.`;
+    }
 
     prompt += `
 `;

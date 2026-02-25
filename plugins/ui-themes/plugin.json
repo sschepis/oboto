@@ -1,0 +1,7 @@
+{
+  "name": "ui-themes",
+  "version": "1.0.0",
+  "description": "UI theming, CSS token overrides, custom CSS injection, and display name management",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "ws": true, "ui": true }
+}

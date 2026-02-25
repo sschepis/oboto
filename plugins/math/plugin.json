@@ -1,0 +1,7 @@
+{
+  "name": "math",
+  "version": "1.0.0",
+  "description": "Mathematical evaluation, unit conversion, and equation solving",
+  "main": "index.mjs",
+  "capabilities": { "tools": true }
+}

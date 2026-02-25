@@ -1,0 +1,13 @@
+{
+  "name": "@oboto/plugin-firecrawl",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Firecrawl web scraping and crawling plugin for Oboto",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "firecrawl", "web-scraping"],
+  "author": "sschepis",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

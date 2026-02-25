@@ -1,0 +1,13 @@
+{
+  "name": "@oboto/plugin-personas",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI persona management plugin for Oboto",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "personas", "ai-identity"],
+  "author": "sschepis",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

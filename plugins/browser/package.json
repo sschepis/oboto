@@ -1,0 +1,16 @@
+{
+  "name": "@oboto/plugin-browser",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Browser automation plugin for Oboto using Puppeteer",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "browser", "puppeteer", "automation"],
+  "author": "sschepis",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  },
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

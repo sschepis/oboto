@@ -1,0 +1,7 @@
+{
+  "name": "canvas-viz",
+  "version": "1.0.0",
+  "description": "Generates an interactive canvas visualization based on a description.",
+  "type": "module",
+  "main": "index.mjs"
+}

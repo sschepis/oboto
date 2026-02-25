@@ -1,0 +1,7 @@
+{
+  "name": "code-interpreter",
+  "version": "1.0.0",
+  "description": "Secure sandboxed environment for executing Python and JavaScript code with Docker isolation and fallback mode",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "websocket": true }
+}

@@ -385,16 +385,27 @@ async function handleSurfaceCallTool(data, ctx) {
         const toolExecutor = assistant.toolExecutor;
         if (!toolExecutor) throw new Error('ToolExecutor not available');
         
-        const allowedTools = [
+        const allowedTools = new Set([
+            // File operations
             'read_file', 'write_file', 'list_files', 'edit_file',
             'read_many_files', 'write_many_files',
-            'search_web', 'list_surfaces', 'list_skills',
-            'evaluate_math', 'unit_conversion',
-            'get_image_info'
-        ];
+            // Search & data
+            'search_web', 'evaluate_math', 'unit_conversion', 'get_image_info',
+            // Surfaces
+            'list_surfaces',
+            // Skills (full CRUD + execution)
+            'list_skills', 'read_skill', 'use_skill', 'create_skill', 'edit_skill', 'delete_skill', 'add_npm_skill',
+            // Scheduling & recurring tasks
+            'create_recurring_task', 'list_recurring_tasks', 'manage_recurring_task',
+            // Background tasks
+            'spawn_background_task', 'check_task_status'
+        ]);
         
-        if (!allowedTools.includes(toolName)) {
-            throw new Error(`Tool "${toolName}" is not allowed from surface context. Allowed: ${allowedTools.join(', ')}`);
+        // Also allow plugin tools explicitly marked as surface-safe
+        const isPluginSurfaceSafe = toolExecutor.isPluginSurfaceSafe?.(toolName);
+        
+        if (!allowedTools.has(toolName) && !isPluginSurfaceSafe) {
+            throw new Error(`Tool "${toolName}" is not allowed from surface context. Allowed: ${[...allowedTools].join(', ')} + surface-safe plugin tools`);
         }
         
         const toolCall = {

@@ -16,6 +16,7 @@ module.exports = {
     }],
     '^.+\\.m?js$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
+      useESM: true,
       isolatedModules: true
     }]
   },

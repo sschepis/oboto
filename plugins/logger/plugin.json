@@ -1,0 +1,7 @@
+{
+  "id": "logger",
+  "name": "System Logger",
+  "version": "1.0.0",
+  "description": "Displays system logs and provides tools to read the central log directory.",
+  "author": "Oboto Team"
+}

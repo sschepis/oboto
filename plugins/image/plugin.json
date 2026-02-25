@@ -1,0 +1,12 @@
+{
+  "name": "image",
+  "version": "1.0.0",
+  "description": "Image generation (DALL-E), manipulation (sharp), and metadata inspection",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "settings": true },
+  "settings": {
+    "schema": {
+      "openaiApiKey": { "type": "string", "label": "OpenAI API Key", "secret": true }
+    }
+  }
+}

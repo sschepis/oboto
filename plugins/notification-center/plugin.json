@@ -1,0 +1,7 @@
+{
+  "name": "notification-center",
+  "version": "1.0.0",
+  "description": "Send alerts and notifications to the user.",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "websocket": true, "events": true }
+}

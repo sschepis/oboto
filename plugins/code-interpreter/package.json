@@ -1,0 +1,13 @@
+{
+  "name": "@oboto/plugin-code-interpreter",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Secure sandboxed code execution plugin for Oboto (Docker + fallback)",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "code-interpreter", "sandbox", "docker"],
+  "author": "sschepis",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@oboto/plugin-embed",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Rich media embed plugin for Oboto — embed YouTube, Spotify, maps, and more inline in chat",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "embed", "rich-media", "youtube", "spotify"],
+  "author": "sschepis",
+  "license": "MIT",
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

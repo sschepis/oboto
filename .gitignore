@@ -51,6 +51,12 @@ analysis_result.json
 analysis_result_v2.json
 line_count.txt
 
+# Plugin runtime data
+.plugins-data/
+
+# Test screenshots (manual test artifacts)
+screenshots/
+
 # Runtime-generated data
 facts.json
 

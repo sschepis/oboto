@@ -1,0 +1,7 @@
+{
+  "name": "knowledge-graph",
+  "version": "1.0.0",
+  "description": "Explorer for the Global Memory Field and semantic data",
+  "type": "module",
+  "main": "index.mjs"
+}

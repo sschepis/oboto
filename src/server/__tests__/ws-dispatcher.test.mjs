@@ -151,15 +151,32 @@ describe('WsDispatcher', () => {
             expect(resolved).toBe(true);
         });
 
-        it('propagates handler errors (uncaught)', async () => {
+        it('catches handler errors and sends error response to client', async () => {
             const errorHandler = jest.fn().mockImplementation(async () => {
                 throw new Error('handler failed');
             });
             dispatcher.register('error-type', errorHandler);
 
-            await expect(
-                dispatcher.dispatch({ type: 'error-type' }, {})
-            ).rejects.toThrow('handler failed');
+            const mockWs = { readyState: 1, send: jest.fn() };
+            const result = await dispatcher.dispatch({ type: 'error-type' }, { ws: mockWs });
+
+            // Should still return true (handler was found)
+            expect(result).toBe(true);
+            // Should send error message to client
+            expect(mockWs.send).toHaveBeenCalledWith(
+                expect.stringContaining('handler failed')
+            );
+        });
+
+        it('does not crash when error handler has no ws context', async () => {
+            const errorHandler = jest.fn().mockImplementation(async () => {
+                throw new Error('handler failed');
+            });
+            dispatcher.register('error-type', errorHandler);
+
+            // Should not throw even without ws in context
+            const result = await dispatcher.dispatch({ type: 'error-type' }, {});
+            expect(result).toBe(true);
         });
     });
 

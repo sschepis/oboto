@@ -1,5 +1,6 @@
 packages:
   - '.'
+  - 'plugins/*'
   - 'BubbleLab/packages/bubble-core'
   - 'BubbleLab/packages/bubble-runtime'
   - 'BubbleLab/packages/bubble-shared-schemas'

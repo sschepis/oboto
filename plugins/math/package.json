@@ -1,0 +1,16 @@
+{
+  "name": "@oboto/plugin-math",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mathematical evaluation, unit conversion, and equation solving plugin for Oboto",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "math", "mathjs", "unit-conversion"],
+  "author": "sschepis",
+  "license": "MIT",
+  "dependencies": {
+    "mathjs": "^14.6.0"
+  },
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

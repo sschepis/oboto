@@ -1,0 +1,7 @@
+{
+  "name": "document-reader",
+  "version": "1.0.0",
+  "description": "Ingest and analyze documents (PDF, DOCX, XLSX, Images, Text).",
+  "main": "index.mjs",
+  "capabilities": { "tools": true }
+}

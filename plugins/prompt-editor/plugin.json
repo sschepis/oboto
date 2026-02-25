@@ -1,0 +1,6 @@
+{
+  "name": "prompt-editor",
+  "version": "1.0.0",
+  "description": "Manage and test prompt chains",
+  "main": "index.mjs"
+}

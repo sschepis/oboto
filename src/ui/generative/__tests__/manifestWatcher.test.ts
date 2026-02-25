@@ -2,7 +2,9 @@ import { ManifestWatcher } from '../manifestWatcher';
 import * as chokidar from 'chokidar';
 import * as fs from 'fs/promises';
 
-jest.mock('chokidar');
+jest.mock('chokidar', () => ({
+  watch: jest.fn(),
+}));
 jest.mock('fs/promises');
 
 describe('ManifestWatcher', () => {

@@ -1,0 +1,23 @@
+{
+  "name": "openclaw",
+  "version": "1.0.0",
+  "description": "OpenClaw AI agent integration — delegate tasks, manage sessions, install & deploy",
+  "main": "index.mjs",
+  "capabilities": {
+    "tools": true,
+    "ws": true,
+    "settings": true
+  },
+  "settings": {
+    "openClawApiKey": {
+      "type": "string",
+      "description": "Authentication token for the OpenClaw gateway",
+      "secret": true
+    },
+    "openClawBaseUrl": {
+      "type": "string",
+      "description": "WebSocket URL for the OpenClaw gateway",
+      "default": "ws://127.0.0.1:18789"
+    }
+  }
+}

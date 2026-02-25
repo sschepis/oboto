@@ -1,0 +1,7 @@
+{
+  "name": "chrome-ext",
+  "version": "1.0.0",
+  "description": "Chrome extension bridge — control real Chrome browser tabs, windows, and DOM via WebSocket",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "ws": true }
+}

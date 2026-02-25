@@ -12,6 +12,7 @@ import path from 'path';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { wsSend } from '../../lib/ws-utils.mjs';
 import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
+import { reinitPlugins } from './plugin-reinit.mjs';
 
 /**
  * Switch the active workspace.  Re-initialises assistant, scheduler, and
@@ -55,10 +56,10 @@ async function handleWorkspaceSwitch(data, ctx) {
         }
         await assistant.loadConversation();
 
-        // Reload UI theme/settings from the new workspace
-        if (assistant.toolExecutor?.uiStyleHandlers) {
-            assistant.toolExecutor.uiStyleHandlers.switchWorkspace(resolved);
-        }
+        // Re-initialize plugin system for new workspace
+        // (ui-themes plugin handles workspace-switch via its own
+        // activate/deactivate lifecycle — no separate call needed)
+        await reinitPlugins(assistant, ctx, broadcast, resolved);
 
         if (workspaceContentServer) {
             try {

@@ -1,0 +1,6 @@
+{
+  "name": "voice-suite",
+  "version": "1.0.0",
+  "description": "Voice manipulation suite.",
+  "main": "index.mjs"
+}

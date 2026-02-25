@@ -1,0 +1,16 @@
+{
+  "name": "@oboto/plugin-image",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Image generation, manipulation, and analysis plugin for Oboto",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "image", "dall-e", "sharp"],
+  "author": "sschepis",
+  "license": "MIT",
+  "dependencies": {
+    "sharp": "^0.33.0"
+  },
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

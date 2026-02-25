@@ -1,0 +1,6 @@
+{
+  "name": "poorman-alpha",
+  "version": "0.2.0",
+  "description": "Computational math plugin: unit conversion, symbolic algebra, matrix operations, SymPy bridge",
+  "main": "index.mjs"
+}

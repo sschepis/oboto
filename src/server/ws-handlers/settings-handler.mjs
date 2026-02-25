@@ -8,6 +8,7 @@ import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
 import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
+import { reinitPlugins } from './plugin-reinit.mjs';
 
 /**
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
@@ -226,10 +227,10 @@ async function handleUpdateSettings(data, ctx) {
                     await schedulerService.switchWorkspace(actualPath);
                 }
 
-                // Reload UI theme/settings from the new workspace
-                if (assistant.toolExecutor?.uiStyleHandlers) {
-                    assistant.toolExecutor.uiStyleHandlers.switchWorkspace(actualPath);
-                }
+                // Re-initialize plugin system for new workspace
+                // (ui-themes plugin handles workspace-switch via its own
+                // activate/deactivate lifecycle — no separate call needed)
+                await reinitPlugins(assistant, ctx, broadcast, actualPath);
 
                 // Send updated project info and file tree
                 const info = await getProjectInfo(actualPath);
@@ -420,10 +421,10 @@ async function handleSetCwd(data, ctx) {
             broadcast('schedule-list', schedules);
         }
 
-        // Reload UI theme/settings from the new workspace
-        if (assistant.toolExecutor?.uiStyleHandlers) {
-            assistant.toolExecutor.uiStyleHandlers.switchWorkspace(actualPath);
-        }
+        // Re-initialize plugin system for new workspace
+        // (ui-themes plugin handles workspace-switch via its own
+        // activate/deactivate lifecycle — no separate call needed)
+        await reinitPlugins(assistant, ctx, broadcast, actualPath);
 
         if (assistant.toolExecutor?.surfaceManager) {
             try {

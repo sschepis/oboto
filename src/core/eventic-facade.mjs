@@ -23,6 +23,9 @@ import { PersonaManager } from './persona-manager.mjs';
 import { ResoLangService } from './resolang-service.mjs';
 import { ConsciousnessProcessor } from './consciousness-processor.mjs';
 
+// Plugin system
+import { PluginManager } from '../plugins/plugin-manager.mjs';
+
 // Controllers
 import { ConversationController } from './controllers/conversation-controller.mjs';
 import { SessionController } from './controllers/session-controller.mjs';
@@ -172,6 +175,16 @@ export class EventicFacade {
             get: (name) => this._services.registry.get(name),
             optional: (name) => this._services.registry.get(name) || null
         };
+
+        // ── Plugin System ──────────────────────────────────────────────────
+        this.pluginManager = new PluginManager({
+            workingDir: this.workingDir,
+            toolExecutor: this.toolExecutor,
+            eventBus: this.eventBus,
+            aiProvider: this.aiProvider,
+            // wsDispatcher and surfaceManager are set later by web-server.mjs
+        });
+        this._services.register('pluginManager', this.pluginManager);
     }
 
     /**
@@ -309,13 +322,9 @@ export class EventicFacade {
                 memoryAdapter: this.memoryAdapter,
                 taskManager: this.taskManager,
                 schedulerService: this.schedulerService,
-                openClawManager: this.openClawManager,
                 mcpClientManager: this.mcpClientManager,
                 eventBus: this.eventBus,
-                personaManager: this.personaManager,
-                assistant: this,
-                chromeWsBridge: this.chromeWsBridge,
-                workspaceContentServer: this.workspaceContentServer
+                assistant: this
             }
         );
     }
@@ -342,6 +351,16 @@ export class EventicFacade {
         // System prompts are injected per-request in Eventic default loops
     }
 
+    _getPluginsSummary() {
+        if (!this.pluginManager) return '';
+        try {
+            const plugins = this.pluginManager.listPlugins?.() || [];
+            const active = plugins.filter(p => p.status === 'active');
+            if (active.length === 0) return '';
+            return 'Active plugins: ' + active.map(p => `${p.name} (${p.description || 'no description'})`).join(', ');
+        } catch { return ''; }
+    }
+
     async updateSystemPrompt() {
         const personaContent = this.personaManager ? this.personaManager.renderPersonaPrompt() : '';
         let skillsSummary = '';
@@ -352,13 +371,16 @@ export class EventicFacade {
             } catch (e) { /* ignore */ }
         }
         this.openclawAvailable = !!(this.openClawManager && this.openClawManager.client && this.openClawManager.client.isConnected);
+        const pluginsSummary = this._getPluginsSummary();
+        const dynamicRoutesEnabled = process.env.OBOTO_DYNAMIC_ROUTES === 'true';
         const currentSystemPrompt = createSystemPrompt(
             this.workingDir,
             this.workspaceManager.getCurrentWorkspace(),
             null,
             {
                 openclawAvailable: this.openclawAvailable, personaContent, skillsSummary,
-                includeSurfaces: true, includeStyling: true, includeWorkflows: true
+                includeSurfaces: true, includeStyling: true, includeWorkflows: true,
+                pluginsSummary, dynamicRoutesEnabled
             }
         );
         this.aiProvider.systemPrompt = currentSystemPrompt;
@@ -411,6 +433,12 @@ export class EventicFacade {
         }
         this.mcpClientManager = new McpClientManager(this.workingDir);
 
+        // Shut down existing plugin system before rebuilding ToolExecutor
+        // so plugin-registered tools are removed from the old instance
+        if (this.pluginManager) {
+            try { await this.pluginManager.shutdown(); } catch { /* best-effort */ }
+        }
+
         // Update Eventic engine context
         this.engine.context.workingDir = this.workingDir;
         this.engine.context.consciousness = this.consciousness;
@@ -429,6 +457,17 @@ export class EventicFacade {
                 console.warn('[EventicFacade] Failed to re-initialize agentic provider after workspace change:', err.message);
             });
         }
+
+        // Re-create the PluginManager for the new workspace.
+        // Discovery, wsDispatcher wiring, and initialization are deferred
+        // to web-server.mjs which will call setWsDispatcher/setBroadcast/initialize.
+        this.pluginManager = new PluginManager({
+            workingDir: this.workingDir,
+            toolExecutor: this.toolExecutor,
+            eventBus: this.eventBus,
+            aiProvider: this.aiProvider,
+        });
+        this._services.register('pluginManager', this.pluginManager);
 
         return this.workingDir;
     }
@@ -467,13 +506,16 @@ export class EventicFacade {
                 }
             }
             this.openclawAvailable = !!(this.openClawManager && this.openClawManager.client && this.openClawManager.client.isConnected);
+            const pluginsSummary = this._getPluginsSummary();
+            const dynamicRoutesEnabled = process.env.OBOTO_DYNAMIC_ROUTES === 'true';
             const currentSystemPrompt = createSystemPrompt(
                 this.workingDir,
                 this.workspaceManager.getCurrentWorkspace(),
                 null,
                 {
                     openclawAvailable: this.openclawAvailable, personaContent, skillsSummary,
-                    includeSurfaces: true, includeStyling: true, includeWorkflows: true
+                    includeSurfaces: true, includeStyling: true, includeWorkflows: true,
+                    pluginsSummary, dynamicRoutesEnabled
                 }
             );
 

@@ -1,5 +1,7 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 
+const mockReadJsonFileSync = jest.fn();
+
 const mockPromises = {
   readFile: jest.fn(),
   mkdir: jest.fn(),
@@ -11,7 +13,13 @@ jest.unstable_mockModule('fs', () => ({
   default: {
     promises: mockPromises,
     existsSync: jest.fn(),
-  }
+    readFileSync: jest.fn(),
+  },
+  readFileSync: jest.fn(),
+}));
+
+jest.unstable_mockModule('../../lib/json-file-utils.mjs', () => ({
+  readJsonFileSync: mockReadJsonFileSync,
 }));
 
 // We need to import the module under test AFTER mocking
@@ -27,6 +35,7 @@ describe('Setup Handler', () => {
   beforeEach(() => {
     mockWs = {
       send: jest.fn(),
+      readyState: 1,
     };
     ctx = { ws: mockWs };
     jest.clearAllMocks();
@@ -34,7 +43,7 @@ describe('Setup Handler', () => {
 
   describe('handleGetSetupStatus', () => {
     it('should return isFirstRun=true if setup.json does not exist', async () => {
-      mockPromises.readFile.mockRejectedValue(new Error('File not found'));
+      mockReadJsonFileSync.mockReturnValue(null);
 
       await handlers['get-setup-status']({}, ctx);
 
@@ -42,7 +51,7 @@ describe('Setup Handler', () => {
     });
 
     it('should return isFirstRun=false if setup.json exists', async () => {
-      mockPromises.readFile.mockResolvedValue(JSON.stringify({ version: 1, completedAt: '2023-01-01' }));
+      mockReadJsonFileSync.mockReturnValue({ version: 1, completedAt: '2023-01-01' });
 
       await handlers['get-setup-status']({}, ctx);
 
@@ -60,7 +69,7 @@ describe('Setup Handler', () => {
 
       expect(mockPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('setup.json'),
-        expect.stringContaining('"provider":"openai"'),
+        expect.stringContaining('"provider": "openai"'),
       );
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"success":true'));
     });

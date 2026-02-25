@@ -1,0 +1,12 @@
+{
+  "name": "web-search",
+  "version": "1.0.0",
+  "description": "Web search and URL fetching",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "settings": true },
+  "settings": {
+    "schema": {
+      "serperApiKey": { "type": "string", "label": "Serper API Key", "secret": true }
+    }
+  }
+}

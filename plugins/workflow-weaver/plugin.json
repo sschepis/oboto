@@ -1,0 +1,7 @@
+{
+  "id": "workflow-weaver",
+  "name": "Workflow Weaver",
+  "version": "1.0.0",
+  "description": "Visual orchestration engine for chaining agents, tools, and semantic queries into reusable workflows.",
+  "author": "Oboto Team"
+}

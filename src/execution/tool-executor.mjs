@@ -18,31 +18,19 @@ import { ApiDocSmith } from '../structured-dev/api-doc-smith.mjs';
 import { TutorialGenerator } from '../structured-dev/tutorial-generator.mjs';
 import { EnhancementGenerator } from '../structured-dev/enhancement-generator.mjs';
 import { ShellTools } from '../tools/shell-tools.mjs';
-import { BrowserHandlers } from './handlers/browser-handlers.mjs';
-import { ChromeExtensionHandlers } from './handlers/chrome-ext-handlers.mjs';
 import { SurfaceManager } from '../surfaces/surface-manager.mjs';
 import { SkillsManager } from '../skills/skills-manager.mjs';
 
 // Handler Imports
-import { FirecrawlHandlers } from './handlers/firecrawl-handlers.mjs';
 import { SkillHandlers } from './handlers/skill-handlers.mjs';
 import { CoreHandlers } from './handlers/core-handlers.mjs';
 import { WorkflowHandlers } from './handlers/workflow-handlers.mjs';
 import { StructuredDevHandlers } from './handlers/structured-dev-handlers.mjs';
-import { WebHandlers } from './handlers/web-handlers.mjs';
 import { AsyncTaskHandlers } from './handlers/async-task-handlers.mjs';
-import { OpenClawHandlers } from './handlers/openclaw-handlers.mjs';
 import { SurfaceHandlers } from './handlers/surface-handlers.mjs';
-import { WorkflowSurfaceHandlers } from './handlers/workflow-surface-handlers.mjs';
-import { WorkflowService } from '../services/workflow-service.mjs';
 import { dryRunGuard } from './dry-run-guard.mjs';
-import { McpHandlers } from './handlers/mcp-handlers.mjs'; // New import
-import { registerPersonaHandlers } from './handlers/persona-handlers.mjs';
-import { UIStyleHandlers } from './handlers/ui-style-handlers.mjs';
-import { MathHandlers } from './handlers/math-handlers.mjs';
-import { ImageHandlers } from './handlers/image-handlers.mjs';
-import { EmbedHandlers } from './handlers/embed-handlers.mjs';
-import { TOOLS, OPENCLAW_TOOLS } from '../tools/tool-definitions.mjs';
+import { McpHandlers } from './handlers/mcp-handlers.mjs';
+import { TOOLS } from '../tools/tool-definitions.mjs';
 
 const TOOL_TIMEOUTS = {
     read_file: 10_000,
@@ -53,25 +41,17 @@ const TOOL_TIMEOUTS = {
     write_many_files: 60_000,
     execute_javascript: 60_000,
     execute_npm_function: 60_000,
-    search_web: 30_000,
-    browse_open: 60_000,
-    browse_act: 30_000,
-    browse_screenshot: 15_000,
-    browse_close: 5_000,
     call_ai_assistant: 300_000,
     ask_blocking_question: 24 * 60 * 60 * 1000, // 24 hours — effectively indefinite
     spawn_background_task: 10_000, // Fast return
     check_task_status: 5_000,
     execute_implementation_plan: 600_000,
-    speak_text: 60_000,
+    plugin_default: 60_000, // Default timeout for plugin-registered tools
     mouse_move: 5_000,
     mouse_click: 5_000,
     keyboard_type: 10_000,
     keyboard_press: 5_000,
     screen_capture: 15_000,
-    delegate_to_openclaw: 120_000,
-    openclaw_status: 10_000,
-    openclaw_sessions: 10_000,
     default: 60_000
 };
 
@@ -84,16 +64,12 @@ export class ToolExecutor {
         this.middleware = options.middleware;
         this.taskManager = options.taskManager;
         this.schedulerService = options.schedulerService;
-        this.openClawManager = options.openClawManager;
-        this.eventBus = options.eventBus; // New: EventBus
-        this.chromeWsBridge = options.chromeWsBridge; // New: Chrome Bridge
+        this.eventBus = options.eventBus;
         this.dryRun = options.dryRun || false;
         this.historyManager = options.historyManager;
-        this.memoryAdapter = options.memoryAdapter; // Add memoryAdapter
-        this.mcpClientManager = options.mcpClientManager; // New: MCP Client Manager
-        this.personaManager = options.personaManager; // Persona Manager
-        this.assistant = options.assistant; // Reference to parent assistant (for persona prompt refresh)
-        this.workspaceContentServer = options.workspaceContentServer; // New: Workspace Content Server
+        this.memoryAdapter = options.memoryAdapter;
+        this.mcpClientManager = options.mcpClientManager;
+        this.assistant = options.assistant;
         
         this._plannedChanges = [];
         this.recursionLevel = 0;
@@ -125,28 +101,23 @@ export class ToolExecutor {
 
         // Initialize Handlers
         this.coreHandlers = new CoreHandlers(this.packageManager, this.historyManager, this.memoryAdapter, { assistant: this.assistant });
-        this.workflowHandlers = new WorkflowHandlers();
+        this.workflowHandlers = new WorkflowHandlers(); // kept for getCurrentTodos/getErrorHistory
         this.structuredDevHandlers = new StructuredDevHandlers(workspaceRoot, this.aiAssistantClass, this.manifestManager);
-        this.webHandlers = new WebHandlers();
-        this.browserHandlers = new BrowserHandlers();
-        this.chromeExtHandlers = this.chromeWsBridge ? new ChromeExtensionHandlers(this.chromeWsBridge) : null;
         this.asyncTaskHandlers = new AsyncTaskHandlers(this.taskManager, this.aiAssistantClass, this.schedulerService, this.eventBus);
-        this.openClawHandlers = this.openClawManager ? new OpenClawHandlers(this.openClawManager) : null;
         this.surfaceHandlers = new SurfaceHandlers(this.surfaceManager, this.eventBus);
-        this.workflowService = new WorkflowService(this.surfaceManager, this.eventBus);
-        this.workflowSurfaceHandlers = new WorkflowSurfaceHandlers(this.workflowService, this.eventBus);
-        this.firecrawlHandlers = new FirecrawlHandlers();
         this.skillHandlers = new SkillHandlers(this.skillsManager, this.aiAssistantClass);
         this.mcpHandlers = this.mcpClientManager ? new McpHandlers(this.mcpClientManager) : null;
-        this.uiStyleHandlers = new UIStyleHandlers(this.eventBus, workspaceRoot);
-        this.mathHandlers = new MathHandlers();
-        this.imageHandlers = new ImageHandlers(workspaceRoot, this.workspaceContentServer);
-        this.embedHandlers = new EmbedHandlers(this.eventBus);
 
         // Initialize tool registry
         this.toolRegistry = new Map();
         this.pendingConfirmations = new Map(); // Store pending tool confirmations
         this.allowedPaths = new Set(); // Paths always-allowed by user
+
+        // Plugin tool registrations (managed via registerPluginTool / unregisterPluginTool)
+        this._pluginHandlers = new Map();
+        this._pluginSchemas = new Map(); // Map<toolName, schema>
+        this._pluginSurfaceSafe = new Set();
+
         this.registerBuiltInTools();
     }
 
@@ -253,32 +224,6 @@ export class ToolExecutor {
         this.registerTool('query_global_memory', args => this.coreHandlers.queryGlobalMemory(args));
         this.registerTool('report_to_parent', args => this.coreHandlers.reportToParent(args));
 
-        // Workflow Tools
-        this.registerTool('create_todo_list', this.workflowHandlers.createTodoList.bind(this.workflowHandlers));
-        this.registerTool('update_todo_status', this.workflowHandlers.updateTodoStatus.bind(this.workflowHandlers));
-        this.registerTool('analyze_and_recover', args => this.workflowHandlers.analyzeAndRecover(args, this.packageManager));
-        this.registerTool('evaluate_response_quality', this.workflowHandlers.evaluateResponseQuality.bind(this.workflowHandlers));
-        this.registerTool('speak_text', this.workflowHandlers.speakText.bind(this.workflowHandlers));
-
-        // Web Tools
-        this.registerTool('search_web', this.webHandlers.searchWeb.bind(this.webHandlers));
-
-        // Browser Tools
-        this.registerTool('browse_open', this.browserHandlers.browseOpen.bind(this.browserHandlers));
-        this.registerTool('browse_act', this.browserHandlers.browseAct.bind(this.browserHandlers));
-        this.registerTool('browse_screenshot', this.browserHandlers.browseScreenshot.bind(this.browserHandlers));
-        this.registerTool('browse_close', this.browserHandlers.browseClose.bind(this.browserHandlers));
-
-        // Chrome Extension Tools
-        if (this.chromeExtHandlers) {
-            this.registerChromeTools();
-        }
-
-        // Firecrawl Tools
-        this.registerTool('firecrawl_scrape', this.firecrawlHandlers.firecrawlScrape.bind(this.firecrawlHandlers));
-        this.registerTool('firecrawl_crawl', this.firecrawlHandlers.firecrawlCrawl.bind(this.firecrawlHandlers));
-        this.registerTool('firecrawl_check_job', this.firecrawlHandlers.firecrawlCheckJob.bind(this.firecrawlHandlers));
-
         // Skill Tools
         this.registerTool('list_skills', this.skillHandlers.listSkills.bind(this.skillHandlers));
         this.registerTool('read_skill', this.skillHandlers.readSkill.bind(this.skillHandlers));
@@ -352,13 +297,6 @@ export class ToolExecutor {
         this.registerTool('keyboard_press', this.desktopTools.pressKey.bind(this.desktopTools));
         this.registerTool('screen_capture', this.desktopTools.captureScreen.bind(this.desktopTools));
 
-        // OpenClaw Tools (conditional)
-        if (this.openClawHandlers) {
-            this.registerTool('delegate_to_openclaw', this.openClawHandlers.delegateToOpenClaw.bind(this.openClawHandlers));
-            this.registerTool('openclaw_status', this.openClawHandlers.openclawStatus.bind(this.openClawHandlers));
-            this.registerTool('openclaw_sessions', this.openClawHandlers.openclawSessions.bind(this.openClawHandlers));
-        }
-
         // MCP Management Tools
         if (this.mcpHandlers) {
             this.registerTool('mcp_add_server', this.mcpHandlers.addServer.bind(this.mcpHandlers));
@@ -377,43 +315,6 @@ export class ToolExecutor {
         this.registerTool('capture_surface', this.surfaceHandlers.captureSurface.bind(this.surfaceHandlers));
         this.registerTool('configure_surface_layout', this.surfaceHandlers.configureSurfaceLayout.bind(this.surfaceHandlers));
         this.registerTool('place_component_in_cell', this.surfaceHandlers.placeComponentInCell.bind(this.surfaceHandlers));
-
-        // Workflow Surface Tools (BubbleLab integration)
-        this.registerTool('start_surface_workflow', this.workflowSurfaceHandlers.startSurfaceWorkflow.bind(this.workflowSurfaceHandlers));
-        this.registerTool('get_workflow_status', this.workflowSurfaceHandlers.getWorkflowStatus.bind(this.workflowSurfaceHandlers));
-        this.registerTool('list_workflows', this.workflowSurfaceHandlers.listWorkflows.bind(this.workflowSurfaceHandlers));
-        this.registerTool('cancel_workflow', this.workflowSurfaceHandlers.cancelWorkflow.bind(this.workflowSurfaceHandlers));
-        this.registerTool('submit_workflow_interaction', this.workflowSurfaceHandlers.submitWorkflowInteraction.bind(this.workflowSurfaceHandlers));
-
-        // Persona Tools
-        if (this.personaManager) {
-            registerPersonaHandlers(this.toolRegistry, {
-                personaManager: this.personaManager,
-                assistant: this.assistant
-            });
-        }
-
-        // UI Style Tools
-        this.registerTool('set_ui_theme', this.uiStyleHandlers.setUITheme.bind(this.uiStyleHandlers));
-        this.registerTool('set_ui_tokens', this.uiStyleHandlers.setUITokens.bind(this.uiStyleHandlers));
-        this.registerTool('inject_ui_css', this.uiStyleHandlers.injectUICSS.bind(this.uiStyleHandlers));
-        this.registerTool('reset_ui_style', this.uiStyleHandlers.resetUIStyle.bind(this.uiStyleHandlers));
-        this.registerTool('get_ui_style_state', this.uiStyleHandlers.getUIStyleState.bind(this.uiStyleHandlers));
-        this.registerTool('set_display_names', this.uiStyleHandlers.setDisplayNames.bind(this.uiStyleHandlers));
-
-        // Math Tools
-        this.registerTool('evaluate_math', this.mathHandlers.evaluateMath.bind(this.mathHandlers));
-        this.registerTool('unit_conversion', this.mathHandlers.unitConversion.bind(this.mathHandlers));
-        this.registerTool('solve_equation', this.mathHandlers.solveEquation.bind(this.mathHandlers));
-
-        // Image Tools
-        this.registerTool('generate_image', this.imageHandlers.generateImage.bind(this.imageHandlers));
-        this.registerTool('create_image_variation', this.imageHandlers.createImageVariation.bind(this.imageHandlers));
-        this.registerTool('manipulate_image', this.imageHandlers.manipulateImage.bind(this.imageHandlers));
-        this.registerTool('get_image_info', this.imageHandlers.getImageInfo.bind(this.imageHandlers));
-
-        // Embed Tools
-        this.registerTool('embed_object', this.embedHandlers.embedObject.bind(this.embedHandlers));
     }
 
     setDryRun(enabled) {
@@ -428,66 +329,101 @@ export class ToolExecutor {
     }
 
     getAllToolDefinitions() {
-        const allTools = [...TOOLS];
+        // Use a Map keyed by tool name to deduplicate.
+        // Later entries (custom, MCP, plugin) override earlier ones (core),
+        // so plugins using useOriginalName don't cause duplicate declarations.
+        const toolMap = new Map();
 
-        // Add OpenClaw tools if enabled
-        if (this.openClawHandlers && OPENCLAW_TOOLS) {
-            allTools.push(...OPENCLAW_TOOLS);
+        for (const tool of TOOLS) {
+            const name = tool.function?.name;
+            if (name) toolMap.set(name, tool);
         }
 
         // Add Custom Tools
         if (this.customToolsManager) {
-            const customTools = this.customToolsManager.getCustomToolSchemas();
-            allTools.push(...customTools);
+            for (const tool of this.customToolsManager.getCustomToolSchemas()) {
+                const name = tool.function?.name;
+                if (name) toolMap.set(name, tool);
+            }
         }
 
         // Add MCP Tools
         if (this.mcpClientManager) {
-            const mcpRawTools = this.mcpClientManager.getAllTools();
-            const mcpTools = mcpRawTools.map(t => ({
-                type: 'function',
-                function: {
-                    name: t.name,
-                    description: t.description,
-                    parameters: t.inputSchema
-                }
-            }));
-            allTools.push(...mcpTools);
+            for (const t of this.mcpClientManager.getAllTools()) {
+                const tool = {
+                    type: 'function',
+                    function: {
+                        name: t.name,
+                        description: t.description,
+                        parameters: t.inputSchema
+                    }
+                };
+                toolMap.set(t.name, tool);
+            }
         }
 
-        return allTools;
-    }
+        // Add Plugin Tools (last — highest priority override)
+        if (this._pluginSchemas.size > 0) {
+            for (const tool of this._pluginSchemas.values()) {
+                const name = tool.function?.name;
+                if (name) toolMap.set(name, tool);
+            }
+        }
 
-    registerChromeTools() {
-        this.registerTool('chrome_list_tabs', this.chromeExtHandlers.listTabs.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_create_tab', this.chromeExtHandlers.createTab.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_close_tab', this.chromeExtHandlers.closeTab.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_navigate', this.chromeExtHandlers.navigate.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_list_windows', this.chromeExtHandlers.listWindows.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_create_window', this.chromeExtHandlers.createWindow.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_close_window', this.chromeExtHandlers.closeWindow.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_click', this.chromeExtHandlers.click.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_type', this.chromeExtHandlers.type.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_evaluate', this.chromeExtHandlers.evaluate.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_screenshot', this.chromeExtHandlers.screenshot.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_get_page_info', this.chromeExtHandlers.getPageInfo.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_query_dom', this.chromeExtHandlers.queryDom.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_fill_form', this.chromeExtHandlers.fillForm.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_scroll', this.chromeExtHandlers.scroll.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_wait_for', this.chromeExtHandlers.waitFor.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_cdp_command', this.chromeExtHandlers.cdpCommand.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_extract_content', this.chromeExtHandlers.extractContent.bind(this.chromeExtHandlers));
-        this.registerTool('chrome_cookies_manage', this.chromeExtHandlers.cookiesManage.bind(this.chromeExtHandlers));
-    }
-
-    attachChromeBridge(bridge) {
-        this.chromeWsBridge = bridge;
-        this.chromeExtHandlers = new ChromeExtensionHandlers(bridge);
-        this.registerChromeTools();
+        return [...toolMap.values()];
     }
 
     registerTool(name, handler, outputSchema = null) {
         this.toolRegistry.set(name, { handler, outputSchema });
+    }
+
+    /**
+     * Register a tool provided by a plugin.
+     *
+     * @param {string} name — fully qualified tool name
+     * @param {Function} handler — async (args) => string
+     * @param {object} schema — OpenAI-style tool schema ({type:'function', function:{…}})
+     * @param {{ surfaceSafe?: boolean }} [options]
+     */
+    registerPluginTool(name, handler, schema, options = {}) {
+        if (this.toolRegistry.has(name)) {
+            console.warn(`[ToolExecutor] Plugin tool "${name}" conflicts with a core tool — the core handler and schema take priority. The plugin handler is stored as fallback.`);
+            // Store handler for fallback but do NOT override the core schema
+            this._pluginHandlers.set(name, handler);
+            // Don't add to _pluginSchemas — core schema takes priority
+            if (options.surfaceSafe) {
+                this._pluginSurfaceSafe.add(name);
+            }
+            return;
+        }
+        if (this._pluginHandlers.has(name)) {
+            console.warn(`[ToolExecutor] Plugin tool name collision: "${name}" — overwriting`);
+        }
+        this._pluginHandlers.set(name, handler);
+        this._pluginSchemas.set(name, schema);
+        if (options.surfaceSafe) {
+            this._pluginSurfaceSafe.add(name);
+        }
+    }
+
+    /**
+     * Unregister a plugin-provided tool.
+     *
+     * @param {string} name — fully qualified tool name
+     */
+    unregisterPluginTool(name) {
+        this._pluginHandlers.delete(name);
+        this._pluginSurfaceSafe.delete(name);
+        this._pluginSchemas.delete(name);
+    }
+
+    /**
+     * Check if a plugin tool is marked as surface-safe.
+     * @param {string} name — tool name
+     * @returns {boolean}
+     */
+    isPluginSurfaceSafe(name) {
+        return this._pluginSurfaceSafe.has(name);
     }
 
     /**
@@ -504,7 +440,9 @@ export class ToolExecutor {
 
     async executeTool(toolCall, options = {}) {
         const functionName = toolCall.function.name;
-        const timeout = TOOL_TIMEOUTS[functionName] || TOOL_TIMEOUTS.default;
+        // Use plugin_default timeout for plugin-registered tools, else per-tool or global default
+        const timeout = TOOL_TIMEOUTS[functionName]
+            || (this._pluginHandlers.has(functionName) ? TOOL_TIMEOUTS.plugin_default : TOOL_TIMEOUTS.default);
         const signal = options.signal;
 
         if (signal?.aborted) {
@@ -606,6 +544,16 @@ export class ToolExecutor {
                 toolResultText = await handler(args);
             } else if (this.customToolsManager.hasCustomTool(functionName)) {
                 toolResultText = await this.customToolsManager.executeCustomTool(functionName, args);
+            } else if (this._pluginHandlers.has(functionName)) {
+                // Plugin-registered tool dispatch — wrapped in try-catch since plugin
+                // code is untrusted and more likely to throw unexpected errors.
+                const pluginHandler = this._pluginHandlers.get(functionName);
+                try {
+                    toolResultText = await pluginHandler(args);
+                } catch (pluginErr) {
+                    consoleStyler.log('error', `Plugin tool error (${functionName}): ${pluginErr.message}`);
+                    toolResultText = `Plugin tool error (${functionName}): ${pluginErr.message}`;
+                }
             } else if (this.mcpClientManager && functionName.startsWith('mcp_')) {
                 // Dynamic MCP Tool Dispatch
                 // Tool Name Format: mcp_{serverName}_{toolName}

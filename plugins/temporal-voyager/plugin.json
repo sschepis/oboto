@@ -1,0 +1,7 @@
+{
+  "id": "temporal-voyager",
+  "name": "Temporal Voyager",
+  "version": "1.0.0",
+  "description": "Time-travel debugging and simulation tool that records agent loop steps and allows jumping to previous states.",
+  "author": "Oboto Team"
+}

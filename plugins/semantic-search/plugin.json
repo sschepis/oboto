@@ -1,0 +1,6 @@
+{
+  "name": "semantic-search",
+  "version": "1.0.0",
+  "description": "Store and search information using semantic queries",
+  "main": "index.mjs"
+}

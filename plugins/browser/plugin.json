@@ -1,0 +1,7 @@
+{
+  "name": "browser",
+  "version": "1.0.0",
+  "description": "Browser automation with Puppeteer",
+  "main": "index.mjs",
+  "capabilities": { "tools": true }
+}

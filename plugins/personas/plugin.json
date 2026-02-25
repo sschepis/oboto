@@ -1,0 +1,12 @@
+{
+  "name": "personas",
+  "version": "1.0.0",
+  "description": "AI persona creation, switching, and system prompt injection",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "settings": true },
+  "settings": {
+    "schema": {
+      "defaultPersonaId": { "type": "string", "label": "Default Persona ID", "description": "Persona to activate on startup" }
+    }
+  }
+}

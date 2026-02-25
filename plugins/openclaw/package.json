@@ -1,0 +1,16 @@
+{
+  "name": "@oboto/plugin-openclaw",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "OpenClaw legal document AI integration plugin for Oboto",
+  "main": "index.mjs",
+  "keywords": ["oboto-plugin", "openclaw", "legal", "ai-agent", "websocket"],
+  "author": "sschepis",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "@sschepis/oboto": ">=1.0.0"
+  }
+}

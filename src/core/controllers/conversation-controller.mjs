@@ -27,13 +27,16 @@ export class ConversationController {
             }
         }
 
+        const pluginsSummary = this.assistant._getPluginsSummary?.() || '';
+        const dynamicRoutesEnabled = process.env.OBOTO_DYNAMIC_ROUTES === 'true';
         const systemPrompt = createSystemPrompt(
             this.assistant.workingDir,
             this.assistant.workspaceManager.getCurrentWorkspace(),
             null,
             {
                 openclawAvailable, personaContent, skillsSummary,
-                includeSurfaces: true, includeStyling: true, includeWorkflows: true
+                includeSurfaces: true, includeStyling: true, includeWorkflows: true,
+                pluginsSummary, dynamicRoutesEnabled
             }
         );
 

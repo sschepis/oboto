@@ -5,8 +5,10 @@ let isConnected = false;
 let retryCount = 0;
 let reconnectTimer = null;
 let shouldBeConnected = false; // User toggle state
+let autoConnectInterval = null; // Periodic auto-connect timer
 const MAX_RETRIES = 10;
 const BASE_RETRY_DELAY = 1000;
+const AUTO_CONNECT_INTERVAL = 60_000; // 60 seconds
 
 // Attached debugger sessions: Set<tabId>
 const attachedDebuggers = new Set();
@@ -31,6 +33,7 @@ async function connect() {
       console.log("Connected to Oboto");
       isConnected = true;
       retryCount = 0;
+      stopAutoConnect(); // Stop periodic reconnect once connected
       updateBadge("ON");
       
       sendEvent("connected", { version: "1.0.0" });
@@ -75,6 +78,7 @@ function disconnect() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  stopAutoConnect();
   if (socket) {
     socket.close();
     socket = null;
@@ -84,9 +88,9 @@ function disconnect() {
 
 function scheduleReconnect() {
   if (retryCount >= MAX_RETRIES) {
-    console.log("Max retries reached. Stopping reconnection attempts.");
-    shouldBeConnected = false; // Stop trying
-    updateBadge("ERR");
+    console.log("Max rapid retries reached. Falling back to periodic auto-connect every 60s.");
+    updateBadge("...");
+    startAutoConnect();
     return;
   }
 
@@ -98,6 +102,36 @@ function scheduleReconnect() {
     retryCount++;
     connect();
   }, delay);
+}
+
+/**
+ * Start a periodic auto-connect timer that tries to reconnect every 60 seconds.
+ * Used after rapid-retry exhaustion and as a background keep-alive mechanism.
+ */
+function startAutoConnect() {
+  if (autoConnectInterval) return; // Already running
+
+  autoConnectInterval = setInterval(() => {
+    if (!shouldBeConnected) {
+      stopAutoConnect();
+      return;
+    }
+    if (!isConnected && (!socket || socket.readyState === WebSocket.CLOSED)) {
+      console.log("Auto-connect: attempting reconnection...");
+      retryCount = 0; // Reset retries for a fresh burst if server comes back
+      connect();
+    }
+  }, AUTO_CONNECT_INTERVAL);
+}
+
+/**
+ * Stop the periodic auto-connect timer.
+ */
+function stopAutoConnect() {
+  if (autoConnectInterval) {
+    clearInterval(autoConnectInterval);
+    autoConnectInterval = null;
+  }
 }
 
 function updateBadge(text) {
@@ -143,6 +177,7 @@ chrome.action.onClicked.addListener((tab) => {
   if (shouldBeConnected) {
     retryCount = 0;
     connect();
+    startAutoConnect(); // Ensure periodic reconnect is always active while toggled on
   } else {
     disconnect();
   }

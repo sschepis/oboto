@@ -1,0 +1,7 @@
+{
+  "name": "voice-suite",
+  "version": "1.0.0",
+  "description": "Voice manipulation suite. Tools: text_to_speech, transcribe_audio, get_voices, clone_voice, generate_sound_effect",
+  "type": "module",
+  "main": "index.mjs"
+}

@@ -379,7 +379,7 @@ export { TutorialGenerator } from '../structured-dev/tutorial-generator.mjs';
 export { EnhancementGenerator } from '../structured-dev/enhancement-generator.mjs';
 export { CancellationError } from './cancellation-error.mjs';
 export { DesignResult } from './design-result.mjs';
-export { WorkflowService } from '../services/workflow-service.mjs';
+// WorkflowService has been extracted to plugins/workflows/workflow-service.mjs
 export { MemoryAdapter } from './adapters/memory-adapter.mjs';
 
 // Task checkpoint system (crash recovery)

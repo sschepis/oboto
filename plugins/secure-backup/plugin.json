@@ -1,0 +1,7 @@
+{
+  "id": "secure-backup",
+  "name": "Secure Backup",
+  "version": "1.0.0",
+  "description": "Encrypted backup and restore of application data.",
+  "author": "Oboto Team"
+}

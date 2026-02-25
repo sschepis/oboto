@@ -1,0 +1,12 @@
+{
+  "name": "firecrawl",
+  "version": "1.0.0",
+  "description": "Firecrawl web scraping and crawling",
+  "main": "index.mjs",
+  "capabilities": { "tools": true, "settings": true },
+  "settings": {
+    "schema": {
+      "apiKey": { "type": "string", "label": "Firecrawl API Key", "secret": true }
+    }
+  }
+}
