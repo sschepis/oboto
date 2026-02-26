@@ -19,10 +19,49 @@
  */
 
 import { WorkflowService } from './workflow-service.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    qualityThreshold: 4,
+    maxErrorHistory: 50,
+    workflowTimeout: 300000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'qualityThreshold',
+        label: 'Quality Threshold',
+        type: 'number',
+        description: 'Minimum quality rating (1-10) for a response to be approved without retry.',
+        default: 4,
+        min: 1,
+        max: 10,
+    },
+    {
+        key: 'maxErrorHistory',
+        label: 'Max Error History',
+        type: 'number',
+        description: 'Maximum number of error recovery entries to retain in history.',
+        default: 50,
+        min: 10,
+        max: 500,
+    },
+    {
+        key: 'workflowTimeout',
+        label: 'Workflow Timeout (ms)',
+        type: 'number',
+        description: 'Maximum time in milliseconds a workflow can run before being automatically cancelled.',
+        default: 300000,
+        min: 10000,
+        max: 3600000,
+    },
+];
 
 // ── Workflow-handler tool implementations ────────────────────────────────
 // These factory functions return handlers that close over the mutable state
-// stored on `api._pluginInstance`, avoiding module-level `let` variables that
+// stored on `api.setInstance()/getInstance()`, avoiding module-level `let` variables that
 // would leak across ESM cache-busted reloads.
 
 function makeWorkflowHandlers(instance) {
@@ -63,6 +102,10 @@ function makeWorkflowHandlers(instance) {
         async handleAnalyzeAndRecover(args) {
             const { error_message, failed_approach, recovery_strategy, alternative_code } = args;
 
+            // Enforce maxErrorHistory limit
+            if (instance.errorHistory.length >= instance.maxErrorHistory) {
+                instance.errorHistory.shift();
+            }
             instance.errorHistory.push({
                 error: error_message,
                 approach: failed_approach,
@@ -106,7 +149,7 @@ function makeWorkflowHandlers(instance) {
                 remedy_suggestion = '',
             } = args;
 
-            if (quality_rating < 4) {
+            if (quality_rating < instance.qualityThreshold) {
                 return `Quality rating ${quality_rating}/10 — retry needed with remedy: ${remedy_suggestion}`;
             }
             return `Quality rating ${quality_rating}/10 — response approved`;
@@ -192,16 +235,36 @@ function makeSurfaceWorkflowHandlers(workflowService) {
 
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
-// NOTE: Plugin state is stored on `api._pluginInstance` rather than in module-level
+// NOTE: Plugin state is stored on `api.setInstance()/getInstance()` rather than in module-level
 // variables. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up state via `api._pluginInstance`, and the new module
+// still reference and clean up state via `api.setInstance()/getInstance()`, and the new module
 // starts fresh.
 
 export async function activate(api) {
-    // Initialize mutable state on api._pluginInstance
-    const instance = { currentTodos: null, errorHistory: [] };
-    api._pluginInstance = instance;
+    // instance is declared here so the onSettingsChange callback can reference it
+    let instance;
+
+    const { pluginSettings: settings } = await registerSettingsHandlers(
+        api, 'workflows', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        (newSettings) => {
+            if (instance) {
+                instance.qualityThreshold = settings.qualityThreshold;
+                instance.maxErrorHistory = settings.maxErrorHistory;
+                instance.settings = settings;
+            }
+        }
+    );
+
+    // Initialize mutable state on api.setInstance()/getInstance()
+    instance = {
+        currentTodos: null,
+        errorHistory: [],
+        qualityThreshold: settings.qualityThreshold,
+        maxErrorHistory: settings.maxErrorHistory,
+        settings,
+    };
+    api.setInstance(instance);
 
     // Build handler closures that capture the local `instance`
     const workflowHandlers = makeWorkflowHandlers(instance);
@@ -449,12 +512,13 @@ export async function activate(api) {
             }
         }
     });
+
 }
 
 export async function deactivate(api) {
-    if (api._pluginInstance) {
-        api._pluginInstance.currentTodos = null;
-        api._pluginInstance.errorHistory = [];
+    if (api.getInstance()) {
+        api.getInstance().currentTodos = null;
+        api.getInstance().errorHistory = [];
     }
-    api._pluginInstance = null;
+    api.setInstance(null);
 }

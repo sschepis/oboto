@@ -1,5 +1,6 @@
 import { computeAsync, computationalTool, getCacheStats, clearCache } from './native.mjs';
 import { callSympy, shutdown as shutdownSympy, getCacheStats as getSympyCacheStats } from './sympy-bridge.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
 const DEFAULT_SETTINGS = {
   pythonPath: 'python3',
@@ -10,28 +11,81 @@ const DEFAULT_SETTINGS = {
   persistentPython: true,
 };
 
-// NOTE: Plugin state is stored on `api._pluginInstance` rather than in a module-level
+const SETTINGS_SCHEMA = [
+  {
+    key: 'pythonPath',
+    label: 'Python Path',
+    type: 'text',
+    description: 'Path to the Python 3 interpreter used for SymPy computations.',
+    default: 'python3',
+  },
+  {
+    key: 'sympyTimeout',
+    label: 'SymPy Timeout (ms)',
+    type: 'number',
+    description: 'Maximum time in milliseconds to wait for a SymPy computation to complete.',
+    default: 30000,
+    min: 1000,
+    max: 120000,
+  },
+  {
+    key: 'nerdamerTimeout',
+    label: 'Nerdamer Timeout (ms)',
+    type: 'number',
+    description: 'Maximum time in milliseconds to wait for a native (nerdamer) computation to complete.',
+    default: 10000,
+    min: 1000,
+    max: 60000,
+  },
+  {
+    key: 'cacheEnabled',
+    label: 'Enable Cache',
+    type: 'boolean',
+    description: 'Cache computation results to speed up repeated evaluations.',
+    default: true,
+  },
+  {
+    key: 'defaultFormat',
+    label: 'Default Output Format',
+    type: 'select',
+    description: 'Default output format for computation results.',
+    default: 'text',
+    options: [
+      { value: 'text', label: 'Text' },
+      { value: 'latex', label: 'LaTeX' },
+      { value: 'all', label: 'All (Text + LaTeX)' },
+    ],
+  },
+  {
+    key: 'persistentPython',
+    label: 'Persistent Python Process',
+    type: 'boolean',
+    description: 'Keep a persistent Python process running for faster SymPy computations.',
+    default: true,
+  },
+];
+
+// NOTE: Plugin state is stored on `api.setInstance()/getInstance()` rather than in a module-level
 // variable. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up state via `api._pluginInstance`, and the new module
+// still reference and clean up state via `api.setInstance()/getInstance()`, and the new module
 // starts fresh.
 
 export async function activate(api) {
   console.log(`[poorman-alpha] Activating plugin ${api.id}`);
 
-  let settings = { ...DEFAULT_SETTINGS };
+  // Pre-create instance object to avoid race condition with onSettingsChange callback
+  const instanceState = { settings: null };
+  api.setInstance(instanceState);
 
-  try {
-    const stored = await api.settings.get('settings');
-    if (stored && typeof stored === 'object') {
-      settings = { ...DEFAULT_SETTINGS, ...stored };
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'poorman-alpha', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    () => {
+      instanceState.settings = pluginSettings;
     }
-  } catch (_e) {
-    // Use defaults
-  }
+  );
 
-  // Store mutable state on api._pluginInstance
-  api._pluginInstance = { settings };
+  instanceState.settings = pluginSettings;
 
   const computeTool = {
     name: 'compute',
@@ -58,11 +112,11 @@ export async function activate(api) {
       required: ['expression']
     },
     handler: async (args) => {
-      const format = args.format || settings.defaultFormat;
+      const format = args.format || pluginSettings.defaultFormat;
       const result = await computeAsync(args.expression, {
         format,
-        cache: settings.cacheEnabled,
-        timeout: settings.nerdamerTimeout,
+        cache: pluginSettings.cacheEnabled,
+        timeout: pluginSettings.nerdamerTimeout,
       });
       return result;
     }
@@ -104,13 +158,13 @@ export async function activate(api) {
     },
     handler: async (args) => {
       return await callSympy(args.expression, {
-        format: args.format || settings.defaultFormat,
+        format: args.format || pluginSettings.defaultFormat,
         steps: args.steps || false,
         plot: args.plot || false,
-        cache: settings.cacheEnabled,
-        pythonPath: settings.pythonPath,
-        timeout: settings.sympyTimeout,
-        persistent: settings.persistentPython,
+        cache: pluginSettings.cacheEnabled,
+        pythonPath: pluginSettings.pythonPath,
+        timeout: pluginSettings.sympyTimeout,
+        persistent: pluginSettings.persistentPython,
       });
     }
   };
@@ -143,8 +197,8 @@ export async function activate(api) {
     },
     handler: async (args) => {
       return await computeAsync(args.expression, {
-        format: args.format || settings.defaultFormat,
-        cache: settings.cacheEnabled,
+        format: args.format || pluginSettings.defaultFormat,
+        cache: pluginSettings.cacheEnabled,
       });
     }
   };
@@ -177,23 +231,14 @@ export async function activate(api) {
 
   api.tools.register(cacheTool);
 
-  api.ws.register('get-settings', async () => settings);
-  api.ws.register('update-settings', async (newSettings) => {
-    Object.assign(settings, newSettings);
-    // Also update the instance reference
-    api._pluginInstance.settings = settings;
-    await api.settings.set('settings', settings);
-    return settings;
-  });
-
   console.log(`[poorman-alpha] Registered tools: compute, sympy_compute, matrix_compute, compute_cache_stats`);
-  console.log(`[poorman-alpha] Settings:`, JSON.stringify(settings));
+  console.log(`[poorman-alpha] Settings:`, JSON.stringify(pluginSettings));
 }
 
 export function deactivate(api) {
   console.log(`[poorman-alpha] Deactivating...`);
   shutdownSympy();
   clearCache();
-  api._pluginInstance = null;
+  api.setInstance(null);
   console.log(`[poorman-alpha] Deactivated`);
 }

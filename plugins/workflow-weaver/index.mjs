@@ -1,6 +1,25 @@
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  defaultAgentTemperature: 0.7,
+  defaultAgentSystemPrompt: 'You are a helpful assistant executing a workflow step.',
+  seedDemoWorkflow: true,
+  verboseLogging: false,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable workflow weaver', default: true },
+  { key: 'defaultAgentTemperature', label: 'Default Agent Temperature', type: 'number', description: 'Default temperature for AI agent steps in workflows', default: 0.7 },
+  { key: 'defaultAgentSystemPrompt', label: 'Default Agent System Prompt', type: 'text', description: 'Default system prompt for agent steps', default: 'You are a helpful assistant executing a workflow step.' },
+  { key: 'seedDemoWorkflow', label: 'Seed Demo Workflow', type: 'boolean', description: 'Automatically create a demo workflow if none exist', default: true },
+  { key: 'verboseLogging', label: 'Verbose Logging', type: 'boolean', description: 'Enable verbose console logging during workflow execution', default: false },
+];
+
 export class WorkflowEngine {
-  constructor(api) {
+  constructor(api, settings) {
     this.api = api;
+    this.settings = settings;
     this.stepHandlers = {};
   }
 
@@ -9,7 +28,9 @@ export class WorkflowEngine {
   }
 
   async execute(workflow, inputs = {}) {
-    console.log(`[WorkflowEngine] Starting workflow: ${workflow.id}`);
+    if (this.settings.verboseLogging) {
+      console.log(`[WorkflowEngine] Starting workflow: ${workflow.id}`);
+    }
     const context = { ...inputs };
     const results = {};
 
@@ -21,7 +42,9 @@ export class WorkflowEngine {
       }
 
       try {
-        console.log(`[WorkflowEngine] Executing step ${step.id} (${step.type})...`);
+        if (this.settings.verboseLogging) {
+          console.log(`[WorkflowEngine] Executing step ${step.id} (${step.type})...`);
+        }
         // Resolve inputs from context
         const resolvedParams = this.resolveParams(step.params, context, results);
 
@@ -71,20 +94,36 @@ export class WorkflowEngine {
   }
 }
 
-export function activate(api) {
+export async function activate(api) {
   console.log('[Workflow Weaver] Activating...');
 
-  const engine = new WorkflowEngine(api);
+  // engine is declared here so the onSettingsChange callback can reference it
+  let engine;
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'workflow-weaver', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    () => {
+      if (engine) {
+        Object.assign(engine.settings, pluginSettings);
+      }
+    }
+  );
+
+  engine = new WorkflowEngine(api, pluginSettings);
 
   // Register basic step types
   engine.registerStepType('log', async (params) => {
-    console.log('[Workflow Log]', params.message);
+    if (pluginSettings.verboseLogging) {
+      console.log('[Workflow Log]', params.message);
+    }
     api.events.emit('workflow-weaver:log', { message: params.message });
     return { logged: true };
   });
 
   engine.registerStepType('tool', async (params) => {
-    console.log(`[Workflow Tool] Calling tool ${params.toolName} with`, params.args);
+    if (pluginSettings.verboseLogging) {
+      console.log(`[Workflow Tool] Calling tool ${params.toolName} with`, params.args);
+    }
     try {
       const result = await api.tools.execute(params.toolName, params.args || {});
       return { toolOutput: result };
@@ -95,11 +134,13 @@ export function activate(api) {
   });
 
   engine.registerStepType('agent', async (params) => {
-    console.log(`[Workflow Agent] Querying agent with: ${params.prompt}`);
+    if (pluginSettings.verboseLogging) {
+      console.log(`[Workflow Agent] Querying agent with: ${params.prompt}`);
+    }
     try {
       const response = await api.ai.ask(params.prompt, {
-        systemPrompt: params.systemPrompt || 'You are a helpful assistant executing a workflow step.',
-        temperature: params.temperature || 0.7
+        systemPrompt: params.systemPrompt || pluginSettings.defaultAgentSystemPrompt,
+        temperature: params.temperature ?? pluginSettings.defaultAgentTemperature
       });
       return { response };
     } catch (e) {
@@ -112,18 +153,22 @@ export function activate(api) {
   const getWorkflows = async () => {
     let workflows = await api.storage.get('workflows');
     if (!workflows || Object.keys(workflows).length === 0) {
-      workflows = {
-        'demo-flow': {
-          id: 'demo-flow',
-          steps: [
-            { id: 'step1', type: 'log', params: { message: 'Starting demo workflow' } },
-            { id: 'step2', type: 'tool', params: { toolName: 'mcp_filesystem_read_multiple_files', args: { paths: ["package.json"] } } },
-            { id: 'step3', type: 'agent', params: { prompt: 'Summarize the package.json file: $step2.toolOutput' } },
-            { id: 'step4', type: 'log', params: { message: 'Workflow complete' } }
-          ]
-        }
-      };
-      await api.storage.set('workflows', workflows);
+      if (pluginSettings.seedDemoWorkflow) {
+        workflows = {
+          'demo-flow': {
+            id: 'demo-flow',
+            steps: [
+              { id: 'step1', type: 'log', params: { message: 'Starting demo workflow' } },
+              { id: 'step2', type: 'tool', params: { toolName: 'mcp_filesystem_read_multiple_files', args: { paths: ["package.json"] } } },
+              { id: 'step3', type: 'agent', params: { prompt: 'Summarize the package.json file: $step2.toolOutput' } },
+              { id: 'step4', type: 'log', params: { message: 'Workflow complete' } }
+            ]
+          }
+        };
+        await api.storage.set('workflows', workflows);
+      } else {
+        workflows = {};
+      }
     }
     return workflows;
   };
@@ -141,6 +186,9 @@ export function activate(api) {
       required: ['workflowId']
     },
     handler: async (args) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Workflow Weaver plugin is disabled' };
+      }
       const workflows = await getWorkflows();
       const workflow = workflows[args.workflowId];
       if (!workflow) {

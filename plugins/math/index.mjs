@@ -10,6 +10,47 @@
  */
 
 import { create, all } from 'mathjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    precision: 64,
+    displayPrecision: 14,
+    angleUnit: 'rad',
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'precision',
+        label: 'BigNumber Precision',
+        type: 'number',
+        description: 'Internal BigNumber precision (number of significant digits).',
+        default: 64,
+        min: 1,
+        max: 256,
+    },
+    {
+        key: 'displayPrecision',
+        label: 'Display Precision',
+        type: 'number',
+        description: 'Number of significant digits shown in formatted results.',
+        default: 14,
+        min: 1,
+        max: 50,
+    },
+    {
+        key: 'angleUnit',
+        label: 'Angle Unit',
+        type: 'select',
+        description: 'Default angle unit for trigonometric functions.',
+        default: 'rad',
+        options: [
+            { value: 'rad', label: 'Radians' },
+            { value: 'deg', label: 'Degrees' },
+        ],
+    },
+];
 
 // ── Math environment setup ───────────────────────────────────────────────
 
@@ -17,10 +58,10 @@ import { create, all } from 'mathjs';
  * Create a configured mathjs instance with BigNumber precision and
  * common unit aliases.
  */
-function createMathEnvironment() {
+function createMathEnvironment(settings = {}) {
     const math = create(all, {
         number: 'BigNumber',
-        precision: 64
+        precision: settings.precision || 64,
     });
 
     return math;
@@ -75,15 +116,16 @@ function normalizeUnit(unit) {
 
 // ── Tool Handlers ────────────────────────────────────────────────────────
 
-function handleEvaluateMath(math, scope, args) {
+function handleEvaluateMath(math, scope, args, settings = {}) {
     const { expression, scope: userScope = {} } = args;
+    const displayPrecision = settings.displayPrecision || 14;
 
     try {
         const result = math.evaluate(expression, { ...scope, ...userScope });
 
         let formattedResult;
         if (math.isMatrix(result) || Array.isArray(result)) {
-            formattedResult = math.format(result, { precision: 14 });
+            formattedResult = math.format(result, { precision: displayPrecision });
         } else if (typeof result === 'object' && result.toString) {
             formattedResult = result.toString();
         } else {
@@ -128,7 +170,11 @@ function handleSolveEquation(math, args) {
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
 export async function activate(api) {
-    const math = createMathEnvironment();
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'math', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+    );
+
+    const math = createMathEnvironment(pluginSettings);
     const scope = {};
 
     api.tools.register({
@@ -150,7 +196,7 @@ export async function activate(api) {
             },
             required: ['expression']
         },
-        handler: (args) => handleEvaluateMath(math, scope, args)
+        handler: (args) => handleEvaluateMath(math, scope, args, pluginSettings)
     });
 
     api.tools.register({

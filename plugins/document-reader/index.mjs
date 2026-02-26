@@ -11,6 +11,53 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    maxFileSizeMb: 50,
+    ocrEnabled: false,
+    defaultSummaryMaxLength: 200,
+    maxContentForSummary: 10000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'maxFileSizeMb',
+        label: 'Max File Size (MB)',
+        type: 'number',
+        description: 'Maximum file size to process in megabytes.',
+        default: 50,
+        min: 1,
+        max: 500,
+    },
+    {
+        key: 'ocrEnabled',
+        label: 'Enable OCR',
+        type: 'boolean',
+        description: 'Enable OCR for image-based documents (placeholder — not yet implemented).',
+        default: false,
+    },
+    {
+        key: 'defaultSummaryMaxLength',
+        label: 'Default Summary Max Length',
+        type: 'number',
+        description: 'Approximate maximum character length for auto-generated summaries.',
+        default: 200,
+        min: 50,
+        max: 5000,
+    },
+    {
+        key: 'maxContentForSummary',
+        label: 'Max Content for AI Summary',
+        type: 'number',
+        description: 'Maximum characters of document content sent to the AI for summarization.',
+        default: 10000,
+        min: 1000,
+        max: 100000,
+    },
+];
 
 // Dynamically import heavy extractors only when needed
 let pdfParse;
@@ -127,8 +174,9 @@ class ExtractionService {
 // ── Enrichment Service ────────────────────────────────────────────────────
 
 class EnrichmentService {
-    constructor(api) {
+    constructor(api, settings = {}) {
         this.api = api;
+        this.settings = settings;
     }
 
     async enrich(document) {
@@ -149,9 +197,11 @@ class EnrichmentService {
     async generateSummary(content) {
         if (!content || content.trim() === '') return '';
 
+        const maxContent = this.settings.maxContentForSummary || 10000;
+
         // Try using AI if available
         try {
-            const prompt = `Summarize the following document content concisely in a few sentences:\n\n${content.substring(0, 10000)}`;
+            const prompt = `Summarize the following document content concisely in a few sentences:\n\n${content.substring(0, maxContent)}`;
             const response = await this.api.ai.ask(prompt);
             if (response && response.trim()) {
                 return response.trim();
@@ -179,11 +229,21 @@ class EnrichmentService {
 export async function activate(api) {
     console.log('[document-reader] Activating...');
 
+    let enrichmentService;
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'document-reader', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        (newSettings) => {
+            // Update enrichment service settings
+            enrichmentService.settings = pluginSettings;
+        }
+    );
+
     const storageService = new StorageService(api);
     await storageService.init();
 
     const extractionService = new ExtractionService();
-    const enrichmentService = new EnrichmentService(api);
+    enrichmentService = new EnrichmentService(api, pluginSettings);
 
     // ── Tool: ingest_document ─────────────────────────────────────────────
     api.tools.register({
@@ -202,7 +262,14 @@ export async function activate(api) {
             try {
                 // Ensure absolute path or resolve against cwd
                 const targetPath = path.resolve(process.cwd(), args.filePath);
-                
+
+                // Check file size against settings
+                const maxBytes = (pluginSettings.maxFileSizeMb || 50) * 1024 * 1024;
+                const stat = await fs.stat(targetPath);
+                if (stat.size > maxBytes) {
+                    return { success: false, error: `File exceeds maximum size of ${pluginSettings.maxFileSizeMb} MB` };
+                }
+
                 const extracted = await extractionService.extract(targetPath);
                 const enriched = await enrichmentService.enrich(extracted);
                 const stored = await storageService.saveDocument(enriched);
@@ -279,7 +346,7 @@ export async function activate(api) {
             required: ['content']
         },
         handler: async (args) => {
-            const maxLength = args.maxLength || 200;
+            const maxLength = args.maxLength || pluginSettings.defaultSummaryMaxLength || 200;
             const summary = await enrichmentService.generateSummary(args.content);
             const finalSummary = summary.length > maxLength ? summary.substring(0, maxLength) + '...' : summary;
             

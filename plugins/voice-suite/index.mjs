@@ -1,8 +1,29 @@
 import { OpenAIProvider } from './providers/openai.mjs';
 import { ElevenLabsProvider } from './providers/elevenlabs.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  defaultProvider: 'openai',
+  defaultVoice: '',
+  openaiApiKey: '',
+  elevenlabsApiKey: '',
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable voice suite', default: true },
+  { key: 'defaultProvider', label: 'Default TTS Provider', type: 'select', description: 'Default text-to-speech provider', default: 'openai', options: ['openai', 'elevenlabs'] },
+  { key: 'defaultVoice', label: 'Default Voice', type: 'text', description: 'Default voice ID or name (provider-specific)', default: '' },
+  { key: 'openaiApiKey', label: 'OpenAI API Key', type: 'password', description: 'API key for OpenAI TTS and Whisper (overrides global key)', default: '' },
+  { key: 'elevenlabsApiKey', label: 'ElevenLabs API Key', type: 'password', description: 'API key for ElevenLabs voice services', default: '' },
+];
 
 export async function activate(api) {
   console.log(`[voice-suite] Activating plugin ${api.id}`);
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'voice-suite', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
 
   const openAIProvider = new OpenAIProvider(api);
   const elevenLabsProvider = new ElevenLabsProvider(api);
@@ -15,22 +36,26 @@ export async function activate(api) {
       type: 'object',
       properties: {
         text: { type: 'string', description: 'The text to convert to speech' },
-        provider: { type: 'string', enum: ['openai', 'elevenlabs'], description: 'The provider to use (default: openai)' },
+        provider: { type: 'string', enum: ['openai', 'elevenlabs'], description: 'The provider to use (default: from settings)' },
         voice: { type: 'string', description: 'The voice ID or name to use' }
       },
       required: ['text']
     },
     handler: async (args) => {
-      const provider = args.provider || 'openai';
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Voice suite plugin is disabled' };
+      }
+      const provider = args.provider || pluginSettings.defaultProvider;
+      const voice = args.voice || pluginSettings.defaultVoice || undefined;
       if (provider === 'elevenlabs') {
         return await elevenLabsProvider.textToSpeech({
           text: args.text,
-          voiceId: args.voice
+          voiceId: voice
         });
       } else {
         return await openAIProvider.textToSpeech({
           text: args.text,
-          voice: args.voice
+          voice: voice
         });
       }
     }
@@ -48,6 +73,9 @@ export async function activate(api) {
       required: ['audioBuffer']
     },
     handler: async (args) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Voice suite plugin is disabled' };
+      }
       return await openAIProvider.transcribeAudio({
         audioBuffer: args.audioBuffer
       });

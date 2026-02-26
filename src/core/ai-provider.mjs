@@ -578,7 +578,18 @@ export async function callProvider(requestBody, options = {}) {
             throw new Error('Cloud AI proxy requires an active Oboto Cloud login. Set AI_PROVIDER to a local provider or log in to cloud.');
         }
         try {
-            return await _cloudSync.aiProxyRequest('auto', ctx.model, requestBody.messages);
+            const rawCloudResponse = await _cloudSync.aiProxyRequest('auto', ctx.model, requestBody.messages, {
+                tools: requestBody.tools,
+                temperature: requestBody.temperature,
+                max_tokens: requestBody.max_tokens,
+                response_format: requestBody.response_format,
+            });
+            // Extract and emit cloud usage metadata if present, without mutating the original response
+            const { _cloud_usage, ...cloudResponse } = rawCloudResponse || {};
+            if (_cloud_usage && _eventBus) {
+                _eventBus.emitTyped('cloud:usage-update', _cloud_usage);
+            }
+            return cloudResponse;
         } catch (err) {
             console.warn(`[ai-provider] Cloud AI proxy failed: ${err.message}. Falling back to local provider.`);
             const fallbackProvider = _detectLocalProvider();

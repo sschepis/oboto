@@ -178,6 +178,18 @@ const _customModels = {};
 // Whether remote models have been fetched at least once
 let _remoteFetched = false;
 
+// CloudSync reference for cloud model fetching (set externally)
+let _cloudSync = null;
+
+/**
+ * Set the CloudSync reference for cloud model fetching.
+ * Called from main.mjs after cloud initialization.
+ * @param {object|null} cloudSync
+ */
+export function setCloudSyncForModels(cloudSync) {
+    _cloudSync = cloudSync;
+}
+
 // Debounce tracker for per-provider fetches (prevents spam from UI re-renders)
 const _providerFetchTimestamps = {};
 const PROVIDER_FETCH_DEBOUNCE_MS = 10_000; // 10 seconds minimum between fetches for same provider
@@ -357,16 +369,53 @@ async function fetchLMStudioModels() {
 }
 
 /**
+ * Fetch available models from Oboto Cloud's AI gateway.
+ * Requires an active cloud login via CloudSync.
+ * @returns {Promise<Object>} Map of modelId → capabilities
+ */
+async function fetchCloudModels() {
+    if (!_cloudSync || !_cloudSync.isLoggedIn()) return {};
+
+    try {
+        const models = await _cloudSync.listCloudModels();
+        if (!models || models.length === 0) return {};
+
+        const result = {};
+        for (const m of models) {
+            result[m.id] = {
+                provider: 'cloud',
+                contextWindow: m.context_window || 128000,
+                maxOutputTokens: m.max_output_tokens || 8192,
+                supportsToolCalling: m.supports_tool_calling !== false,
+                supportsStreaming: m.supports_streaming !== false,
+                supportsReasoningEffort: false,
+                costTier: m.cost_tier || 'medium',
+                reasoningCapability: m.reasoning || 'medium',
+                displayName: m.display_name || m.id,
+                tierRequired: m.tier_required || 'free',
+                _fromAPI: true,
+            };
+        }
+        console.log(`[model-registry] Fetched ${Object.keys(result).length} models from Oboto Cloud`);
+        return result;
+    } catch (err) {
+        console.warn(`[model-registry] Failed to fetch cloud models: ${err.message}`);
+        return {};
+    }
+}
+
+/**
  * Fetch live model lists from all configured providers.
  * Merges results into `_remoteModels`. Falls back to FALLBACK_MODELS for
  * providers without API keys or on fetch failure.
  * @returns {Promise<void>}
  */
 export async function fetchRemoteModels() {
-    const [openai, gemini, lmstudio] = await Promise.all([
+    const [openai, gemini, lmstudio, cloud] = await Promise.all([
         fetchOpenAIModels(),
         fetchGeminiModels(),
         fetchLMStudioModels(),
+        fetchCloudModels(),
     ]);
 
     // Anthropic has no list API — always include the curated known models
@@ -374,7 +423,7 @@ export async function fetchRemoteModels() {
     if (anthropicCount > 0) {
         console.log(`[model-registry] Included ${anthropicCount} curated Anthropic models (no list API)`);
     }
-    _remoteModels = { ...ANTHROPIC_KNOWN_MODELS, ...openai, ...gemini, ...lmstudio };
+    _remoteModels = { ...ANTHROPIC_KNOWN_MODELS, ...openai, ...gemini, ...lmstudio, ...cloud };
     _remoteFetched = true;
 
     const total = Object.keys(_remoteModels).length;
@@ -421,6 +470,9 @@ export async function fetchModelsForProvider(provider) {
             // Anthropic has no list API — return the curated known models
             fetched = { ...ANTHROPIC_KNOWN_MODELS };
             break;
+        case 'cloud':
+            fetched = await fetchCloudModels();
+            break;
         default:
             console.warn(`[model-registry] Unknown provider: ${provider}`);
             return {};
@@ -460,6 +512,8 @@ export function inferModelProvider(modelId) {
     if (m.startsWith('gemini-') || m.startsWith('models/gemini-')) return 'gemini';
     if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) return 'openai';
     if (m.startsWith('claude-')) return 'anthropic';
+    // Check if model is known in the remote registry as a cloud model
+    if (_remoteModels[modelId]?.provider === 'cloud') return 'cloud';
     return 'lmstudio';
 }
 

@@ -1,3 +1,5 @@
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
 /**
  * Oboto Chrome Extension Plugin
  *
@@ -13,6 +15,42 @@
  *
  * @module @oboto/plugin-chrome-ext
  */
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    commandTimeout: 30000,
+    autoReconnect: false,
+    reconnectInterval: 5000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'commandTimeout',
+        label: 'Command Timeout (ms)',
+        type: 'number',
+        description: 'Maximum time in milliseconds to wait for a Chrome extension command to complete.',
+        default: 30000,
+        min: 1000,
+        max: 120000,
+    },
+    {
+        key: 'autoReconnect',
+        label: 'Auto Reconnect',
+        type: 'boolean',
+        description: 'Automatically reconnect to the Chrome extension when the connection is lost.',
+        default: false,
+    },
+    {
+        key: 'reconnectInterval',
+        label: 'Reconnect Interval (ms)',
+        type: 'number',
+        description: 'Time in milliseconds between reconnection attempts when auto-reconnect is enabled.',
+        default: 5000,
+        min: 1000,
+        max: 60000,
+    },
+];
 
 // ── Chrome WebSocket Bridge ──────────────────────────────────────────────
 
@@ -60,7 +98,8 @@ class ChromeWsBridge {
      * @param {number} [timeout=30000]
      * @returns {Promise<unknown>}
      */
-    async send(action, params, timeout = 30000) {
+    async send(action, params, timeout = null) {
+        timeout = timeout ?? this.defaultTimeout ?? 30000;
         if (!this.connected) {
             throw new Error('Chrome extension not connected');
         }
@@ -110,12 +149,29 @@ class ChromeWsBridge {
 // NOTE: Plugin state is stored on the `api` object rather than in a module-level
 // variable. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up the bridge via `api._pluginInstance`, and the
+// still reference and clean up the bridge via `api.setInstance()/getInstance()`, and the
 // new module starts fresh.
 
 export async function activate(api) {
     const bridge = new ChromeWsBridge();
-    api._pluginInstance = { bridge };
+
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { bridge, settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'chrome-ext', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        (newSettings) => {
+            // Update the bridge timeout if changed
+            if (newSettings.commandTimeout !== undefined) {
+                bridge.defaultTimeout = pluginSettings.commandTimeout;
+            }
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    bridge.defaultTimeout = pluginSettings.commandTimeout;
+    instanceState.settings = pluginSettings;
 
     // Forward push events from the Chrome extension as plugin events
     bridge._eventHandler = (event, data) => {
@@ -491,11 +547,12 @@ export async function activate(api) {
         },
         handler: cookiesManage
     });
+
 }
 
 export async function deactivate(api) {
-    if (api._pluginInstance?.bridge) {
-        api._pluginInstance.bridge.destroy();
+    if (api.getInstance()?.bridge) {
+        api.getInstance().bridge.destroy();
     }
-    api._pluginInstance = null;
+    api.setInstance(null);
 }

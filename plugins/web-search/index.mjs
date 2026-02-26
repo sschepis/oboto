@@ -8,6 +8,44 @@
  * @module @oboto/plugin-web-search
  */
 
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    serperApiKey: '',
+    defaultNumResults: 10,
+    fetchTimeout: 15000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'serperApiKey',
+        label: 'Serper API Key',
+        type: 'password',
+        description: 'Serper API key for web search',
+        default: '',
+    },
+    {
+        key: 'defaultNumResults',
+        label: 'Default Number of Results',
+        type: 'number',
+        description: 'Default number of search results',
+        default: 10,
+        min: 1,
+        max: 100,
+    },
+    {
+        key: 'fetchTimeout',
+        label: 'URL Fetch Timeout (ms)',
+        type: 'number',
+        description: 'URL fetch timeout (ms)',
+        default: 15000,
+        min: 5000,
+        max: 60000,
+    },
+];
+
 // ── Tool Handlers ────────────────────────────────────────────────────────
 
 async function handleSearchWeb(apiKey, args) {
@@ -151,6 +189,19 @@ async function handleSearchWeb(apiKey, args) {
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
 export async function activate(api) {
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'web-search', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    instanceState.settings = pluginSettings;
+
     // Resolve API key: plugin settings first, then environment variable
     const getApiKey = async () =>
         (await api.settings.get('serperApiKey')) || process.env.SERPER_API_KEY || '';
@@ -176,10 +227,10 @@ export async function activate(api) {
                 },
                 num: {
                     type: 'number',
-                    description: 'Number of results to return (1-100)',
+                    description: `Number of results to return (1-100). Default ${pluginSettings.defaultNumResults}.`,
                     minimum: 1,
                     maximum: 100,
-                    default: 10
+                    default: pluginSettings.defaultNumResults
                 },
                 location: {
                     type: 'string',
@@ -199,10 +250,14 @@ export async function activate(api) {
             },
             required: ['query']
         },
-        handler: async (args) => handleSearchWeb(await getApiKey(), args)
+        handler: async (args) => {
+            const mergedArgs = { ...args, num: args.num ?? pluginSettings.defaultNumResults };
+            return handleSearchWeb(await getApiKey(), mergedArgs);
+        }
     });
+
 }
 
-export async function deactivate(_api) {
-    // Cleanup handled automatically by PluginAPI._cleanup()
+export async function deactivate(api) {
+    api.setInstance(null);
 }

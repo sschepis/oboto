@@ -324,6 +324,47 @@ export class CloudSync {
         return this.agent.invoke(slug, null, message, history);
     }
 
+    // ── Cloud Models & Usage ─────────────────────────────────────────────
+
+    /**
+     * Fetch the list of AI models available through the cloud AI gateway.
+     * Returns models appropriate for the user's subscription tier.
+     * @returns {Promise<Array<{ id: string, display_name: string, context_window: number, max_output_tokens: number, supports_tool_calling: boolean, supports_streaming: boolean, cost_tier: string, reasoning: string, tier_required: string }>>}
+     */
+    async listCloudModels() {
+        if (!this.isLoggedIn() || !this.client) return [];
+        try {
+            const result = await this.client.get('/functions/v1/cloud-models');
+            return result?.models || [];
+        } catch (err) {
+            console.warn(`[CloudSync] Failed to fetch cloud models: ${err.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * Get current AI usage data for the logged-in user.
+     * Returns today's token usage, daily limit, and tier info.
+     * System admin users (role: owner or admin) get unlimited tokens.
+     * @returns {Promise<{ today: { tokens_used: number, tokens_limit: number, request_count: number, models_used: object }, tier: string, subscription_status: string, is_unlimited: boolean } | null>}
+     */
+    async getUsage() {
+        if (!this.isLoggedIn() || !this.client) return null;
+        try {
+            const usage = await this.client.get('/functions/v1/cloud-usage');
+            // System admin users (owner/admin) get unlimited tokens
+            const role = this.auth?.membership?.role;
+            const isAdmin = role === 'owner' || role === 'admin';
+            if (usage) {
+                usage.is_unlimited = isAdmin;
+            }
+            return usage;
+        } catch (err) {
+            console.warn(`[CloudSync] Failed to fetch usage: ${err.message}`);
+            return null;
+        }
+    }
+
     // ── AI Proxy ──────────────────────────────────────────────────────────
 
     /**
@@ -333,23 +374,38 @@ export class CloudSync {
      * @param {string} provider — AI provider (or 'auto' to let cloud decide)
      * @param {string} model — Model ID
      * @param {Array<{ role: string, content: string }>} messages — Chat messages
-     * @param {boolean} [stream=false] — Whether to stream the response
+     * @param {object} [options] — Additional request options
+     * @param {Array} [options.tools] — Tool definitions for function calling
+     * @param {number} [options.temperature] — Sampling temperature
+     * @param {number} [options.max_tokens] — Max output tokens
+     * @param {object} [options.response_format] — Response format specification
      * @returns {Promise<object>} OpenAI-compatible completion response
      */
-    async aiProxyRequest(provider, model, messages, stream = false) {
+    async aiProxyRequest(provider, model, messages, options = {}) {
         if (!this.isLoggedIn() || !this.client) {
             throw new Error('Cloud AI proxy requires an active cloud login');
         }
 
         const wsId = this.workspaceSync?.getLinkedWorkspaceId() || null;
 
-        return this.client.post('/functions/v1/ai-proxy', {
+        const body = {
             provider: provider || 'auto',
             model,
             messages,
+            // Streaming is explicitly disabled for cloud proxy requests.
+            // The cloud edge function returns a complete response; streaming
+            // support would require a different transport (e.g. SSE or chunked).
             stream: false,
             workspace_id: wsId,
-        });
+        };
+
+        // Forward optional parameters if provided
+        if (options.tools && options.tools.length > 0) body.tools = options.tools;
+        if (options.temperature !== undefined) body.temperature = options.temperature;
+        if (options.max_tokens !== undefined) body.max_tokens = options.max_tokens;
+        if (options.response_format) body.response_format = options.response_format;
+
+        return this.client.post('/functions/v1/ai-proxy', body);
     }
 
     /**

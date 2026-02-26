@@ -564,6 +564,9 @@ export function createPluginAPI(pluginName, deps, options = {}) {
      *
      * @type {PluginAPI}
      */
+    /** @type {*} Internal slot for plugin instance state */
+    let _instanceState = null;
+
     return {
         tools: toolsAPI,
         ws: wsAPI,
@@ -578,12 +581,33 @@ export function createPluginAPI(pluginName, deps, options = {}) {
         workingDir,
 
         /**
-         * Slot for plugin instance state. Plugins should store their mutable
-         * state here instead of in module-level variables to ensure proper
-         * cleanup across ESM reloads. See the Instance State Pattern docs above.
+         * Store plugin instance state.
+         * Preferred over module-level `let` variables to survive ESM reloads.
+         * @param {*} state — any serializable or object state
+         */
+        setInstance(state) {
+            _instanceState = state;
+        },
+
+        /**
+         * Retrieve previously stored plugin instance state.
+         * @returns {*}
+         */
+        getInstance() {
+            return _instanceState;
+        },
+
+        /**
+         * Legacy property accessor for plugin instance state.
+         * Kept for backward compatibility — prefer setInstance()/getInstance().
          * @type {*}
          */
-        _pluginInstance: null,
+        get _pluginInstance() {
+            return _instanceState;
+        },
+        set _pluginInstance(value) {
+            _instanceState = value;
+        },
 
         _cleanup: cleanup,
         _registeredUIComponents: registeredUIComponents

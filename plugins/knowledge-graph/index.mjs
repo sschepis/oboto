@@ -2,27 +2,110 @@ import { GraphStore } from './graph-store.mjs';
 import { MemoryFieldStore } from './memory-field-store.mjs';
 import { HolographicProjection } from './holographic-projection.mjs';
 import { SemanticComputing } from './semantic-computing.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
-// NOTE: Plugin state is stored on `api._pluginInstance` rather than in module-level
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+  defaultTraversalDepth: 2,
+  defaultQueryLimit: 20,
+  autoSaveInterval: 0,
+  maxMemoryFragments: 1000,
+};
+
+const SETTINGS_SCHEMA = [
+  {
+    key: 'defaultTraversalDepth',
+    label: 'Default Traversal Depth',
+    type: 'number',
+    description: 'Default number of hops to traverse when exploring related entities.',
+    default: 2,
+    min: 1,
+    max: 10,
+  },
+  {
+    key: 'defaultQueryLimit',
+    label: 'Default Query Limit',
+    type: 'number',
+    description: 'Default maximum number of results returned by knowledge queries.',
+    default: 20,
+    min: 1,
+    max: 100,
+  },
+  {
+    key: 'autoSaveInterval',
+    label: 'Auto-Save Interval (ms, 0=disabled)',
+    type: 'number',
+    description: 'Interval in milliseconds for automatic graph persistence. Set to 0 to disable.',
+    default: 0,
+    min: 0,
+    max: 600000,
+  },
+  {
+    key: 'maxMemoryFragments',
+    label: 'Max Memory Fragments',
+    type: 'number',
+    description: 'Maximum number of memory fragments to retain in the memory field store.',
+    default: 1000,
+    min: 100,
+    max: 10000,
+  },
+];
+
+// NOTE: Plugin state is stored on `api.setInstance()/getInstance()` rather than in module-level
 // variables. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up state via `api._pluginInstance`, and the new module
+// still reference and clean up state via `api.setInstance()/getInstance()`, and the new module
 // starts fresh.
 
 export async function activate(api) {
   console.log('[Knowledge Graph] Activating...');
 
-  const graphStore = new GraphStore(api);
+  // Pre-create instance object to avoid race condition with onSettingsChange callback
+  const instanceState = { graphStore: null, memoryStore: null, holographicProjection: null, semanticComputing: null, settings: null, autoSaveTimer: null };
+  api.setInstance(instanceState);
+
+  let graphStore, memoryStore;
+
+  const { pluginSettings: settings } = await registerSettingsHandlers(
+    api, 'knowledge-graph', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    (newSettings, mergedSettings) => {
+      instanceState.settings = settings;
+      // Restart auto-save timer if interval changed
+      if (newSettings.autoSaveInterval !== undefined) {
+        if (instanceState.autoSaveTimer) {
+          clearInterval(instanceState.autoSaveTimer);
+          instanceState.autoSaveTimer = null;
+        }
+        if (mergedSettings.autoSaveInterval > 0) {
+          instanceState.autoSaveTimer = setInterval(async () => {
+            try {
+              if (graphStore) await graphStore.saveToStorage();
+              if (memoryStore) await memoryStore.save();
+            } catch (e) {
+              console.error('[Knowledge Graph] Auto-save failed:', e.message);
+            }
+          }, mergedSettings.autoSaveInterval);
+        }
+      }
+    }
+  );
+
+  graphStore = new GraphStore(api);
   await graphStore.activate();
 
-  const memoryStore = new MemoryFieldStore(api);
+  memoryStore = new MemoryFieldStore(api);
   await memoryStore.init();
 
   const holographicProjection = new HolographicProjection();
   const semanticComputing = new SemanticComputing(memoryStore);
 
-  // Store instances on api so deactivate() can access them even after ESM reload
-  api._pluginInstance = { graphStore, memoryStore, holographicProjection, semanticComputing };
+  // Populate instance state now that all components are initialized
+  instanceState.graphStore = graphStore;
+  instanceState.memoryStore = memoryStore;
+  instanceState.holographicProjection = holographicProjection;
+  instanceState.semanticComputing = semanticComputing;
+  instanceState.settings = settings;
 
   // Register Tools
 
@@ -39,7 +122,7 @@ export async function activate(api) {
         limit: { type: 'number', description: 'Maximum number of results (default: 20)' }
       }
     },
-    handler: async (args) => graphStore.query(args.subject, args.predicate, args.object, args.limit)
+    handler: async (args) => graphStore.query(args.subject, args.predicate, args.object, args.limit ?? settings.defaultQueryLimit)
   });
 
   api.tools.register({
@@ -75,7 +158,7 @@ export async function activate(api) {
       },
       required: ['entityId']
     },
-    handler: async (args) => graphStore.getRelated(args.entityId, args.depth, args.relationTypes)
+    handler: async (args) => graphStore.getRelated(args.entityId, args.depth ?? settings.defaultTraversalDepth, args.relationTypes)
   });
 
   api.tools.register({
@@ -91,7 +174,7 @@ export async function activate(api) {
       },
       required: []
     },
-    handler: async (args) => graphStore.searchEntities(args.query, args.type, args.limit)
+    handler: async (args) => graphStore.searchEntities(args.query, args.type, args.limit ?? settings.defaultQueryLimit)
   });
 
   api.tools.register({
@@ -145,7 +228,7 @@ export async function activate(api) {
   api.ws.register('kg:add-entity', async (data) => graphStore.addEntity(data));
   api.ws.register('kg:get-entity', async (data) => graphStore.getEntity(data.id));
   api.ws.register('kg:search-entities', async (data) => graphStore.searchEntities(data.query, data.type));
-  api.ws.register('kg:get-related', async (data) => graphStore.getRelated(data.entityId, data.depth));
+  api.ws.register('kg:get-related', async (data) => graphStore.getRelated(data.entityId, data.depth ?? settings.defaultTraversalDepth));
   api.ws.register('kg:get-graph', async () => graphStore.getGraph());
   api.ws.register('kg:clear', async () => graphStore.clear());
 
@@ -174,15 +257,30 @@ export async function activate(api) {
   api.ws.register('aleph:introspect', async () => semanticComputing.introspect());
   api.ws.register('aleph:focus', async (data) => semanticComputing.focus(data.topics, data.duration));
 
+  // ── Auto-save timer ──────────────────────────────────────────────────
+  let autoSaveTimer = null;
+  if (settings.autoSaveInterval > 0) {
+    autoSaveTimer = setInterval(async () => {
+      try {
+        await graphStore.saveToStorage();
+        await memoryStore.save();
+      } catch (e) {
+        console.error('[Knowledge Graph] Auto-save failed:', e.message);
+      }
+    }, settings.autoSaveInterval);
+  }
+  instanceState.autoSaveTimer = autoSaveTimer;
+
   console.log('[Knowledge Graph] Activated successfully');
 }
 
 export async function deactivate(api) {
-  if (api._pluginInstance) {
-    const { graphStore, memoryStore } = api._pluginInstance;
+  if (api.getInstance()) {
+    const { graphStore, memoryStore, autoSaveTimer } = api.getInstance();
+    if (autoSaveTimer) clearInterval(autoSaveTimer);
     if (graphStore) await graphStore.saveToStorage();
     if (memoryStore) await memoryStore.save();
   }
-  api._pluginInstance = null;
+  api.setInstance(null);
   console.log('[Knowledge Graph] Deactivated');
 }

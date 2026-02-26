@@ -1,8 +1,45 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
-export function activate(api) {
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+  defaultTailLines: 100,
+  logLevel: 'info',
+};
+
+const SETTINGS_SCHEMA = [
+  {
+    key: 'defaultTailLines',
+    label: 'Default Tail Lines',
+    type: 'number',
+    description: 'Default number of trailing lines to read from log files.',
+    default: 100,
+    min: 10,
+    max: 10000,
+  },
+  {
+    key: 'logLevel',
+    label: 'Log Level',
+    type: 'select',
+    description: 'Minimum log level for events broadcast to the UI.',
+    default: 'info',
+    options: [
+      { value: 'debug', label: 'Debug' },
+      { value: 'info', label: 'Info' },
+      { value: 'warn', label: 'Warning' },
+      { value: 'error', label: 'Error' },
+    ],
+  },
+];
+
+export async function activate(api) {
   console.log('[System Logger] Activating...');
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'logger', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
 
   const logsDir = path.join(process.cwd(), 'logs');
 
@@ -14,13 +51,13 @@ export function activate(api) {
     parameters: {
       type: 'object',
       properties: {
-        filename: { 
-          type: 'string', 
-          description: 'Name of the log file (e.g., ai.log). If omitted, returns the list of available log files.' 
+        filename: {
+          type: 'string',
+          description: 'Name of the log file (e.g., ai.log). If omitted, returns the list of available log files.'
         },
         lines: {
           type: 'number',
-          description: 'Number of trailing lines to read (default 100)'
+          description: 'Number of trailing lines to read (default from settings)'
         }
       }
     },
@@ -48,7 +85,7 @@ export function activate(api) {
       try {
         const content = await fs.readFile(requestedPath, 'utf-8');
         const lines = content.split('\n');
-        const numLines = args.lines || 100;
+        const numLines = args.lines || pluginSettings.defaultTailLines || 100;
         
         return {
           filename: args.filename,

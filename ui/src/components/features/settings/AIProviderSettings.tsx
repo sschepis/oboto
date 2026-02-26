@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Server, Zap, Cpu, Globe, Box, ShieldCheck, ShieldAlert, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
+import { Server, Zap, Cpu, Globe, Box, Cloud, ShieldCheck, ShieldAlert, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
 import type { SecretItem } from '../../../hooks/useSecrets';
+import type { CloudUsage, CloudModel } from '../../../hooks/useCloudSync';
 import { Select, SelectItem } from '../../../surface-kit/primitives/Select';
 import { Switch } from '../../../surface-kit/primitives/Switch';
 import { wsService } from '../../../services/wsService';
 
-export type AIProviderType = 'openai' | 'gemini' | 'anthropic' | 'lmstudio';
+export type AIProviderType = 'openai' | 'gemini' | 'anthropic' | 'lmstudio' | 'cloud';
 
 export interface ProviderConfig {
   enabled: boolean;
@@ -26,6 +27,7 @@ const PROVIDER_SECRET_MAP: Record<AIProviderType, string | null> = {
   gemini: 'GOOGLE_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   lmstudio: null, // no key needed
+  cloud: null, // managed by Oboto Cloud login
 };
 
 /** Default models for each provider */
@@ -34,6 +36,7 @@ const DEFAULT_MODELS: Record<AIProviderType, string> = {
   gemini: 'gemini-2.5-flash',
   anthropic: 'claude-sonnet-4-20250514',
   lmstudio: '',
+  cloud: 'auto',
 };
 
 /** Recommended models to highlight */
@@ -42,6 +45,7 @@ const RECOMMENDED_MODELS: Record<string, string[]> = {
   gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
   anthropic: ['claude-sonnet-4', 'claude-opus-4', 'claude-3-7-sonnet'],
   lmstudio: [],
+  cloud: ['gemini-3-flash', 'claude-sonnet-4', 'gpt-4o'],
 };
 
 interface ProviderMeta {
@@ -93,6 +97,16 @@ const PROVIDERS: ProviderMeta[] = [
     iconColor: 'text-amber-400',
     needsKey: false,
   },
+  {
+    key: 'cloud',
+    label: 'Oboto Cloud',
+    description: 'Metered AI models via Oboto Cloud subscription',
+    icon: <Cloud size={16} />,
+    colorClass: 'cyan',
+    iconColor: 'text-cyan-400',
+    needsKey: false,
+    authNote: 'Login to Oboto Cloud in the Cloud tab to enable this provider.',
+  },
 ];
 
 const colorMap: Record<string, { bg: string; border: string; iconBg: string; dot: string }> = {
@@ -120,6 +134,12 @@ const colorMap: Record<string, { bg: string; border: string; iconBg: string; dot
     iconBg: 'bg-amber-500/15 border-amber-500/15',
     dot: 'bg-amber-500',
   },
+  cyan: {
+    bg: 'bg-cyan-500/5',
+    border: 'border-cyan-500/20',
+    iconBg: 'bg-cyan-500/15 border-cyan-500/15',
+    dot: 'bg-cyan-500',
+  },
 };
 
 interface AIProviderSettingsProps {
@@ -137,6 +157,12 @@ interface AIProviderSettingsProps {
     reasoningCapability?: string;
     displayName?: string;
   }>;
+  /** Cloud usage data (only for cloud provider) */
+  cloudUsage?: CloudUsage | null;
+  /** Cloud models list (used for cloud provider model selection) */
+  cloudModels?: CloudModel[];
+  /** Whether the user is logged into Oboto Cloud */
+  cloudLoggedIn?: boolean;
 }
 
 export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
@@ -146,6 +172,9 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
   secretsStatus,
   onOpenSecrets,
   modelRegistry = {},
+  cloudUsage,
+  cloudModels = [],
+  cloudLoggedIn = false,
 }) => {
   const [refreshingProvider, setRefreshingProvider] = useState<string | null>(null);
 
@@ -155,6 +184,7 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
     gemini: { enabled: config.provider === 'gemini', model: config.provider === 'gemini' ? config.model : DEFAULT_MODELS.gemini },
     anthropic: { enabled: config.provider === 'anthropic', model: config.provider === 'anthropic' ? config.model : DEFAULT_MODELS.anthropic },
     lmstudio: { enabled: config.provider === 'lmstudio', model: config.provider === 'lmstudio' ? config.model : DEFAULT_MODELS.lmstudio },
+    cloud: { enabled: config.provider === 'cloud', model: config.provider === 'cloud' ? config.model : DEFAULT_MODELS.cloud },
   };
 
   // Subscribe to WS 'settings' event to detect when models arrive
@@ -240,6 +270,21 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
 
   /** Get available models for a specific provider */
   const getModelsForProvider = (providerKey: string) => {
+    // For cloud provider, merge cloudModels with any models from the registry
+    if (providerKey === 'cloud' && cloudModels.length > 0) {
+      const cloudEntries: [string, { provider: string; displayName: string }][] = cloudModels.map(m => [
+        m.id,
+        { provider: 'cloud', displayName: m.name },
+      ]);
+      return cloudEntries.sort((a, b) => {
+        const aRec = isRecommended('cloud', a[0]);
+        const bRec = isRecommended('cloud', b[0]);
+        if (aRec && !bRec) return -1;
+        if (!aRec && bRec) return 1;
+        return a[0].localeCompare(b[0]);
+      });
+    }
+
     return Object.entries(modelRegistry)
       .filter(([, caps]) => caps.provider === providerKey)
       .sort((a, b) => {
@@ -348,14 +393,89 @@ export const AIProviderSettings: React.FC<AIProviderSettingsProps> = ({
                   </div>
                 )}
 
-                {/* Auth note for providers that don't need API keys */}
-                {meta.authNote && (
+                {/* Auth note for providers that don't need API keys (non-cloud) */}
+                {meta.authNote && meta.key !== 'cloud' && (
                   <div className="p-2.5 rounded-lg bg-violet-500/8 border border-violet-500/15">
                     <div className="flex items-center gap-2">
                       <ShieldCheck size={13} className="text-violet-400" />
                       <span className="text-[11px] text-violet-300 font-medium">Google Cloud Auth</span>
                     </div>
                     <p className="text-[10px] text-violet-200/60 mt-1 leading-relaxed font-mono">{meta.authNote}</p>
+                  </div>
+                )}
+
+                {/* Cloud Provider: Login status + Usage Meter */}
+                {meta.key === 'cloud' && (
+                  <div className="space-y-3">
+                    {/* Cloud login status */}
+                    <div className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-800/40 bg-zinc-950/30">
+                      <div className="flex items-center gap-2">
+                        {cloudLoggedIn ? (
+                          <>
+                            <ShieldCheck size={13} className="text-cyan-400" />
+                            <span className="text-[11px] text-cyan-400 font-medium">Logged into Oboto Cloud</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldAlert size={13} className="text-amber-400 animate-pulse" />
+                            <span className="text-[11px] text-amber-400 font-medium">Not logged in</span>
+                            <span className="text-[9px] text-zinc-600">Login via Cloud tab</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Usage meter */}
+                    {cloudLoggedIn && cloudUsage && (
+                      <div className={`p-3 rounded-lg ${cloudUsage.is_unlimited ? 'bg-emerald-500/5 border border-emerald-500/15' : 'bg-cyan-500/5 border border-cyan-500/15'}`}>
+                        {(() => {
+                          const isUnlimited = cloudUsage.is_unlimited === true;
+                          const usageRatio = (!isUnlimited && cloudUsage.daily_limit > 0)
+                            ? cloudUsage.tokens_used / cloudUsage.daily_limit
+                            : 0;
+                          return (<>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[11px] font-medium ${isUnlimited ? 'text-emerald-300' : 'text-cyan-300'}`}>
+                            {isUnlimited ? 'Usage (Unlimited)' : 'Daily Usage'}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            {isUnlimited
+                              ? `${(cloudUsage.tokens_used / 1000).toFixed(1)}K tokens used`
+                              : `${(cloudUsage.tokens_used / 1000).toFixed(1)}K / ${(cloudUsage.daily_limit / 1000).toFixed(0)}K tokens`}
+                          </span>
+                        </div>
+                        {!isUnlimited && (
+                        <div className="w-full h-2 bg-zinc-900/60 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              cloudUsage.remaining <= 0
+                                ? 'bg-red-500'
+                                : usageRatio > 0.8
+                                  ? 'bg-amber-500'
+                                  : 'bg-cyan-500'
+                            }`}
+                            style={{ width: `${Math.min(100, usageRatio * 100)}%` }}
+                          />
+                        </div>
+                        )}
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-[9px] text-zinc-600 capitalize">{cloudUsage.tier} tier</span>
+                          {isUnlimited ? (
+                            <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">∞ Admin — No Limit</span>
+                          ) : (
+                          <span className={`text-[9px] font-medium ${
+                            cloudUsage.remaining <= 0 ? 'text-red-400' : 'text-zinc-500'
+                          }`}>
+                            {cloudUsage.remaining <= 0
+                              ? 'Limit reached'
+                              : `${(cloudUsage.remaining / 1000).toFixed(1)}K remaining`}
+                          </span>
+                          )}
+                        </div>
+                          </>);
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 

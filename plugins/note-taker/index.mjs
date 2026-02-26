@@ -1,4 +1,24 @@
-export function activate(api) {
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  maxNotes: 500,
+  broadcastChanges: true,
+  defaultTitle: 'Untitled Note',
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable note taking', default: true },
+  { key: 'maxNotes', label: 'Max Notes', type: 'number', description: 'Maximum number of notes to keep', default: 500 },
+  { key: 'broadcastChanges', label: 'Broadcast Changes', type: 'boolean', description: 'Broadcast WS events on note save/delete', default: true },
+  { key: 'defaultTitle', label: 'Default Title', type: 'text', description: 'Default title for notes without one', default: 'Untitled Note' },
+];
+
+export async function activate(api) {
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'note-taker', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
+
   // Use api.storage to manage notes
   // A 'notes_index' key will keep track of note IDs, and each note will be stored as `note:${id}`
 
@@ -26,21 +46,29 @@ export function activate(api) {
     useOriginalName: true,
     surfaceSafe: true,
     handler: async ({ id, title, content }) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Note Taker plugin is disabled' };
+      }
       const index = await getNotesIndex();
       if (!index.includes(id)) {
+        if (index.length >= (pluginSettings.maxNotes || 500)) {
+          return { success: false, message: `Maximum note limit (${pluginSettings.maxNotes}) reached` };
+        }
         index.push(id);
         await saveNotesIndex(index);
       }
       const note = {
         id,
-        title,
+        title: title || pluginSettings.defaultTitle,
         content,
         timestamp: Date.now()
       };
       await api.storage.set(`note:${id}`, note);
       
       // Emit an event or broadcast so UI can update
-      api.ws.broadcast('note-taker:note-saved', note);
+      if (pluginSettings.broadcastChanges) {
+        api.ws.broadcast('note-taker:note-saved', note);
+      }
       
       return { success: true, id, message: 'Note saved successfully' };
     }
@@ -104,7 +132,9 @@ export function activate(api) {
       await saveNotesIndex(newIndex);
       await api.storage.set(`note:${id}`, null);
       
-      api.ws.broadcast('note-taker:note-deleted', { id });
+      if (pluginSettings.broadcastChanges) {
+        api.ws.broadcast('note-taker:note-deleted', { id });
+      }
       return { success: true, message: 'Note deleted' };
     }
   });
@@ -126,12 +156,17 @@ export function activate(api) {
     const { id, title, content } = payload;
     const index = await getNotesIndex();
     if (!index.includes(id)) {
+      if (index.length >= (pluginSettings.maxNotes || 500)) {
+        return { success: false, message: `Maximum note limit (${pluginSettings.maxNotes}) reached` };
+      }
       index.push(id);
       await saveNotesIndex(index);
     }
-    const note = { id, title, content, timestamp: Date.now() };
+    const note = { id, title: title || pluginSettings.defaultTitle, content, timestamp: Date.now() };
     await api.storage.set(`note:${id}`, note);
-    api.ws.broadcast('note-taker:note-saved', note);
+    if (pluginSettings.broadcastChanges) {
+      api.ws.broadcast('note-taker:note-saved', note);
+    }
     return { success: true, note };
   });
 
@@ -145,9 +180,12 @@ export function activate(api) {
     const newIndex = index.filter(n => n !== id);
     await saveNotesIndex(newIndex);
     await api.storage.set(`note:${id}`, null);
-    api.ws.broadcast('note-taker:note-deleted', { id });
+    if (pluginSettings.broadcastChanges) {
+      api.ws.broadcast('note-taker:note-deleted', { id });
+    }
     return { success: true };
   });
+
 }
 
 export function deactivate(api) {

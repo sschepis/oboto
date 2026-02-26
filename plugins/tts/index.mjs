@@ -13,18 +13,73 @@ import path from 'path';
 import { execFile } from 'child_process';
 import util from 'util';
 import os from 'os';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
 const execFileAsync = util.promisify(execFile);
 
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    elevenlabsApiKey: '',
+    defaultVoiceId: '21m00Tcm4TlvDq8ikWAM',
+    defaultModel: 'eleven_monolingual_v1',
+    outputFormat: 'mp3_44100_128',
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'elevenlabsApiKey',
+        label: 'ElevenLabs API Key',
+        type: 'password',
+        description: 'ElevenLabs API key',
+        default: '',
+    },
+    {
+        key: 'defaultVoiceId',
+        label: 'Default Voice ID',
+        type: 'text',
+        description: 'Default voice ID',
+        default: '21m00Tcm4TlvDq8ikWAM',
+    },
+    {
+        key: 'defaultModel',
+        label: 'Default TTS Model',
+        type: 'select',
+        description: 'Default TTS model',
+        default: 'eleven_monolingual_v1',
+        options: [
+            { value: 'eleven_monolingual_v1', label: 'Monolingual v1' },
+            { value: 'eleven_multilingual_v2', label: 'Multilingual v2' },
+            { value: 'eleven_turbo_v2', label: 'Turbo v2' },
+        ],
+    },
+    {
+        key: 'outputFormat',
+        label: 'Output Audio Format',
+        type: 'select',
+        description: 'Output audio format',
+        default: 'mp3_44100_128',
+        options: [
+            { value: 'mp3_44100_128', label: 'MP3 44.1kHz 128kbps' },
+            { value: 'mp3_44100_192', label: 'MP3 44.1kHz 192kbps' },
+            { value: 'pcm_16000', label: 'PCM 16kHz' },
+            { value: 'pcm_24000', label: 'PCM 24kHz' },
+        ],
+    },
+];
+
 // ── Tool Handler ─────────────────────────────────────────────────────────
 
-async function handleSpeakText(apiKey, args) {
+async function handleSpeakText(apiKey, pluginSettings, args) {
     const {
         text,
-        voice_id = 'tQ4MEZFJOzsahSEEZtHK',
+        voice_id,
         stability = 0.5,
         similarity_boost = 0.75
     } = args;
+
+    const voiceId = voice_id || pluginSettings.defaultVoiceId;
+    const modelId = pluginSettings.defaultModel;
 
     if (!apiKey) {
         return 'Error: ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY or configure in plugin settings.';
@@ -43,7 +98,7 @@ async function handleSpeakText(apiKey, args) {
             .trim();
 
         // Call ElevenLabs API
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
             method: 'POST',
             headers: {
                 'Accept': 'audio/mpeg',
@@ -52,7 +107,7 @@ async function handleSpeakText(apiKey, args) {
             },
             body: JSON.stringify({
                 text: cleanText,
-                model_id: 'eleven_monolingual_v1',
+                model_id: modelId,
                 voice_settings: {
                     stability,
                     similarity_boost
@@ -102,7 +157,7 @@ async function handleSpeakText(apiKey, args) {
             }
         }, 1000);
 
-        return `Text converted to speech and played successfully. Used voice ${voice_id} with ${cleanText.length} characters.`;
+        return `Text converted to speech and played successfully. Used voice ${voiceId} with ${cleanText.length} characters.`;
 
     } catch (error) {
         return `Error converting text to speech: ${error.message}`;
@@ -112,6 +167,19 @@ async function handleSpeakText(apiKey, args) {
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
 export async function activate(api) {
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'tts', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    instanceState.settings = pluginSettings;
+
     // Resolve API key: plugin settings first, then environment variable
     const getApiKey = async () =>
         (await api.settings.get('elevenlabsApiKey')) || process.env.ELEVENLABS_API_KEY || '';
@@ -130,8 +198,8 @@ export async function activate(api) {
                 },
                 voice_id: {
                     type: 'string',
-                    description: "ElevenLabs voice ID to use. Default is 'tQ4MEZFJOzsahSEEZtHK'.",
-                    default: 'tQ4MEZFJOzsahSEEZtHK'
+                    description: `ElevenLabs voice ID to use. Default is '${pluginSettings.defaultVoiceId}'.`,
+                    default: pluginSettings.defaultVoiceId
                 },
                 stability: {
                     type: 'number',
@@ -150,10 +218,11 @@ export async function activate(api) {
             },
             required: ['text']
         },
-        handler: async (args) => handleSpeakText(await getApiKey(), args)
+        handler: async (args) => handleSpeakText(await getApiKey(), pluginSettings, args)
     });
+
 }
 
-export async function deactivate(_api) {
-    // Cleanup handled automatically by PluginAPI._cleanup()
+export async function deactivate(api) {
+    api.setInstance(null);
 }

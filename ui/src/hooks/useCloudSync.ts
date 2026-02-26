@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { wsService } from '../services/wsService';
 
 export interface CloudUser {
@@ -44,6 +44,26 @@ export interface OnlineMember {
   lastSeen?: string;
 }
 
+export interface CloudUsage {
+  tokens_used: number;
+  daily_limit: number;
+  remaining: number;
+  tier: string;
+  period: string;
+  request_count?: number;
+  /** True when the user is a system admin (owner/admin role) with unlimited tokens */
+  is_unlimited?: boolean;
+}
+
+export interface CloudModel {
+  id: string;
+  name: string;
+  provider: string;
+  context_window: number;
+  tier_required: string;
+  capabilities?: string[];
+}
+
 export interface CloudState {
   configured: boolean;
   loggedIn: boolean;
@@ -58,6 +78,8 @@ export interface CloudState {
   onlineMembers: OnlineMember[];
   loginError: string | null;
   loginLoading: boolean;
+  usage: CloudUsage | null;
+  cloudModels: CloudModel[];
 }
 
 const defaultState: CloudState = {
@@ -74,6 +96,8 @@ const defaultState: CloudState = {
   onlineMembers: [],
   loginError: null,
   loginLoading: false,
+  usage: null,
+  cloudModels: [],
 };
 
 /**
@@ -83,6 +107,7 @@ const defaultState: CloudState = {
  */
 export function useCloudSync() {
   const [state, setState] = useState<CloudState>(defaultState);
+  const loggedInRef = useRef(false);
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -149,6 +174,16 @@ export function useCloudSync() {
       setState(prev => ({ ...prev, onlineMembers: (payload as OnlineMember[]) || [] }));
     }));
 
+    // Listen for cloud:usage
+    unsubs.push(wsService.on('cloud:usage', (payload: unknown) => {
+      setState(prev => ({ ...prev, usage: payload as CloudUsage }));
+    }));
+
+    // Listen for cloud:models
+    unsubs.push(wsService.on('cloud:models', (payload: unknown) => {
+      setState(prev => ({ ...prev, cloudModels: (payload as CloudModel[]) || [] }));
+    }));
+
     // Listen for cloud:error
     unsubs.push(wsService.on('cloud:error', (payload: unknown) => {
       const p = payload as { error: string };
@@ -158,8 +193,25 @@ export function useCloudSync() {
     // Request initial status on mount
     wsService.cloudGetStatus();
 
-    return () => unsubs.forEach(u => u());
+    // Periodic usage auto-refresh every 5 minutes while logged in.
+    // Real-time updates already arrive via the cloud:usage event after each
+    // cloud AI call, so this is just a safety net / catch-up mechanism.
+    const usageInterval = setInterval(() => {
+      if (loggedInRef.current) {
+        wsService.cloudGetUsage();
+      }
+    }, 300_000);
+
+    return () => {
+      unsubs.forEach(u => u());
+      clearInterval(usageInterval);
+    };
   }, []);
+
+  // Keep the login ref in sync with state so the interval can check it
+  useEffect(() => {
+    loggedInRef.current = state.loggedIn;
+  }, [state.loggedIn]);
 
   // ── Actions ──
 
@@ -218,6 +270,14 @@ export function useCloudSync() {
     wsService.cloudCreateWorkspace(name, description);
   }, []);
 
+  const getUsage = useCallback(() => {
+    wsService.cloudGetUsage();
+  }, []);
+
+  const listCloudModels = useCallback(() => {
+    wsService.cloudListModels();
+  }, []);
+
   return {
     ...state,
     login,
@@ -230,5 +290,7 @@ export function useCloudSync() {
     listAgents,
     invokeAgent,
     createWorkspace,
+    getUsage,
+    listCloudModels,
   };
 }

@@ -9,6 +9,53 @@
  */
 
 import puppeteer from 'puppeteer';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    headless: true,
+    defaultTimeout: 30000,
+    defaultViewportWidth: 1280,
+    defaultViewportHeight: 800,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'headless',
+        label: 'Headless Mode',
+        type: 'boolean',
+        description: 'Run browser in headless mode.',
+        default: true,
+    },
+    {
+        key: 'defaultTimeout',
+        label: 'Default Timeout (ms)',
+        type: 'number',
+        description: 'Default page navigation timeout in milliseconds.',
+        default: 30000,
+        min: 5000,
+        max: 120000,
+    },
+    {
+        key: 'defaultViewportWidth',
+        label: 'Default Viewport Width',
+        type: 'number',
+        description: 'Default viewport width in pixels.',
+        default: 1280,
+        min: 320,
+        max: 3840,
+    },
+    {
+        key: 'defaultViewportHeight',
+        label: 'Default Viewport Height',
+        type: 'number',
+        description: 'Default viewport height in pixels.',
+        default: 800,
+        min: 240,
+        max: 2160,
+    },
+];
 
 // ── BrowserSession — encapsulates all mutable browser state ──────────────
 
@@ -20,10 +67,11 @@ class BrowserSession {
         this.networkLogs = [];
     }
 
-    async ensureBrowser() {
+    async ensureBrowser(settings = {}) {
         if (!this.browser) {
+            const headless = settings.headless !== undefined ? settings.headless : true;
             this.browser = await puppeteer.launch({
-                headless: 'new',
+                headless: headless ? 'new' : false,
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
             this.page = await this.browser.newPage();
@@ -108,22 +156,25 @@ class BrowserSession {
 
     // ── Tool handlers ────────────────────────────────────────────────────
 
-    async browseOpen(args) {
+    async browseOpen(args, settings = {}) {
+        const defaultWidth = settings.defaultViewportWidth || 1280;
+        const defaultHeight = settings.defaultViewportHeight || 800;
+        const defaultTimeout = settings.defaultTimeout || 30000;
         const {
             url = 'about:blank',
-            width = 1280,
-            height = 800,
+            width = defaultWidth,
+            height = defaultHeight,
             wait_condition = 'networkidle0'
         } = args;
 
         try {
-            const p = await this.ensureBrowser();
+            const p = await this.ensureBrowser(settings);
 
             await p.setViewport({ width, height });
             this.logs = [];
             this.networkLogs = [];
 
-            await p.goto(url, { waitUntil: wait_condition, timeout: 30000 });
+            await p.goto(url, { waitUntil: wait_condition, timeout: defaultTimeout });
 
             return await this.captureState(url, { action: { type: 'open', url } });
         } catch (error) {
@@ -231,12 +282,24 @@ class BrowserSession {
 // NOTE: Plugin state is stored on the `api` object rather than in a module-level
 // variable. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up the session via `api._pluginInstance`, and the
+// still reference and clean up the session via `api.setInstance()/getInstance()`, and the
 // new module starts fresh.
 
 export async function activate(api) {
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { session: null, settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'browser', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
     const session = new BrowserSession();
-    api._pluginInstance = session;
+    instanceState.session = session;
+    instanceState.settings = pluginSettings;
 
     api.tools.register({
         useOriginalName: true,
@@ -271,7 +334,7 @@ export async function activate(api) {
             },
             required: []
         },
-        handler: (args) => session.browseOpen(args)
+        handler: (args) => session.browseOpen(args, pluginSettings)
     });
 
     api.tools.register({
@@ -339,11 +402,12 @@ export async function activate(api) {
         },
         handler: () => session.browseClose()
     });
+
 }
 
 export async function deactivate(api) {
-    if (api._pluginInstance) {
-        await api._pluginInstance.cleanup();
-        api._pluginInstance = null;
+    if (api.getInstance()?.session) {
+        await api.getInstance().session.cleanup();
     }
+    api.setInstance(null);
 }

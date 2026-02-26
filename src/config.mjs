@@ -63,6 +63,11 @@ export const config = {
         model: _detectedProvider === 'lmstudio' ? _aiModel : DEFAULT_MODELS.lmstudio,
         endpoint: process.env.AI_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
       },
+      cloud: {
+        enabled: _detectedProvider === 'cloud',
+        model: _detectedProvider === 'cloud' ? _aiModel : 'auto',
+        label: 'Oboto Cloud',
+      },
     },
   },
 
@@ -109,6 +114,19 @@ export const config = {
     get google() { return process.env.GOOGLE_API_KEY; },
   }
 };
+
+/**
+ * Enable or disable a provider at runtime.
+ * Centralises config mutation so callers don't need to reach into the singleton.
+ *
+ * @param {string} provider — Provider key (e.g. 'cloud', 'openai')
+ * @param {boolean} enabled — Whether the provider should be enabled
+ */
+export function setProviderEnabled(provider, enabled) {
+  if (config.ai.providers[provider]) {
+    config.ai.providers[provider].enabled = !!enabled;
+  }
+}
 
 /**
  * Validate required configuration

@@ -12,6 +12,62 @@
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    openaiApiKey: '',
+    defaultSize: '1024x1024',
+    defaultQuality: 'standard',
+    defaultModel: 'dall-e-3',
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'openaiApiKey',
+        label: 'OpenAI API Key',
+        type: 'password',
+        description: 'OpenAI API key for DALL-E',
+        default: '',
+    },
+    {
+        key: 'defaultSize',
+        label: 'Default Image Size',
+        type: 'select',
+        description: 'Default image size',
+        default: '1024x1024',
+        options: [
+            { value: '256x256', label: '256x256' },
+            { value: '512x512', label: '512x512' },
+            { value: '1024x1024', label: '1024x1024' },
+            { value: '1792x1024', label: '1792x1024' },
+            { value: '1024x1792', label: '1024x1792' },
+        ],
+    },
+    {
+        key: 'defaultQuality',
+        label: 'Default Image Quality',
+        type: 'select',
+        description: 'Default image quality',
+        default: 'standard',
+        options: [
+            { value: 'standard', label: 'Standard' },
+            { value: 'hd', label: 'HD' },
+        ],
+    },
+    {
+        key: 'defaultModel',
+        label: 'Default DALL-E Model',
+        type: 'select',
+        description: 'Default DALL-E model',
+        default: 'dall-e-3',
+        options: [
+            { value: 'dall-e-2', label: 'DALL-E 2' },
+            { value: 'dall-e-3', label: 'DALL-E 3' },
+        ],
+    },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -354,6 +410,19 @@ export async function activate(api) {
     const workspaceRoot = api.workingDir || process.cwd();
     const generatedImagesDir = path.join(workspaceRoot, 'public', 'generated-images');
 
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'image', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    instanceState.settings = pluginSettings;
+
     // Resolve API key: plugin settings first, then environment variable
     const getApiKey = async () =>
         (await api.settings.get('openaiApiKey')) || process.env.OPENAI_API_KEY || '';
@@ -372,15 +441,15 @@ export async function activate(api) {
                 },
                 size: {
                     type: 'string',
-                    enum: ['1024x1024'],
-                    description: 'The size of the generated image. Default is 1024x1024.',
-                    default: '1024x1024'
+                    enum: ['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'],
+                    description: `The size of the generated image. Default is ${pluginSettings.defaultSize}.`,
+                    default: pluginSettings.defaultSize
                 },
                 quality: {
                     type: 'string',
                     enum: ['standard', 'hd'],
-                    description: 'The quality of the image. HD creates more detailed images but may take longer.',
-                    default: 'standard'
+                    description: `The quality of the image. Default is ${pluginSettings.defaultQuality}.`,
+                    default: pluginSettings.defaultQuality
                 },
                 style: {
                     type: 'string',
@@ -395,7 +464,14 @@ export async function activate(api) {
             },
             required: ['prompt']
         },
-        handler: async (args) => handleGenerateImage(await getApiKey(), workspaceRoot, generatedImagesDir, args)
+        handler: async (args) => {
+            const mergedArgs = {
+                ...args,
+                size: args.size || pluginSettings.defaultSize,
+                quality: args.quality || pluginSettings.defaultQuality,
+            };
+            return handleGenerateImage(await getApiKey(), workspaceRoot, generatedImagesDir, mergedArgs);
+        }
     });
 
     // ── create_image_variation ────────────────────────────────────────────
@@ -418,8 +494,8 @@ export async function activate(api) {
                 size: {
                     type: 'string',
                     enum: ['256x256', '512x512', '1024x1024'],
-                    description: 'The size of the generated images. Default is 1024x1024.',
-                    default: '1024x1024'
+                    description: `The size of the generated images. Default is ${pluginSettings.defaultSize}.`,
+                    default: pluginSettings.defaultSize
                 },
                 filename_prefix: {
                     type: 'string',
@@ -428,7 +504,13 @@ export async function activate(api) {
             },
             required: ['input_path']
         },
-        handler: async (args) => handleCreateImageVariation(await getApiKey(), workspaceRoot, generatedImagesDir, args)
+        handler: async (args) => {
+            const mergedArgs = {
+                ...args,
+                size: args.size || pluginSettings.defaultSize,
+            };
+            return handleCreateImageVariation(await getApiKey(), workspaceRoot, generatedImagesDir, mergedArgs);
+        }
     });
 
     // ── manipulate_image ─────────────────────────────────────────────────
@@ -508,8 +590,9 @@ export async function activate(api) {
         },
         handler: (args) => handleGetImageInfo(workspaceRoot, args)
     });
+
 }
 
-export async function deactivate(_api) {
-    // Cleanup handled automatically by PluginAPI._cleanup()
+export async function deactivate(api) {
+    api.setInstance(null);
 }

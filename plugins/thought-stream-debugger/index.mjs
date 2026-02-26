@@ -7,12 +7,37 @@
  * @module @oboto/plugin-thought-stream-debugger
  */
 
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  maxSessions: 100,
+  trackAgentSteps: true,
+  trackAgentLoopSteps: true,
+  trackToolExecutions: true,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable thought stream debugging', default: true },
+  { key: 'maxSessions', label: 'Max Sessions', type: 'number', description: 'Maximum number of debug sessions to retain', default: 100 },
+  { key: 'trackAgentSteps', label: 'Track Agent Steps', type: 'boolean', description: 'Record legacy agent:step events', default: true },
+  { key: 'trackAgentLoopSteps', label: 'Track Agent Loop Steps', type: 'boolean', description: 'Record agent-loop:step events', default: true },
+  { key: 'trackToolExecutions', label: 'Track Tool Executions', type: 'boolean', description: 'Record tool:executed events', default: true },
+];
+
 class TraceCollector {
-  constructor() {
+  constructor(maxSessions) {
     this.sessions = new Map();
+    this.maxSessions = maxSessions || 100;
   }
 
   startSession(agentId) {
+    // Prune oldest sessions if at capacity
+    if (this.sessions.size >= this.maxSessions) {
+      const oldest = this.sessions.keys().next().value;
+      this.sessions.delete(oldest);
+    }
+
     const id = 'sess_' + Date.now().toString(36);
     this.sessions.set(id, { 
         id, 
@@ -57,11 +82,17 @@ class TraceCollector {
 
 export async function activate(api) {
   console.log('[thought-stream-debugger] Activating...');
-  
-  const collector = new TraceCollector();
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'thought-stream-debugger', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    () => { collector.maxSessions = pluginSettings.maxSessions; }
+  );
+
+  const collector = new TraceCollector(pluginSettings.maxSessions);
 
   // Helper to handle incoming events
   const handleEvent = (stepName, data) => {
+      if (!pluginSettings.enabled) return;
       if (!data) return;
       const agentId = data.agentId || data.threadId || 'system';
       
@@ -73,10 +104,16 @@ export async function activate(api) {
       collector.logTrace(sessionId, stepName, data);
   };
 
-  // Listen to system events
-  api.events.onSystem('agent:step', (data) => handleEvent('Agent Step (legacy)', data));
-  api.events.onSystem('agent-loop:step', (data) => handleEvent('Agent Loop Step', data));
-  api.events.onSystem('tool:executed', (data) => handleEvent('Tool Executed', data));
+  // Listen to system events based on settings
+  if (pluginSettings.trackAgentSteps) {
+    api.events.onSystem('agent:step', (data) => handleEvent('Agent Step (legacy)', data));
+  }
+  if (pluginSettings.trackAgentLoopSteps) {
+    api.events.onSystem('agent-loop:step', (data) => handleEvent('Agent Loop Step', data));
+  }
+  if (pluginSettings.trackToolExecutions) {
+    api.events.onSystem('tool:executed', (data) => handleEvent('Tool Executed', data));
+  }
 
   // Tool: list_agent_sessions
   api.tools.register({

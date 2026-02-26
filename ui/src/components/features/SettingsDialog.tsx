@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, Puzzle, Cloud } from 'lucide-react';
+import { Save, Settings, Database, Cpu, LayoutGrid, Info, X, Puzzle, Cloud, Blocks } from 'lucide-react';
 import type { OpenClawStatus } from '../../types';
 import { PropertyGrid, type PropertyItem } from './settings/PropertyGrid';
 import { AIProviderSettings, type AIProviderConfig, type ProviderConfig, type AIProviderType } from './settings/AIProviderSettings';
@@ -7,9 +7,12 @@ import { ModelRoutingSettings } from './settings/ModelRoutingSettings';
 import { AgenticProviderSettings } from './settings/AgenticProviderSettings';
 import SkillsSettings from './settings/SkillsSettings';
 import CloudSettings from './settings/CloudSettings';
+import PluginSettingsTab from './settings/PluginSettingsTab';
 import type { SecretItem } from '../../hooks/useSecrets';
 import type { SkillInfo, ClawHubSkill } from '../../hooks/useSkills';
 import type { AgenticProviderInfo } from '../../hooks/useChat';
+import { useCloudSync } from '../../hooks/useCloudSync';
+import { usePlugins } from '../../hooks/usePlugins';
 
 interface ModelCapabilities {
   id: string;
@@ -68,7 +71,7 @@ interface SettingsDialogProps {
   };
 }
 
-type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills' | 'cloud';
+type SettingsTab = 'general' | 'ai' | 'openclaw' | 'skills' | 'plugins' | 'cloud';
 type AISubTab = 'config' | 'routing' | 'agentic';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ 
@@ -90,6 +93,28 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [aiSubTab, setAISubTab] = useState<AISubTab>('config');
   const [settings, setSettings] = useState<AgentSettings>(initialSettings);
+
+  // Plugin data from the usePlugins hook
+  const {
+    plugins: pluginList,
+    loading: pluginsLoading,
+    pluginSettings: pluginSettingsData,
+    pluginSchemas,
+    fetchPluginSettings,
+    savePluginSettings: savePluginSettingsFn,
+    fetchPluginSchema,
+  } = usePlugins();
+
+  // Cloud data for the AI provider cloud card
+  const { loggedIn: cloudLoggedIn, usage: cloudUsage, cloudModels, getUsage: cloudGetUsage, listCloudModels } = useCloudSync();
+
+  // Fetch cloud usage and models when the AI tab is active and user is logged in
+  useEffect(() => {
+    if (activeTab === 'ai' && cloudLoggedIn) {
+      cloudGetUsage();
+      listCloudModels();
+    }
+  }, [activeTab, cloudLoggedIn, cloudGetUsage, listCloudModels]);
   
   // Local state for OpenClaw that isn't part of the main AgentSettings object yet
   const [saveScope, setSaveScope] = useState('session');
@@ -149,6 +174,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
     { id: 'ai', label: 'AI Providers', icon: <Cpu size={15} /> },
     { id: 'openclaw', label: 'OpenClaw', icon: <Database size={15} /> },
     { id: 'skills', label: 'Skills', icon: <Puzzle size={15} /> },
+    { id: 'plugins', label: 'Plugins', icon: <Blocks size={15} /> },
     { id: 'cloud', label: 'Cloud', icon: <Cloud size={15} /> },
   ];
 
@@ -225,6 +251,9 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   secretsStatus={settings.secretsStatus}
                   onOpenSecrets={() => { onClose(); onOpenSecrets?.(); }}
                   modelRegistry={settings.modelRegistry || {}}
+                  cloudUsage={cloudUsage}
+                  cloudModels={cloudModels}
+                  cloudLoggedIn={cloudLoggedIn}
                 />
               ) : aiSubTab === 'routing' ? (
                 <ModelRoutingSettings
@@ -396,6 +425,25 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        );
+
+      case 'plugins':
+        return (
+          <div className="space-y-6 animate-fade-in-up" key="plugins">
+            <div>
+              <h3 className="text-lg font-semibold text-zinc-100 mb-1">Plugins</h3>
+              <p className="text-xs text-zinc-500 mb-5">Configure settings for installed plugins.</p>
+              <PluginSettingsTab
+                plugins={pluginList}
+                pluginSettings={pluginSettingsData}
+                pluginSchemas={pluginSchemas}
+                fetchPluginSettings={fetchPluginSettings}
+                savePluginSettings={savePluginSettingsFn}
+                fetchPluginSchema={fetchPluginSchema}
+                loading={pluginsLoading}
+              />
             </div>
           </div>
         );

@@ -16,11 +16,12 @@ const CloudSettings: React.FC = () => {
   const [agentMessage, setAgentMessage] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
 
-  // Fetch workspaces and agents when logged in
+  // Fetch workspaces, agents, and usage when logged in
   useEffect(() => {
     if (cloud.loggedIn) {
       cloud.listWorkspaces();
       cloud.listAgents();
+      cloud.getUsage();
     }
   }, [cloud]);
 
@@ -287,23 +288,75 @@ const CloudSettings: React.FC = () => {
         )}
       </div>
 
-      {/* AI Proxy Info */}
+      {/* AI Proxy Info + Usage Meter */}
       <div className="bg-zinc-900/30 rounded-xl border border-zinc-800/30 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Zap size={14} className="text-zinc-500" />
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.15em]">Cloud AI Proxy</span>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Zap size={14} className="text-zinc-500" />
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.15em]">Cloud AI Usage</span>
+          </div>
+          <button onClick={() => cloud.getUsage()} title="Refresh usage"
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 transition-all"><RefreshCw size={12} /></button>
         </div>
-        <p className="text-[10px] text-zinc-500 mb-2">
-          Set <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-400">AI_PROVIDER=cloud</code> in your{' '}
-          <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-400">.env</code> to route AI requests through Oboto Cloud.
-          This uses your organization's metered token allowance — no personal API keys needed.
-        </p>
-        <div className="flex items-center gap-3 text-[10px]">
-          <span className="text-zinc-600">Tier limit:</span>
-          <span className="text-zinc-300 font-medium">
-            {cloud.org?.tier === 'free' ? '50K tokens/day' : cloud.org?.tier === 'pro' ? '500K tokens/day' : cloud.org?.tier === 'team' ? '2M tokens/day' : '50K tokens/day'}
-          </span>
-        </div>
+
+        {cloud.usage ? (() => {
+          const isUnlimited = cloud.usage.is_unlimited === true;
+          const pct = (!isUnlimited && cloud.usage.daily_limit > 0)
+            ? Math.min(100, (cloud.usage.tokens_used / cloud.usage.daily_limit) * 100)
+            : 0;
+          const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-cyan-500';
+          const textColor = isUnlimited ? 'text-emerald-400' : pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-cyan-400';
+
+          const formatTokens = (n: number) => {
+            if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+            if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+            return String(n);
+          };
+
+          return (
+            <div className="space-y-2">
+              {/* Progress bar — hidden for unlimited users */}
+              {!isUnlimited && (
+                <div className="w-full h-2 bg-zinc-800/60 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                    style={{ width: `${pct}%` }} />
+                </div>
+              )}
+              {/* Stats row */}
+              <div className="flex items-center justify-between text-[10px]">
+                <span className={`font-medium ${textColor}`}>
+                  {isUnlimited
+                    ? `${formatTokens(cloud.usage.tokens_used)} tokens used — Unlimited`
+                    : `${formatTokens(cloud.usage.tokens_used)} / ${formatTokens(cloud.usage.daily_limit)} tokens`}
+                </span>
+                {!isUnlimited && <span className="text-zinc-500">{pct.toFixed(0)}% used</span>}
+                {isUnlimited && <span className="text-emerald-500/70 text-[9px] font-bold uppercase tracking-wider">∞ Admin</span>}
+              </div>
+              <div className="flex items-center gap-4 text-[10px]">
+                <span className="text-zinc-600">Requests today: <span className="text-zinc-400">{cloud.usage.request_count ?? '—'}</span></span>
+                <span className="text-zinc-600">Tier: <span className={`capitalize ${cloud.usage.tier === 'free' ? 'text-zinc-400' : 'text-indigo-400'}`}>{cloud.usage.tier}</span></span>
+              </div>
+              {!isUnlimited && pct >= 90 && (
+                <div className="px-2.5 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[10px] text-red-400">
+                  ⚠ You've used {pct >= 100 ? 'all' : 'over 90%'} of your daily token allowance.{' '}
+                  {pct >= 100 ? 'Requests will be rejected until the limit resets.' : 'Consider upgrading your plan.'}
+                </div>
+              )}
+            </div>
+          );
+        })() : (
+          <div className="space-y-2">
+            <p className="text-[10px] text-zinc-500">
+              Route AI requests through Oboto Cloud using the Cloud provider in AI settings — no personal API keys needed.
+            </p>
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="text-zinc-600">Tier limit:</span>
+              <span className="text-zinc-300 font-medium">
+                {(cloud.role === 'owner' || cloud.role === 'admin') ? 'Unlimited (Admin)' : cloud.org?.tier === 'free' ? '50K tokens/day' : cloud.org?.tier === 'pro' ? '500K tokens/day' : cloud.org?.tier === 'team' ? '2M tokens/day' : cloud.org?.tier === 'enterprise' ? '10M tokens/day' : '50K tokens/day'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dashboard Link */}

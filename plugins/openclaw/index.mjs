@@ -19,13 +19,48 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { OpenClawManager } from './manager.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    openClawApiKey: '',
+    openClawBaseUrl: 'http://localhost:3001',
+    timeout: 30000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'openClawApiKey',
+        label: 'OpenClaw API Key',
+        type: 'password',
+        description: 'OpenClaw API key',
+        default: '',
+    },
+    {
+        key: 'openClawBaseUrl',
+        label: 'OpenClaw Base URL',
+        type: 'text',
+        description: 'OpenClaw base URL',
+        default: 'http://localhost:3001',
+    },
+    {
+        key: 'timeout',
+        label: 'Request Timeout (ms)',
+        type: 'number',
+        description: 'Request timeout (ms)',
+        default: 30000,
+        min: 5000,
+        max: 120000,
+    },
+];
 
 // ── Tool handlers ────────────────────────────────────────────────────────
-// NOTE: Plugin state is stored on the `api` object (via `api._pluginInstance`)
+// NOTE: Plugin state is stored on the `api` object (via `api.setInstance()/getInstance()`)
 // rather than in a module-level variable. This ensures that when the plugin is
 // reloaded (which creates a new ES module instance due to cache-busting), the
 // old module's `deactivate()` can still reference and clean up the manager via
-// `api._pluginInstance`, and the new module starts fresh.
+// `api.setInstance()/getInstance()`, and the new module starts fresh.
 
 function handleDelegateToOpenClaw(manager) {
     return async (args) => {
@@ -156,9 +191,21 @@ function buildClawStatus(manager) {
 export async function activate(api) {
     const { settings } = api;
 
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { manager: null, settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'openclaw', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
     // Initialise the manager with plugin settings — stored on api for safe cleanup
     const manager = new OpenClawManager(settings);
-    api._pluginInstance = manager;
+    instanceState.manager = manager;
+    instanceState.settings = pluginSettings;
 
     // Start connecting in the background (non-blocking)
     manager.start().catch((err) => {
@@ -412,11 +459,15 @@ export async function activate(api) {
             }
         }
     });
+
 }
 
 export async function deactivate(api) {
-    if (api._pluginInstance) {
-        await api._pluginInstance.stop();
-        api._pluginInstance = null;
+    if (api.getInstance()) {
+        const manager = api.getInstance()?.manager || api.getInstance();
+        if (manager && typeof manager.stop === 'function') {
+            await manager.stop();
+        }
+        api.setInstance(null);
     }
 }

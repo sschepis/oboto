@@ -8,9 +8,11 @@
  * - Get plugin UI manifests
  * - Get plugin component sources
  * - Update plugin settings
- * 
+ *
  * @module src/server/ws-handlers/plugin-handler
  */
+
+import { validateSettings } from '../../plugins/plugin-settings-handlers.mjs';
 
 /**
  * Resolve the PluginManager from the WS context.
@@ -287,7 +289,44 @@ export const handlers = {
             return;
         }
 
-        await plugin.api.settings.setAll(settings);
+        // Dispatch to the plugin's own `update-settings` WS handler (if registered)
+        // so the plugin can validate, persist, and apply settings in one pass.
+        let dispatchedOk = false;
+        if (ctx.dispatcher) {
+            const updateType = `plugin:${name}:update-settings`;
+            try {
+                await ctx.dispatcher.dispatch(
+                    { type: updateType, settings },
+                    ctx
+                );
+                dispatchedOk = true;
+            } catch (err) {
+                // Plugin may not have registered an update-settings handler.
+                console.warn(`[plugin:set-settings] Failed to dispatch ${updateType}: ${err.message}`);
+            }
+        }
+
+        // Fallback: if the plugin doesn't handle update-settings, persist directly.
+        // Apply schema validation if a schema is available, otherwise only accept
+        // plain-object values. Merge with existing stored settings to avoid losing
+        // unmodified keys.
+        if (!dispatchedOk) {
+            const rawSettings = (settings && typeof settings === 'object' && !Array.isArray(settings))
+                ? { ...settings }
+                : {};
+            // Attempt to retrieve the plugin's settings schema for validation.
+            // Plugins using registerSettingsHandlers expose the schema via their
+            // WS handler, but we can also check a well-known property on the API.
+            let sanitized = rawSettings;
+            const schema = plugin.api._settingsSchema;
+            if (Array.isArray(schema) && schema.length > 0) {
+                sanitized = validateSettings(rawSettings, schema);
+            }
+            let existing = {};
+            try { existing = await plugin.api.settings.getAll() || {}; } catch (_e) { /* use empty */ }
+            await plugin.api.settings.setAll({ ...existing, ...sanitized });
+        }
+
         ws.send(JSON.stringify({
             type: 'plugin:settings-saved',
             payload: { name, success: true }
@@ -360,6 +399,7 @@ export const handlers = {
 
     /**
      * Uninstall a plugin by name.
+     * Built-in plugins (source: 'builtin') cannot be uninstalled — only disabled.
      * Expects: { name: string, cleanData?: boolean, target?: string }
      */
     'plugin:uninstall': async (data, ctx) => {
@@ -378,6 +418,17 @@ export const handlers = {
         const { name, cleanData, target } = data;
         if (!name) {
             ws.send(JSON.stringify({ type: 'plugin:error', payload: { error: 'Plugin name is required' } }));
+            return;
+        }
+
+        // Reject uninstall of built-in plugins — they ship with the app and can
+        // only be disabled, not deleted.
+        const pluginInfo = pluginManager.getPlugin(name);
+        if (pluginInfo?.discovered?.source === 'builtin') {
+            ws.send(JSON.stringify({
+                type: 'plugin:error',
+                payload: { error: `Cannot uninstall built-in plugin "${name}". Built-in plugins can only be disabled.`, name }
+            }));
             return;
         }
 

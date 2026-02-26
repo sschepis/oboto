@@ -9,6 +9,32 @@
  * @module @oboto/plugin-embed
  */
 
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    defaultWidth: '100%',
+    defaultAutoplay: false,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'defaultWidth',
+        label: 'Default Embed Width',
+        type: 'text',
+        description: 'Default CSS width for embedded content (e.g. "100%", "800px").',
+        default: '100%',
+    },
+    {
+        key: 'defaultAutoplay',
+        label: 'Auto-play Media',
+        type: 'boolean',
+        description: 'Auto-play embedded media by default.',
+        default: false,
+    },
+];
+
 const VALID_EMBED_TYPES = [
     'youtube', 'video', 'audio', 'iframe', 'map', 'tweet',
     'codepen', 'spotify', 'figma', 'gist', 'loom', 'generic'
@@ -16,7 +42,7 @@ const VALID_EMBED_TYPES = [
 
 // ── Tool Handler ─────────────────────────────────────────────────────────
 
-function handleEmbedObject(args, eventsAPI) {
+function handleEmbedObject(args, eventsAPI, settings = {}) {
     const {
         embed_type,
         url,
@@ -24,7 +50,7 @@ function handleEmbedObject(args, eventsAPI) {
         description,
         thumbnail_url,
         start_time,
-        autoplay = false,
+        autoplay = settings.defaultAutoplay ?? false,
         width,
         height,
     } = args;
@@ -47,7 +73,7 @@ function handleEmbedObject(args, eventsAPI) {
         thumbnailUrl: thumbnail_url || undefined,
         startTime: start_time || undefined,
         autoplay: autoplay || false,
-        width: width || '100%',
+        width: width || settings.defaultWidth || '100%',
         height: height || undefined,
     };
 
@@ -73,6 +99,10 @@ function handleEmbedObject(args, eventsAPI) {
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
 export async function activate(api) {
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'embed', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+    );
+
     api.tools.register({
         useOriginalName: true,
         name: 'embed_object',
@@ -141,8 +171,9 @@ The embedded content renders inline in the chat with a header, controls, and opt
             },
             required: ['embed_type', 'url']
         },
-        handler: (args) => handleEmbedObject(args, api.events)
+        handler: (args) => handleEmbedObject(args, api.events, pluginSettings)
     });
+
 }
 
 export async function deactivate(_api) {

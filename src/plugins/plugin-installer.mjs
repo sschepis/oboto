@@ -149,6 +149,26 @@ export class PluginInstaller {
         this._validateName(name);
 
         const target = options.target || InstallTarget.GLOBAL;
+
+        // Built-in plugins (shipped with the app in ./plugins/) cannot be deleted.
+        // They may be disabled via the plugin manager, but never removed from disk.
+        if (target === InstallTarget.BUILTIN) {
+            throw new Error(
+                `Cannot uninstall built-in plugin "${name}". ` +
+                `Built-in plugins are part of the base installation and can only be disabled, not deleted.`
+            );
+        }
+        // Defense-in-depth: also check if the plugin physically resides in the
+        // builtin directory, regardless of the `target` parameter.
+        const builtinDir = resolveTargetDir(InstallTarget.BUILTIN, this.workingDir);
+        const builtinPath = path.join(builtinDir, name);
+        if (await this._exists(builtinPath)) {
+            throw new Error(
+                `Cannot uninstall "${name}" — it is a built-in plugin. ` +
+                `Built-in plugins can only be disabled, not deleted.`
+            );
+        }
+
         const targetDir = resolveTargetDir(target, this.workingDir);
 
         // Deactivate via PluginManager if available

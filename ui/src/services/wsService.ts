@@ -517,6 +517,14 @@ class WSService {
     this.sendMessage('cloud:pull-conversation', { cloudConvId, since });
   }
 
+  cloudGetUsage() {
+    this.sendMessage('cloud:get-usage');
+  }
+
+  cloudListModels() {
+    this.sendMessage('cloud:list-models');
+  }
+
   /** Send a raw typed message to the server (bypasses the chat wrapper) */
   sendMessage(type: string, payload?: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) {

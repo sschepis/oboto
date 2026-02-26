@@ -9,7 +9,7 @@
  *   - src/tools/definitions/ui-style-tools.mjs
  *   - src/server/ws-handlers/style-handler.mjs
  *
- * Uses the `api._pluginInstance` pattern to avoid module-level mutable state.
+ * Uses the `api.setInstance()/getInstance()` pattern to avoid module-level mutable state.
  * This ensures proper cleanup across ESM reloads (where the old module entry
  * may be cached but the new import creates a fresh scope).
  *
@@ -18,6 +18,25 @@
 
 import fs from 'fs';
 import path from 'path';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Plugin settings ──────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    defaultTheme: 'midnight',
+    persistThemeChanges: true,
+    enableCustomCSS: true,
+    enableDisplayNames: true,
+    maxInjectedCSSKB: 64,
+};
+
+const SETTINGS_SCHEMA = [
+    { key: 'defaultTheme', label: 'Default Theme', type: 'select', description: 'Theme to apply when the plugin loads', default: 'midnight', options: ['cyberpunk', 'ocean', 'sunset', 'matrix', 'midnight', 'arctic', 'forest', 'lavender', 'ember', 'monochrome', 'daylight', 'paper', 'corporate', 'solarized', 'mermaid', 'quiet'] },
+    { key: 'persistThemeChanges', label: 'Persist Theme Changes', type: 'boolean', description: 'Save theme changes to disk so they survive restarts', default: true },
+    { key: 'enableCustomCSS', label: 'Enable Custom CSS', type: 'boolean', description: 'Allow injection of custom CSS into the UI', default: true },
+    { key: 'enableDisplayNames', label: 'Enable Display Names', type: 'boolean', description: 'Allow setting custom display names for user and agent', default: true },
+    { key: 'maxInjectedCSSKB', label: 'Max Injected CSS (KB)', type: 'number', description: 'Maximum size in KB allowed for injected CSS', default: 64 },
+];
 
 // ── Theme presets ────────────────────────────────────────────────────────
 
@@ -252,7 +271,7 @@ const THEME_PRESETS = {
 
 /**
  * Mutable state for a single activation of the ui-themes plugin.
- * Stored on `api._pluginInstance` so that `deactivate()` can clean up
+ * Stored via `api.setInstance()` so that `deactivate()` can clean up
  * even when ESM cache-busting creates a fresh module scope.
  */
 class UIThemesState {
@@ -407,14 +426,22 @@ async function handleSetDisplayNames(state, args) {
 
 export async function activate(api) {
     const state = new UIThemesState();
-    api._pluginInstance = state;
+    api.setInstance(state);
+
+    // Load plugin-level settings from the settings API
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'ui-themes', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+    );
 
     const workspaceRoot = api.workingDir || process.cwd();
     state.settingsPath = path.join(workspaceRoot, '.oboto', 'ui-settings.json');
     // Use the PluginAPI ws.broadcast for WS-level broadcasting to all clients
     state.broadcastFn = (type, payload) => api.ws.broadcast(type, payload);
 
-    // Load persisted settings
+    // Apply default theme from plugin settings
+    state.currentTheme = pluginSettings.defaultTheme || 'midnight';
+
+    // Load persisted theme state (overrides default if file exists)
     loadSettings(state);
 
     // ── Register tools ───────────────────────────────────────────────
@@ -570,13 +597,14 @@ export async function activate(api) {
             }
         }
     });
+
 }
 
 export async function deactivate(api) {
     // Clean up instance state — the PluginAPI._cleanup() handles tool/handler
     // unregistration, so we only need to clear our own state reference.
-    if (api._pluginInstance) {
-        api._pluginInstance.broadcastFn = null;
-        api._pluginInstance = null;
+    if (api.getInstance()) {
+        api.getInstance().broadcastFn = null;
+        api.setInstance(null);
     }
 }

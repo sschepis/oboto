@@ -155,6 +155,10 @@ async function main() {
                     setCloudSyncRef(cloudSync);
                     setEventBusRef(eventBus);
 
+                    // Wire cloud reference into model registry for cloud model fetching
+                    const { setCloudSyncForModels } = await import('./core/model-registry.mjs');
+                    setCloudSyncForModels(cloudSync);
+
                     consoleStyler.log('system', '☁️  Cloud integration initialized');
                 }
             } catch (err) {

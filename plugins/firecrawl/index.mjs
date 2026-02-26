@@ -8,6 +8,44 @@
  * @module @oboto/plugin-firecrawl
  */
 
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    apiKey: '',
+    maxPages: 10,
+    timeout: 30000,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'apiKey',
+        label: 'Firecrawl API Key',
+        type: 'password',
+        description: 'Firecrawl API key',
+        default: '',
+    },
+    {
+        key: 'maxPages',
+        label: 'Max Pages',
+        type: 'number',
+        description: 'Max pages to crawl',
+        default: 10,
+        min: 1,
+        max: 100,
+    },
+    {
+        key: 'timeout',
+        label: 'Request Timeout (ms)',
+        type: 'number',
+        description: 'Request timeout (ms)',
+        default: 30000,
+        min: 5000,
+        max: 120000,
+    },
+];
+
 const BASE_URL = 'https://api.firecrawl.dev/v1';
 
 /**
@@ -135,6 +173,19 @@ async function handleCheckJob(args, settings) {
 export async function activate(api) {
     const { settings } = api;
 
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'firecrawl', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    instanceState.settings = pluginSettings;
+
     api.tools.register({
         useOriginalName: true,
         name: 'firecrawl_scrape',
@@ -183,8 +234,8 @@ export async function activate(api) {
                 },
                 limit: {
                     type: 'number',
-                    description: 'Maximum number of pages to crawl. Default 10.',
-                    default: 10
+                    description: `Maximum number of pages to crawl. Default ${pluginSettings.maxPages}.`,
+                    default: pluginSettings.maxPages
                 },
                 scrapeOptions: {
                     type: 'object',
@@ -193,7 +244,7 @@ export async function activate(api) {
             },
             required: ['url']
         },
-        handler: (args) => handleCrawl(args, settings)
+        handler: (args) => handleCrawl({ ...args, limit: args.limit ?? pluginSettings.maxPages }, settings)
     });
 
     api.tools.register({
@@ -212,8 +263,9 @@ export async function activate(api) {
         },
         handler: (args) => handleCheckJob(args, settings)
     });
+
 }
 
-export async function deactivate(_api) {
-    // Cleanup handled automatically by PluginAPI._cleanup()
+export async function deactivate(api) {
+    api.setInstance(null);
 }

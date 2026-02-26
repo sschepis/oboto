@@ -13,11 +13,49 @@
  */
 
 import { PersonaManager } from './persona-manager.mjs';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    defaultPersonaId: '',
+    maxPersonas: 50,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'defaultPersonaId',
+        label: 'Default Persona ID',
+        type: 'text',
+        description: 'Default persona ID to use on startup',
+        default: '',
+    },
+    {
+        key: 'maxPersonas',
+        label: 'Max Personas',
+        type: 'number',
+        description: 'Maximum number of stored personas',
+        default: 50,
+        min: 5,
+        max: 200,
+    },
+];
 
 // ── Plugin lifecycle ─────────────────────────────────────────────────────
 
 export async function activate(api) {
     const { settings } = api;
+
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { personaManager: null, settings: null };
+    api.setInstance(instanceState);
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'personas', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        () => {
+            instanceState.settings = pluginSettings;
+        }
+    );
 
     // Determine workspace root — prefer api.services if available
     const workingDir = api.services?.workingDir ?? process.cwd();
@@ -25,8 +63,11 @@ export async function activate(api) {
     const personaManager = new PersonaManager(workingDir);
     await personaManager.initialize();
 
+    instanceState.personaManager = personaManager;
+    instanceState.settings = pluginSettings;
+
     // If a default persona ID is stored in settings, activate it
-    const defaultId = await settings.get('defaultPersonaId');
+    const defaultId = pluginSettings.defaultPersonaId || await settings.get('defaultPersonaId');
     if (defaultId && personaManager.personas.has(defaultId)) {
         personaManager.switchPersona(defaultId);
     }
@@ -213,8 +254,9 @@ export async function activate(api) {
             return `Error: ${result.error}`;
         },
     });
+
 }
 
-export async function deactivate(_api) {
-    // Cleanup handled automatically by PluginAPI._cleanup()
+export async function deactivate(api) {
+    api.setInstance(null);
 }

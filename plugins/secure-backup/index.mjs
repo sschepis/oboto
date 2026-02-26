@@ -1,23 +1,40 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;       // 256 bits
 const IV_LENGTH = 16;        // 128 bits
 const SALT_LENGTH = 32;      // 256 bits
 const AUTH_TAG_LENGTH = 16;  // 128 bits
-const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_DIGEST = 'sha512';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  pbkdf2Iterations: 100000,
+  pbkdf2Digest: 'sha512',
+  backupDirName: '.backups',
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable secure backup', default: true },
+  { key: 'pbkdf2Iterations', label: 'PBKDF2 Iterations', type: 'number', description: 'Number of PBKDF2 iterations for key derivation (higher = slower but more secure)', default: 100000, min: 10000, max: 1000000 },
+  { key: 'pbkdf2Digest', label: 'PBKDF2 Digest', type: 'select', description: 'Hash algorithm for PBKDF2 key derivation', default: 'sha512', options: ['sha256', 'sha384', 'sha512'] },
+  { key: 'backupDirName', label: 'Backup Directory Name', type: 'text', description: 'Name of the backup directory inside the working directory', default: '.backups' },
+];
 
 class CryptoEngine {
+  constructor(settings) {
+    this.settings = settings;
+  }
+
   deriveKey(passphrase, salt) {
     return crypto.pbkdf2Sync(
       passphrase,
       salt,
-      PBKDF2_ITERATIONS,
+      this.settings.pbkdf2Iterations || 100000,
       KEY_LENGTH,
-      PBKDF2_DIGEST
+      this.settings.pbkdf2Digest || 'sha512'
     );
   }
 
@@ -79,16 +96,38 @@ class CryptoEngine {
   }
 }
 
-export function activate(api) {
+export async function activate(api) {
   console.log('[Secure Backup] Activating...');
-  const cryptoEngine = new CryptoEngine();
-  const backupsDir = path.join(api.workingDir, '.backups');
+
+  const cryptoEngine = new CryptoEngine(DEFAULT_SETTINGS);
+
+  // Pre-create instance object to avoid race condition with onSettingsChange callback
+  const instanceState = { settings: null };
+  api.setInstance(instanceState);
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'secure-backup', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    () => {
+      cryptoEngine.settings = pluginSettings;
+      instanceState.settings = pluginSettings;
+    }
+  );
+
+  instanceState.settings = pluginSettings;
+
+  cryptoEngine.settings = pluginSettings;
+  const getBackupsDir = () => {
+    // Sanitize backupDirName to prevent path traversal
+    const raw = pluginSettings.backupDirName || '.backups';
+    const sanitized = raw.replace(/[\/\\]/g, '').replace(/^\.{2,}$/, '.backups') || '.backups';
+    return path.join(api.workingDir, sanitized);
+  };
 
   async function ensureBackupDir() {
     try {
-      await fs.mkdir(backupsDir, { recursive: true });
+      await fs.mkdir(getBackupsDir(), { recursive: true });
     } catch (e) {
-      console.error('[Secure Backup] Could not create .backups directory', e);
+      console.error('[Secure Backup] Could not create backup directory', e);
     }
   }
 
@@ -105,15 +144,16 @@ export function activate(api) {
       required: ['passphrase']
     },
     handler: async (args) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Secure Backup plugin is disabled' };
+      }
+
+      const backupsDir = getBackupsDir();
       await ensureBackupDir();
 
-      // Collect data to backup. We can get plugin settings and anything else from storage or disk.
-      // For this implementation, we will backup the state that we can access.
       const backupData = {
         timestamp: Date.now(),
         name: args.name || `Backup-${new Date().toISOString()}`,
-        // Note: For a real system we would ask oboto for everything or read all storage files.
-        // For now, we will simulate by reading a dummy object.
         data: {
           info: "Oboto Backup Payload",
           version: "1.0.0"
@@ -159,6 +199,11 @@ export function activate(api) {
       required: ['backupId', 'passphrase']
     },
     handler: async (args) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Secure Backup plugin is disabled' };
+      }
+
+      const backupsDir = getBackupsDir();
       // Security: prevent path traversal — resolve and verify the path stays inside backupsDir
       const filePath = path.join(backupsDir, `${args.backupId}.json`);
       const resolvedPath = path.resolve(filePath);
@@ -173,23 +218,22 @@ export function activate(api) {
         throw new Error(`Backup not found: ${args.backupId}`);
       }
 
-      const backupFile = JSON.parse(fileContent);
-      const ciphertext = Buffer.from(backupFile.payload, 'base64');
+      const backupFileData = JSON.parse(fileContent);
+      const ciphertext = Buffer.from(backupFileData.payload, 'base64');
       
-      if (!cryptoEngine.verifyChecksum(ciphertext, backupFile.metadata.checksum)) {
+      if (!cryptoEngine.verifyChecksum(ciphertext, backupFileData.metadata.checksum)) {
         throw new Error('Backup integrity check failed - checksum mismatch');
       }
 
       const decrypted = cryptoEngine.decrypt({
-        salt: Buffer.from(backupFile.salt, 'base64'),
-        iv: Buffer.from(backupFile.iv, 'base64'),
-        authTag: Buffer.from(backupFile.authTag, 'base64'),
+        salt: Buffer.from(backupFileData.salt, 'base64'),
+        iv: Buffer.from(backupFileData.iv, 'base64'),
+        authTag: Buffer.from(backupFileData.authTag, 'base64'),
         ciphertext
       }, args.passphrase);
 
       const data = JSON.parse(decrypted.toString('utf-8'));
       
-      // In a real scenario, we would apply `data` to the system state here.
       console.log('[Secure Backup] Successfully decrypted data:', data.name);
 
       return { success: true, message: `Restored backup ${data.name}` };
@@ -205,6 +249,7 @@ export function activate(api) {
       properties: {}
     },
     handler: async () => {
+      const backupsDir = getBackupsDir();
       await ensureBackupDir();
       const files = await fs.readdir(backupsDir);
       const backups = [];

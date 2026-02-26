@@ -355,6 +355,9 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             });
         });
 
+        // Cloud AI Usage Updates — push real-time usage data to UI after each cloud AI call
+        eventBus.on('cloud:usage-update', (data) => broadcast('cloud:usage', data));
+
         // WebLLM Bridge — forward generate requests to browser, collect responses
         eventBus.on('webllm:generate', (data) => {
             broadcast('webllm:generate', data);

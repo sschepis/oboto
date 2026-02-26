@@ -1,3 +1,5 @@
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
 /**
  * Oboto Notification Center Plugin
  *
@@ -13,32 +15,40 @@ const DEFAULT_SETTINGS = {
   soundVolume: 0.5,
   dndEnabled: false,
   desktopNotifications: false,
+  deduplicationWindowMs: 2000,
 };
+
+const SETTINGS_SCHEMA = [
+  { key: 'maxHistory', label: 'Max History', type: 'number', description: 'Maximum number of notifications to keep in history', default: 100 },
+  { key: 'soundEnabled', label: 'Sound Enabled', type: 'boolean', description: 'Enable notification sounds', default: true },
+  { key: 'soundVolume', label: 'Sound Volume', type: 'number', description: 'Volume for notification sounds (0.0 to 1.0)', default: 0.5 },
+  { key: 'dndEnabled', label: 'Do Not Disturb', type: 'boolean', description: 'Suppress notifications when enabled', default: false },
+  { key: 'desktopNotifications', label: 'Desktop Notifications', type: 'boolean', description: 'Show desktop OS notifications', default: false },
+  { key: 'deduplicationWindowMs', label: 'Deduplication Window (ms)', type: 'number', description: 'Time window in milliseconds to suppress duplicate notifications', default: 2000 },
+];
 
 export async function activate(api) {
   console.log('[notification-center] Activating...');
 
   let notifications = [];
-  let settings = { ...DEFAULT_SETTINGS };
 
-  // Load from storage
+  // Load notifications from storage
   try {
     const storedNotifications = await api.storage.get('notifications');
     if (Array.isArray(storedNotifications)) {
       notifications = storedNotifications;
     }
-    const storedSettings = await api.storage.get('settings');
-    if (storedSettings) {
-      settings = { ...DEFAULT_SETTINGS, ...storedSettings };
-    }
   } catch (err) {
     console.error('[notification-center] Failed to load storage:', err);
   }
 
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'notification-center', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
+
   const persist = async () => {
     try {
       await api.storage.set('notifications', notifications);
-      await api.storage.set('settings', settings);
     } catch (err) {
       console.error('[notification-center] Failed to save storage:', err);
     }
@@ -61,18 +71,19 @@ export async function activate(api) {
       data: data.data
     };
 
-    // Deduplication (same title and message within 2 seconds)
+    // Deduplication
+    const dedupWindow = pluginSettings.deduplicationWindowMs || 2000;
     const duplicate = notifications.find(n => 
         n.title === notification.title && 
         n.message === notification.message && 
-        n.timestamp > notification.timestamp - 2000
+        n.timestamp > notification.timestamp - dedupWindow
     );
 
     if (duplicate) return;
 
     notifications.unshift(notification);
-    if (notifications.length > settings.maxHistory) {
-        notifications = notifications.slice(0, settings.maxHistory);
+    if (notifications.length > pluginSettings.maxHistory) {
+        notifications = notifications.slice(0, pluginSettings.maxHistory);
     }
 
     await persist();
@@ -146,13 +157,13 @@ export async function activate(api) {
   });
   
   api.ws.register('notifications:getSettings', async (data, ctx) => {
-      ctx.ws.send(JSON.stringify({ type: 'plugin:notification-center:settings', payload: settings }));
+      ctx.ws.send(JSON.stringify({ type: 'plugin:notification-center:settings', payload: pluginSettings }));
   });
 
   api.ws.register('notifications:updateSettings', async (data, ctx) => {
-      settings = { ...settings, ...data.settings };
-      await persist();
-      api.ws.broadcast('notifications:settingsUpdated', settings);
+      Object.assign(pluginSettings, data.settings);
+      await api.settings.setAll(pluginSettings);
+      api.ws.broadcast('notifications:settingsUpdated', pluginSettings);
       ctx.ws.send(JSON.stringify({ type: 'plugin:notification-center:success', payload: { action: 'updateSettings' } }));
   });
 
@@ -187,8 +198,8 @@ export async function activate(api) {
           };
           
           notifications.unshift(notification);
-          if (notifications.length > settings.maxHistory) {
-              notifications = notifications.slice(0, settings.maxHistory);
+          if (notifications.length > pluginSettings.maxHistory) {
+              notifications = notifications.slice(0, pluginSettings.maxHistory);
           }
           await persist();
           

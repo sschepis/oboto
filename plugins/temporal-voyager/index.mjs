@@ -1,15 +1,43 @@
-export function activate(api) {
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  maxTimelineSize: 1000,
+  defaultListLimit: 20,
+  autoCleanupEnabled: true,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable temporal voyager', default: true },
+  { key: 'maxTimelineSize', label: 'Max Timeline Size', type: 'number', description: 'Maximum number of steps to keep in the timeline (oldest are pruned)', default: 1000 },
+  { key: 'defaultListLimit', label: 'Default List Limit', type: 'number', description: 'Default number of recent steps returned by list_timeline_steps', default: 20 },
+  { key: 'autoCleanupEnabled', label: 'Auto Cleanup', type: 'boolean', description: 'Automatically prune old timeline entries when maxTimelineSize is exceeded', default: true },
+];
+
+export async function activate(api) {
   console.log('[Temporal Voyager] Activating...');
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'temporal-voyager', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
 
   const timeline = [];
 
   // Hook into the agent loop to record state
   api.events.onSystem('agent-loop:step', (data) => {
+    if (!pluginSettings.enabled) return;
+
     timeline.push({
       id: `step-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       timestamp: Date.now(),
       data: data
     });
+
+    // Auto-cleanup if timeline exceeds max size
+    if (pluginSettings.autoCleanupEnabled && timeline.length > pluginSettings.maxTimelineSize) {
+      const excess = timeline.length - pluginSettings.maxTimelineSize;
+      timeline.splice(0, excess);
+    }
   });
 
   api.tools.register({
@@ -23,7 +51,7 @@ export function activate(api) {
       }
     },
     handler: async (args) => {
-      const limit = args.limit || 20;
+      const limit = args.limit || pluginSettings.defaultListLimit;
       // Return the most recent 'limit' steps
       const steps = timeline.slice(-limit).map(step => ({
         id: step.id,

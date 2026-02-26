@@ -1,4 +1,24 @@
-export function activate(api) {
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  defaultResultLimit: 5,
+  snippetLength: 500,
+  fallbackToKeywordSearch: true,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable semantic search', default: true },
+  { key: 'defaultResultLimit', label: 'Default Result Limit', type: 'number', description: 'Default maximum number of search results to return', default: 5 },
+  { key: 'snippetLength', label: 'Snippet Length', type: 'number', description: 'Maximum character length of document snippets sent to the AI for ranking', default: 500 },
+  { key: 'fallbackToKeywordSearch', label: 'Fallback to Keyword Search', type: 'boolean', description: 'Fall back to keyword matching if AI ranking fails', default: true },
+];
+
+export async function activate(api) {
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'semantic-search', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
+
   api.tools.register({
     name: 'store_content',
     description: 'Store a document or information in the knowledge base for semantic search',
@@ -13,6 +33,9 @@ export function activate(api) {
     useOriginalName: true,
     surfaceSafe: true,
     handler: async ({ id, content }) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'Semantic search plugin is disabled' };
+      }
       const docIds = await api.storage.get('semantic_doc_ids') || [];
       if (!docIds.includes(id)) {
         docIds.push(id);
@@ -30,13 +53,19 @@ export function activate(api) {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'The semantic query or concept to search for' },
-        limit: { type: 'number', description: 'Maximum number of results to return (default: 5)' }
+        limit: { type: 'number', description: 'Maximum number of results to return (default: from settings)' }
       },
       required: ['query']
     },
     useOriginalName: true,
     surfaceSafe: true,
-    handler: async ({ query, limit = 5 }) => {
+    handler: async ({ query, limit }) => {
+      if (!pluginSettings.enabled) {
+        return { results: [], message: 'Semantic search plugin is disabled' };
+      }
+
+      const resultLimit = limit || pluginSettings.defaultResultLimit;
+      const snippetLen = pluginSettings.snippetLength;
       const docIds = await api.storage.get('semantic_doc_ids') || [];
       if (docIds.length === 0) {
         return { results: [], message: 'Knowledge base is empty' };
@@ -60,9 +89,9 @@ export function activate(api) {
 Query: "${query}"
 
 Documents:
-${docs.map(d => `--- Document ID: ${d.id} ---\n${d.content.substring(0, 500)}...\n`).join('\n')}
+${docs.map(d => `--- Document ID: ${d.id} ---\n${d.content.substring(0, snippetLen)}...\n`).join('\n')}
 
-Task: Analyze the documents and return a JSON array of the top ${limit} most relevant document IDs, ordered by relevance. If none are relevant, return an empty array.
+Task: Analyze the documents and return a JSON array of the top ${resultLimit} most relevant document IDs, ordered by relevance. If none are relevant, return an empty array.
 Format strictly as JSON array of strings: ["id1", "id2"]`;
 
       try {
@@ -80,20 +109,22 @@ Format strictly as JSON array of strings: ["id1", "id2"]`;
         } catch (e) {
           console.error('[semantic-search] Failed to parse AI response as JSON:', aiResponse);
           // Fallback to naive keyword match if AI fails to return JSON
-          const keywords = query.toLowerCase().split(' ');
-          rankedIds = docs
-            .map(d => {
-              const score = keywords.reduce((acc, kw) => acc + (d.content.toLowerCase().includes(kw) ? 1 : 0), 0);
-              return { id: d.id, score };
-            })
-            .filter(d => d.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map(d => d.id);
+          if (pluginSettings.fallbackToKeywordSearch) {
+            const keywords = query.toLowerCase().split(' ');
+            rankedIds = docs
+              .map(d => {
+                const score = keywords.reduce((acc, kw) => acc + (d.content.toLowerCase().includes(kw) ? 1 : 0), 0);
+                return { id: d.id, score };
+              })
+              .filter(d => d.score > 0)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, resultLimit)
+              .map(d => d.id);
+          }
         }
 
         const results = rankedIds
-          .slice(0, limit)
+          .slice(0, resultLimit)
           .map(id => docs.find(d => d.id === id))
           .filter(Boolean);
 
@@ -103,6 +134,7 @@ Format strictly as JSON array of strings: ["id1", "id2"]`;
       }
     }
   });
+
 }
 
 export function deactivate(api) {

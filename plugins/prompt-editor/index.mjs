@@ -1,4 +1,22 @@
-export function activate(api) {
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  maxChains: 100,
+  broadcastExecution: true,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable prompt editor', default: true },
+  { key: 'maxChains', label: 'Max Chains', type: 'number', description: 'Maximum number of prompt chains to store', default: 100 },
+  { key: 'broadcastExecution', label: 'Broadcast Execution', type: 'boolean', description: 'Broadcast WS events during chain execution', default: true },
+];
+
+export async function activate(api) {
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'prompt-editor', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
+
   // ChainManager using api.storage
   class ChainManager {
     async initialize() {
@@ -19,6 +37,9 @@ export function activate(api) {
     async saveChain(id, config) {
       const chains = await this.listChains();
       if (!chains.includes(id)) {
+        if (chains.length >= (pluginSettings.maxChains || 100)) {
+          throw new Error(`Maximum chain limit (${pluginSettings.maxChains}) reached`);
+        }
         chains.push(id);
         await api.storage.set('chains_index', chains);
       }
@@ -29,8 +50,6 @@ export function activate(api) {
       const chains = await this.listChains();
       const newChains = chains.filter(c => c !== id);
       await api.storage.set('chains_index', newChains);
-      // We could delete the specific key, but api.storage might not have a delete method.
-      // We can just set it to null.
       await api.storage.set(`chain:${id}`, null);
     }
   }
@@ -58,6 +77,10 @@ export function activate(api) {
   });
 
   api.ws.register('prompt-editor:execute-chain', async (payload) => {
+    if (!pluginSettings.enabled) {
+      return { success: false, error: 'Prompt Editor plugin is disabled' };
+    }
+
     const { id, input } = payload;
     const config = await chainManager.getChain(id);
     if (!config) throw new Error('Chain not found');
@@ -75,28 +98,34 @@ export function activate(api) {
       }
     }
 
-    api.ws.broadcast('chain-execution-update', { type: 'node-start', nodeId: startPrompt.name, timestamp: Date.now() });
+    if (pluginSettings.broadcastExecution) {
+      api.ws.broadcast('chain-execution-update', { type: 'node-start', nodeId: startPrompt.name, timestamp: Date.now() });
+    }
     
     try {
       // Use api.ai.ask instead of workflow runner
       const fullPrompt = `System: ${systemPrompt}\n\nUser: ${userPrompt}`;
       const result = await api.ai.ask(fullPrompt, { system: systemPrompt });
       
-      api.ws.broadcast('chain-execution-update', { 
-        type: 'node-complete', 
-        nodeId: startPrompt.name, 
-        result: { response: result },
-        timestamp: Date.now() 
-      });
+      if (pluginSettings.broadcastExecution) {
+        api.ws.broadcast('chain-execution-update', { 
+          type: 'node-complete', 
+          nodeId: startPrompt.name, 
+          result: { response: result },
+          timestamp: Date.now() 
+        });
+      }
       
       return { success: true, result: { response: result } };
     } catch (error) {
-      api.ws.broadcast('chain-execution-update', { 
-        type: 'node-error', 
-        nodeId: startPrompt.name, 
-        error: error.message,
-        timestamp: Date.now() 
-      });
+      if (pluginSettings.broadcastExecution) {
+        api.ws.broadcast('chain-execution-update', { 
+          type: 'node-error', 
+          nodeId: startPrompt.name, 
+          error: error.message,
+          timestamp: Date.now() 
+        });
+      }
       return { success: false, error: error.message };
     }
   });
@@ -163,6 +192,10 @@ export function activate(api) {
     useOriginalName: true,
     surfaceSafe: true,
     handler: async ({ id, input }) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, error: 'Prompt Editor plugin is disabled' };
+      }
+
       const config = await chainManager.getChain(id);
       if (!config) throw new Error('Chain not found');
 

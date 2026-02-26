@@ -1,6 +1,21 @@
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  autoCapture: true,
+  observationLabelLength: 20,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable canvas visualization', default: true },
+  { key: 'autoCapture', label: 'Auto-Capture Observations', type: 'boolean', description: 'Automatically add DSN observations as graph nodes', default: true },
+  { key: 'observationLabelLength', label: 'Observation Label Length', type: 'number', description: 'Max characters for auto-generated observation node labels', default: 20 },
+];
+
 class CanvasService {
-  constructor(api) {
+  constructor(api, settings) {
     this.api = api;
+    this.settings = settings;
     this.nodes = new Map();
     this.edges = new Map();
   }
@@ -12,8 +27,10 @@ class CanvasService {
     if (this.api.events && this.api.events.onSystem) {
         this.api.events.onSystem('dsn:observation', (obs) => {
             try {
+                if (!this.settings.autoCapture) return;
                 if (obs && obs.content) {
-                    const node = { id: `obs-${Date.now()}`, label: obs.content.substring(0, 20) };
+                    const labelLen = this.settings.observationLabelLength || 20;
+                    const node = { id: `obs-${Date.now()}`, label: obs.content.substring(0, labelLen) };
                     this.addNode(node);
                 }
             } catch (e) {
@@ -40,7 +57,15 @@ class CanvasService {
 
 export async function activate(api) {
   console.log('[Canvas Viz] Activating...');
-  const service = new CanvasService(api);
+
+  let service;
+
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'canvas-viz', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+    () => { if (service) Object.assign(service.settings, pluginSettings); }
+  );
+
+  service = new CanvasService(api, pluginSettings);
   service.register();
   
   api.tools.register({
@@ -58,6 +83,10 @@ export async function activate(api) {
       required: ['description']
     },
     handler: async ({ description }) => {
+      if (!pluginSettings.enabled) {
+        return 'Canvas Viz plugin is disabled.';
+      }
+
       const prompt = `
       Create a JavaScript class that extends 'CanvasVisualization' to render: ${description}.
       

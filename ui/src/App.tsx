@@ -40,6 +40,7 @@ import { useWorkspaceState } from './hooks/useWorkspaceState';
 import { useUIState } from './hooks/useUIState';
 import { useMessageActions } from './hooks/useMessageActions';
 import { useSendHandler } from './hooks/useSendHandler';
+import { usePlugins } from './hooks/usePlugins';
 import { globalActions, inlineCommands } from './constants/commands';
 
 function App() {
@@ -72,6 +73,7 @@ function App() {
   const { isFirstRun, isLoading: setupLoading } = useSetupWizard();
 
   const skills = useSkills();
+  const { uiManifest } = usePlugins();
 
   // Task Manager for running task count
   const { tasks } = useTaskManager();
@@ -321,6 +323,7 @@ function App() {
           projectStatus={projectStatus}
           fileTree={fileTree}
           surfaces={surfaces}
+          pluginSidebarSections={uiManifest.sidebarSections}
           onFileClick={tabManager.handleFileClick}
           onSurfaceClick={tabManager.handleSurfaceClick}
           onSurfaceRename={renameSurface}

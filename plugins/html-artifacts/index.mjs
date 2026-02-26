@@ -1,4 +1,24 @@
-export function activate(api) {
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  defaultType: 'html',
+  maxArtifactSizeKB: 512,
+  broadcastOnSave: true,
+};
+
+const SETTINGS_SCHEMA = [
+  { key: 'enabled', label: 'Enabled', type: 'boolean', description: 'Enable or disable HTML artifact rendering', default: true },
+  { key: 'defaultType', label: 'Default Artifact Type', type: 'select', description: 'Default type for new artifacts', default: 'html', options: ['html', 'react'] },
+  { key: 'maxArtifactSizeKB', label: 'Max Artifact Size (KB)', type: 'number', description: 'Maximum size in KB for saved artifacts', default: 512 },
+  { key: 'broadcastOnSave', label: 'Broadcast on Save', type: 'boolean', description: 'Broadcast a WS event when an artifact is saved', default: true },
+];
+
+export async function activate(api) {
+  const { pluginSettings } = await registerSettingsHandlers(
+    api, 'html-artifacts', DEFAULT_SETTINGS, SETTINGS_SCHEMA
+  );
+
   api.tools.register({
     name: 'save_artifact',
     description: 'Save an HTML/React artifact for preview',
@@ -14,9 +34,18 @@ export function activate(api) {
     useOriginalName: true,
     surfaceSafe: true,
     handler: async (args) => {
+      if (!pluginSettings.enabled) {
+        return { success: false, message: 'HTML Artifacts plugin is disabled' };
+      }
+      const maxBytes = (pluginSettings.maxArtifactSizeKB || 512) * 1024;
+      if (args.content && args.content.length > maxBytes) {
+        return { success: false, message: `Artifact exceeds max size of ${pluginSettings.maxArtifactSizeKB} KB` };
+      }
       await api.storage.set(`artifact:${args.id}`, args);
       // Broadcast to any connected surface/clients
-      api.ws.broadcast('html-artifacts:saved', { id: args.id, type: args.type });
+      if (pluginSettings.broadcastOnSave) {
+        api.ws.broadcast('html-artifacts:saved', { id: args.id, type: args.type });
+      }
       return { success: true, id: args.id, message: 'Artifact saved successfully' };
     }
   });
@@ -44,13 +73,16 @@ export function activate(api) {
 
   api.ws.register('html-artifacts:save', async (payload) => {
     await api.storage.set(`artifact:${payload.id}`, payload);
-    api.ws.broadcast('html-artifacts:saved', { id: payload.id, type: payload.type });
+    if (pluginSettings.broadcastOnSave) {
+      api.ws.broadcast('html-artifacts:saved', { id: payload.id, type: payload.type });
+    }
     return { success: true };
   });
 
   api.ws.register('html-artifacts:load', async (payload) => {
     return await api.storage.get(`artifact:${payload.id}`);
   });
+
 }
 
 export function deactivate(api) {

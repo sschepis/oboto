@@ -16,8 +16,63 @@ import { randomUUID } from 'crypto';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 
 const execFileAsync = promisify(execFile);
+
+// ── Settings ─────────────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+    executionTimeout: 10000,
+    sessionTimeout: 3600000,
+    maxMemory: '512m',
+    maxCpus: 1.0,
+    allowFallbackExecution: false,
+};
+
+const SETTINGS_SCHEMA = [
+    {
+        key: 'executionTimeout',
+        label: 'Execution Timeout (ms)',
+        type: 'number',
+        description: 'Maximum time in milliseconds for a single code execution.',
+        default: 10000,
+        min: 1000,
+        max: 300000,
+    },
+    {
+        key: 'sessionTimeout',
+        label: 'Session Timeout (ms)',
+        type: 'number',
+        description: 'Idle time in milliseconds before a session is automatically cleaned up.',
+        default: 3600000,
+        min: 60000,
+        max: 86400000,
+    },
+    {
+        key: 'maxMemory',
+        label: 'Max Memory (Docker)',
+        type: 'text',
+        description: 'Docker container memory limit (e.g. "512m", "1g").',
+        default: '512m',
+    },
+    {
+        key: 'maxCpus',
+        label: 'Max CPUs (Docker)',
+        type: 'number',
+        description: 'Docker container CPU limit.',
+        default: 1.0,
+        min: 0.1,
+        max: 8,
+    },
+    {
+        key: 'allowFallbackExecution',
+        label: 'Allow Fallback Execution',
+        type: 'boolean',
+        description: 'Allow code execution directly on the host when Docker is unavailable (less secure).',
+        default: false,
+    },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -36,22 +91,22 @@ async function execSafe(cmd, args, options = {}) {
 // ── CodeInterpreter core ─────────────────────────────────────────────────
 
 class CodeInterpreter {
-    constructor(api) {
+    constructor(api, settings = {}) {
         this.api = api;
         this.sessions = new Map();
         this.dockerAvailable = false;
 
-        // Limits
-        this.maxMemory = '512m';
-        this.maxCpus = 1.0;
-        this.defaultTimeout = 10000;   // 10 s
-        this.sessionTimeout = 3600000; // 1 h
+        // Limits — sourced from plugin settings
+        this.maxMemory = settings.maxMemory || '512m';
+        this.maxCpus = settings.maxCpus ?? 1.0;
+        this.defaultTimeout = settings.executionTimeout || 10000;
+        this.sessionTimeout = settings.sessionTimeout || 3600000;
+        this.allowFallback = settings.allowFallbackExecution ?? false;
         this.cleanupInterval = null;
     }
 
     async init() {
         this.dockerAvailable = await this.checkDocker();
-        this.allowFallback = await this.api.settings.get('allowFallbackExecution', false);
         console.log(`[code-interpreter] Docker available: ${this.dockerAvailable}, fallback allowed: ${this.allowFallback}`);
 
         this.cleanupInterval = setInterval(() => this.cleanupSessions(), 60000);
@@ -288,17 +343,36 @@ class CodeInterpreter {
 // NOTE: Plugin state is stored on the `api` object rather than in a module-level
 // variable. This ensures that when the plugin is reloaded (which creates a new
 // ES module instance due to cache-busting), the old module's `deactivate()` can
-// still reference and clean up the interpreter via `api._pluginInstance`, and the
+// still reference and clean up the interpreter via `api.setInstance()/getInstance()`, and the
 // new module starts fresh.
 
 export async function activate(api) {
     console.log('[code-interpreter] Activating...');
 
-    const interpreter = new CodeInterpreter(api);
+    // Pre-create instance object to avoid race condition with onSettingsChange callback
+    const instanceState = { interpreter: null, settings: null };
+    api.setInstance(instanceState);
+
+    let interpreter;
+
+    const { pluginSettings } = await registerSettingsHandlers(
+        api, 'code-interpreter', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
+        (newSettings) => {
+            if (!interpreter) return; // not yet initialized
+            if (newSettings.executionTimeout !== undefined) interpreter.defaultTimeout = newSettings.executionTimeout;
+            if (newSettings.sessionTimeout !== undefined) interpreter.sessionTimeout = newSettings.sessionTimeout;
+            if (newSettings.maxMemory !== undefined) interpreter.maxMemory = newSettings.maxMemory;
+            if (newSettings.maxCpus !== undefined) interpreter.maxCpus = newSettings.maxCpus;
+            if (newSettings.allowFallbackExecution !== undefined) interpreter.allowFallback = newSettings.allowFallbackExecution;
+            instanceState.settings = pluginSettings;
+        }
+    );
+
+    interpreter = new CodeInterpreter(api, pluginSettings);
     await interpreter.init();
 
-    // Store instance on api so deactivate() can access it even after ESM reload
-    api._pluginInstance = interpreter;
+    instanceState.interpreter = interpreter;
+    instanceState.settings = pluginSettings;
 
     // ── Tool: create session ─────────────────────────────────────────────
     api.tools.register({
@@ -431,8 +505,8 @@ export async function activate(api) {
 
 export async function deactivate(api) {
     console.log('[code-interpreter] Deactivating...');
-    if (api._pluginInstance) {
-        api._pluginInstance.destroy();
-        api._pluginInstance = null;
+    if (api.getInstance()?.interpreter) {
+        api.getInstance().interpreter.destroy();
     }
+    api.setInstance(null);
 }

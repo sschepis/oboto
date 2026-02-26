@@ -3,6 +3,8 @@
 // ctx.cloudSync may be null if cloud is not configured.
 
 import { wsSend } from '../../lib/ws-utils.mjs';
+import { setProviderEnabled } from '../../config.mjs';
+import { fetchModelsForProvider } from '../../core/model-registry.mjs';
 
 /** Send a cloud:error to the requesting client */
 function sendCloudError(ws, message) {
@@ -36,6 +38,14 @@ export const handlers = {
             const status = ctx.cloudSync.getStatus();
             wsSend(ctx.ws, 'cloud:login-result', { success: true, ...status });
             ctx.broadcast('cloud:status', status);
+
+            // Auto-enable the cloud AI provider on successful login
+            setProviderEnabled('cloud', true);
+            // Fetch cloud models so they appear in the model registry
+            fetchModelsForProvider('cloud').catch(err => {
+                console.warn(`[cloud-handler] Failed to fetch cloud models after login: ${err.message}`);
+                wsSend(ctx.ws, 'cloud:error', { error: `Cloud models couldn't be loaded: ${err.message}. Try refreshing the model list.` });
+            });
         } catch (err) {
             wsSend(ctx.ws, 'cloud:login-result', { success: false, error: err.message });
         }
@@ -45,6 +55,8 @@ export const handlers = {
         if (!ctx.cloudSync) return;
         try {
             await ctx.cloudSync.logout();
+            // Disable the cloud AI provider on logout
+            setProviderEnabled('cloud', false);
             ctx.broadcast('cloud:status', ctx.cloudSync.getStatus());
         } catch (err) {
             sendCloudError(ctx.ws, `Logout failed: ${err.message}`);
@@ -304,6 +316,32 @@ export const handlers = {
             });
         } catch (err) {
             wsSend(ctx.ws, 'cloud:task-failed', { agentSlug, error: err.message });
+        }
+    },
+
+    // ── Cloud AI Provider ──────────────────────────────────────────────────
+
+    'cloud:get-usage': async (data, ctx) => {
+        if (!ctx.cloudSync?.isLoggedIn()) {
+            return wsSend(ctx.ws, 'cloud:usage', { tokens_used: 0, daily_limit: 0, remaining: 0, tier: 'free', period: new Date().toISOString().slice(0, 10), is_unlimited: false });
+        }
+        try {
+            const usage = await ctx.cloudSync.getUsage();
+            wsSend(ctx.ws, 'cloud:usage', usage);
+        } catch (err) {
+            sendCloudError(ctx.ws, `Failed to get usage: ${err.message}`);
+        }
+    },
+
+    'cloud:list-models': async (data, ctx) => {
+        if (!ctx.cloudSync?.isLoggedIn()) {
+            return wsSend(ctx.ws, 'cloud:models', []);
+        }
+        try {
+            const models = await ctx.cloudSync.listCloudModels();
+            wsSend(ctx.ws, 'cloud:models', models || []);
+        } catch (err) {
+            sendCloudError(ctx.ws, `Failed to list cloud models: ${err.message}`);
         }
     },
 };
