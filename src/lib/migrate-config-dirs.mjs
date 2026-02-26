@@ -15,6 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const OLD_WORKSPACE_DIR = '.ai-man';
 const NEW_WORKSPACE_DIR = '.oboto';
@@ -67,7 +68,7 @@ function safeRename(oldPath, newPath) {
         if (err.code === 'EXDEV') {
             // Cross-device rename not supported — contents already copied,
             // leave the old directory in place rather than crashing.
-            console.warn(`[migrate] Cannot rename across devices; old path preserved: ${oldPath}`);
+            consoleStyler.log('warning', `Cannot rename across devices; old path preserved: ${oldPath}`);
         } else {
             throw err;
         }
@@ -91,10 +92,10 @@ export function migrateWorkspaceConfig(workspaceDir) {
         mergeDirs(oldDir, newDir);
         // Rename old dir so we don't migrate twice
         safeRename(oldDir, oldDir + '.migrated');
-        console.log(`[migrate] Moved workspace config ${oldDir} → ${newDir}`);
+        consoleStyler.log('migration', `Moved workspace config ${oldDir} → ${newDir}`);
         return true;
     } catch (err) {
-        console.warn(`[migrate] Failed to migrate workspace config: ${err.message}`);
+        consoleStyler.log('warning', `Failed to migrate workspace config: ${err.message}`);
         return false;
     }
 }
@@ -114,10 +115,10 @@ export function migrateGlobalConfig() {
         try {
             mergeDirs(OLD_GLOBAL_AI_MAN, NEW_GLOBAL_DIR);
             safeRename(OLD_GLOBAL_AI_MAN, OLD_GLOBAL_AI_MAN + '.migrated');
-            console.log(`[migrate] Moved global config ${OLD_GLOBAL_AI_MAN} → ${NEW_GLOBAL_DIR}`);
+            consoleStyler.log('migration', `Moved global config ${OLD_GLOBAL_AI_MAN} → ${NEW_GLOBAL_DIR}`);
             migrated = true;
         } catch (err) {
-            console.warn(`[migrate] Failed to migrate ${OLD_GLOBAL_AI_MAN}: ${err.message}`);
+            consoleStyler.log('warning', `Failed to migrate ${OLD_GLOBAL_AI_MAN}: ${err.message}`);
         }
     }
 
@@ -126,10 +127,10 @@ export function migrateGlobalConfig() {
         try {
             mergeDirs(OLD_GLOBAL_DIR, NEW_GLOBAL_DIR);
             safeRename(OLD_GLOBAL_DIR, OLD_GLOBAL_DIR + '.migrated');
-            console.log(`[migrate] Moved global config ${OLD_GLOBAL_DIR} → ${NEW_GLOBAL_DIR}`);
+            consoleStyler.log('migration', `Moved global config ${OLD_GLOBAL_DIR} → ${NEW_GLOBAL_DIR}`);
             migrated = true;
         } catch (err) {
-            console.warn(`[migrate] Failed to migrate ${OLD_GLOBAL_DIR}: ${err.message}`);
+            consoleStyler.log('warning', `Failed to migrate ${OLD_GLOBAL_DIR}: ${err.message}`);
         }
     }
 
@@ -157,10 +158,10 @@ export function migrateSecretsFile(projectRoot) {
         }
         fs.copyFileSync(legacyPath, newPath);
         safeRename(legacyPath, legacyPath + '.migrated');
-        console.log(`[migrate] Moved secrets vault ${legacyPath} → ${newPath}`);
+        consoleStyler.log('migration', `Moved secrets vault ${legacyPath} → ${newPath}`);
         return true;
     } catch (err) {
-        console.warn(`[migrate] Failed to migrate secrets file: ${err.message}`);
+        consoleStyler.log('warning', `Failed to migrate secrets file: ${err.message}`);
         return false;
     }
 }

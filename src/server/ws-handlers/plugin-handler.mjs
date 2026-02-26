@@ -13,6 +13,7 @@
  */
 
 import { validateSettings } from '../../plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 /**
  * Resolve the PluginManager from the WS context.
@@ -302,7 +303,7 @@ export const handlers = {
                 dispatchedOk = true;
             } catch (err) {
                 // Plugin may not have registered an update-settings handler.
-                console.warn(`[plugin:set-settings] Failed to dispatch ${updateType}: ${err.message}`);
+                consoleStyler.log('warning', `🔌 Failed to dispatch ${updateType}: ${err.message}`);
             }
         }
 

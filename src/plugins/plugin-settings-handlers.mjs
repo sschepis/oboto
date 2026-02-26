@@ -1,3 +1,5 @@
+import { consoleStyler } from '../ui/console-styler.mjs';
+
 /**
  * Shared plugin settings handler utility.
  *
@@ -105,7 +107,7 @@ export function validateSettings(newSettings, schema) {
                 } else if (typeof value === 'number' || typeof value === 'boolean') {
                     validated[key] = value;
                 } else {
-                    console.warn(`[plugin-settings] Dropping non-primitive value for unknown schema type '${entry.type}', key '${key}'`);
+                    consoleStyler.log('plugin', `Dropping non-primitive value for unknown schema type '${entry.type}', key '${key}'`);
                 }
                 break;
             }
@@ -199,7 +201,7 @@ export async function registerSettingsHandlers(api, pluginName, defaultSettings,
             try {
                 onSettingsChange(validatedSettings, merged);
             } catch (err) {
-                console.error(`[${pluginName}] onSettingsChange callback error:`, err);
+                consoleStyler.logError('error', `[${pluginName}] onSettingsChange callback error: ${err.message}`, err);
             }
         }
 

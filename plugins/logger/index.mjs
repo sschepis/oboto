@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ const SETTINGS_SCHEMA = [
 ];
 
 export async function activate(api) {
-  console.log('[System Logger] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   const { pluginSettings } = await registerSettingsHandlers(
     api, 'logger', DEFAULT_SETTINGS, SETTINGS_SCHEMA
@@ -117,9 +118,9 @@ export async function activate(api) {
     });
   });
 
-  console.log('[System Logger] Activated.');
+  consoleStyler.log('plugin', 'Activated.');
 }
 
 export function deactivate(api) {
-  console.log('[System Logger] Deactivated.');
+  consoleStyler.log('plugin', 'Deactivated.');
 }

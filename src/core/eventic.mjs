@@ -1,8 +1,10 @@
 /**
  * Eventic Core Engine
- * 
+ *
  * Provides an event-driven agent loop with pluggable backends and tools.
  */
+
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 // --- Base Interface Definitions (Conceptual) ---
 // AI Provider: { ask(prompt, options), clearHistory() }
@@ -33,8 +35,8 @@ export class Eventic {
         this.tools = new Map(Object.entries(options.tools || {}));
         this.handlers = new Map();
         
-        // Setup logger (defaults to no-op if disabled, or console.log)
-        this.logHandlers = options.logHandlers || [console.log];
+        // Setup logger (defaults to no-op if disabled, or consoleStyler)
+        this.logHandlers = options.logHandlers || [(msg) => consoleStyler.log('system', msg)];
     }
 
     log(message) {

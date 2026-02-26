@@ -5,6 +5,7 @@
  */
 
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -25,7 +26,7 @@ const SETTINGS_SCHEMA = [
  * @param {import('../../src/plugins/plugin-api.mjs').PluginAPI} api
  */
 export async function activate(api) {
-    console.log(`[hello-world] Plugin activated!`);
+    consoleStyler.log('plugin', 'Plugin activated!');
 
     const { pluginSettings } = await registerSettingsHandlers(
         api, 'hello-world', DEFAULT_SETTINGS, SETTINGS_SCHEMA
@@ -72,11 +73,11 @@ export async function activate(api) {
     // ── Listen for system events ────────────────────────────────────────
     api.events.onSystem('chat:message', (data) => {
         if (pluginSettings.logChatMessages) {
-            console.log(`[hello-world] Chat message received:`, data?.content?.substring(0, 50));
+            consoleStyler.log('plugin', `Chat message received: ${data?.content?.substring(0, 50)}`);
         }
     });
 
-    console.log(`[hello-world] Initialization complete. Welcome: ${pluginSettings.welcomeMessage}`);
+    consoleStyler.log('plugin', `Initialization complete. Welcome: ${pluginSettings.welcomeMessage}`);
 }
 
 /**
@@ -84,7 +85,7 @@ export async function activate(api) {
  * @param {import('../../src/plugins/plugin-api.mjs').PluginAPI} api
  */
 export async function deactivate(api) {
-    console.log(`[hello-world] Plugin deactivated. Goodbye!`);
+    consoleStyler.log('plugin', 'Plugin deactivated. Goodbye!');
     // Note: The plugin system automatically cleans up registered tools, WS handlers,
     // and event listeners — no manual cleanup needed here.
 }

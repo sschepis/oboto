@@ -2,6 +2,8 @@
 // Handles login, logout, token refresh, and token caching via SecretsManager.
 // Zero cloud SDK dependencies — uses CloudClient (native fetch) for all HTTP.
 
+import { consoleStyler } from '../ui/console-styler.mjs';
+
 const REFRESH_TOKEN_KEY = 'OBOTO_CLOUD_REFRESH_TOKEN';
 const REFRESH_BUFFER_SECONDS = 60; // Refresh 60s before expiry
 
@@ -226,7 +228,7 @@ export class CloudAuth {
             }
         } catch (err) {
             // Profile fetch is non-critical — log but continue
-            console.warn(`[CloudAuth] Failed to fetch profile: ${err.message}`);
+            consoleStyler.log('cloud', `Failed to fetch profile: ${err.message}`);
         }
 
         // Fetch org membership
@@ -241,7 +243,7 @@ export class CloudAuth {
             }
         } catch (err) {
             // Org fetch is non-critical
-            console.warn(`[CloudAuth] Failed to fetch organization: ${err.message}`);
+            consoleStyler.log('cloud', `Failed to fetch organization: ${err.message}`);
         }
     }
 
@@ -261,7 +263,7 @@ export class CloudAuth {
             try {
                 await this.refresh();
             } catch (err) {
-                console.warn(`[CloudAuth] Token refresh failed: ${err.message}`);
+                consoleStyler.log('cloud', `Token refresh failed: ${err.message}`);
                 if (this.eventBus) {
                     this.eventBus.emitTyped('cloud:auth:error', {
                         error: `Token refresh failed: ${err.message}`,
@@ -301,7 +303,7 @@ export class CloudAuth {
                 'Oboto Cloud refresh token (auto-managed)'
             );
         } catch (err) {
-            console.warn(`[CloudAuth] Failed to cache refresh token: ${err.message}`);
+            consoleStyler.log('cloud', `Failed to cache refresh token: ${err.message}`);
         }
     }
 

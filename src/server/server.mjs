@@ -1,6 +1,7 @@
 import express from 'express';
 import { AiMan } from '../lib/index.mjs';
 import bodyParser from 'body-parser';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 export function createServer(config = {}) {
     const app = express();
@@ -84,6 +85,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const port = process.env.PORT || 3000;
     const app = createServer();
     app.listen(port, () => {
-        console.log(`Oboto server running on http://localhost:${port}`);
+        consoleStyler.log('system', `Server running on http://localhost:${port}`);
     });
 }

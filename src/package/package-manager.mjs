@@ -5,6 +5,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const execPromise = util.promisify(exec);
 
@@ -52,7 +53,7 @@ export class PackageManager {
         } catch (error) {
             // Don't log error for compatibility skips
             if (!error.message.startsWith('COMPATIBILITY_SKIP:')) {
-                console.error(`\x1b[31m[SYSTEM] Failed to install package '${packageName}': ${error.message}\x1b[0m`);
+                consoleStyler.log('error', `Failed to install package '${packageName}': ${error.message}`);
                 
                 // Enhanced Node.js compatibility detection
                 if (error.message.includes('File is not defined') ||
@@ -60,8 +61,8 @@ export class PackageManager {
                     error.message.includes('webidl') ||
                     error.stdout?.includes('File is not defined') ||
                     error.stderr?.includes('File is not defined')) {
-                    console.log(`\x1b[33m[SYSTEM] Node.js v${this.nodeMajorVersion} compatibility issue detected with ${packageName}\x1b[0m`);
-                    console.log(`\x1b[33m[SYSTEM] Skipping ${packageName} - will use built-in alternatives (fetch, fs, etc.)\x1b[0m`);
+                    consoleStyler.log('warning', `Node.js v${this.nodeMajorVersion} compatibility issue detected with ${packageName}`);
+                    consoleStyler.log('warning', `Skipping ${packageName} - will use built-in alternatives (fetch, fs, etc.)`);
                     throw new Error(`COMPATIBILITY_SKIP: ${packageName} incompatible with Node.js v${this.nodeMajorVersion}`);
                 }
             }

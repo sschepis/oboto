@@ -9,6 +9,7 @@
 
 import { PluginLoader } from './plugin-loader.mjs';
 import { createPluginAPI } from './plugin-api.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -140,7 +141,7 @@ export class PluginManager {
             // Discover plugins
             const initStart = Date.now();
             const discovered = await this.loader.discover();
-            console.log(`[PluginManager] Discovered ${discovered.length} plugin(s)`);
+            consoleStyler.log('plugin', `Discovered ${discovered.length} plugin(s)`);
 
             // Register all discovered plugins
             const toActivate = [];
@@ -157,7 +158,7 @@ export class PluginManager {
                 // Skip disabled plugins
                 if (this._disabledPlugins.has(plugin.name)) {
                     this.plugins.get(plugin.name).status = 'disabled';
-                    console.log(`[PluginManager] Skipping disabled plugin: ${plugin.name}`);
+                    consoleStyler.log('plugin', `Skipping disabled plugin: ${plugin.name}`);
                     continue;
                 }
 
@@ -172,7 +173,7 @@ export class PluginManager {
                     const success = await this._activatePlugin(name);
                     const elapsed = Date.now() - startTime;
                     if (elapsed > 1000) {
-                        console.warn(`[PluginManager] ⚠ Slow activation: ${name} took ${elapsed}ms`);
+                        consoleStyler.log('warning', `Slow activation: ${name} took ${elapsed}ms`);
                     }
                     return { name, success, elapsed };
                 })
@@ -182,7 +183,7 @@ export class PluginManager {
             // has its own try/catch, but guards against truly unexpected errors)
             for (const r of results) {
                 if (r.status === 'rejected') {
-                    console.error(`[PluginManager] Unexpected activation rejection:`, r.reason?.message || r.reason);
+                    consoleStyler.log('error', `Unexpected activation rejection: ${r.reason?.message || r.reason}`);
                 }
             }
 
@@ -190,13 +191,10 @@ export class PluginManager {
             const failed = toActivate.length - succeeded;
 
             const totalElapsed = Date.now() - initStart;
-            console.log(
-                `[PluginManager] Initialization complete in ${totalElapsed}ms ` +
-                `(${succeeded} active, ${failed} failed, ${this._disabledPlugins.size} disabled)`
-            );
+            consoleStyler.log('plugin', `Initialization complete in ${totalElapsed}ms (${succeeded} active, ${failed} failed, ${this._disabledPlugins.size} disabled)`);
             this._initialized = true;
         } catch (err) {
-            console.error(`[PluginManager] Initialization error:`, err.message);
+            consoleStyler.log('error', `Plugin initialization error: ${err.message}`);
         }
     }
 
@@ -209,7 +207,7 @@ export class PluginManager {
     async _activatePlugin(name) {
         const instance = this.plugins.get(name);
         if (!instance) {
-            console.warn(`[PluginManager] Plugin not found: ${name}`);
+            consoleStyler.log('warning', `Plugin not found: ${name}`);
             return false;
         }
 
@@ -255,7 +253,7 @@ export class PluginManager {
             }
 
             instance.status = 'active';
-            console.log(`[PluginManager] ✓ Activated: ${name} (${instance.discovered.source})`);
+            consoleStyler.log('plugin', `Activated: ${name} (${instance.discovered.source})`);
 
             // Emit event
             if (this._deps.eventBus) {
@@ -266,7 +264,7 @@ export class PluginManager {
         } catch (err) {
             instance.status = 'error';
             instance.error = err.message;
-            console.error(`[PluginManager] ✗ Failed to activate ${name}:`, err.message);
+            consoleStyler.log('error', `Failed to activate ${name}: ${err.message}`);
             return false;
         }
     }
@@ -331,7 +329,7 @@ export class PluginManager {
             instance.module = null;
             instance.api = null;
 
-            console.log(`[PluginManager] Deactivated: ${name}`);
+            consoleStyler.log('plugin', `Deactivated: ${name}`);
 
             if (this._deps.eventBus) {
                 this._deps.eventBus.emit('plugin:deactivated', { name });
@@ -339,7 +337,7 @@ export class PluginManager {
 
             return true;
         } catch (err) {
-            console.error(`[PluginManager] Error deactivating ${name}:`, err.message);
+            consoleStyler.log('error', `Error deactivating plugin ${name}: ${err.message}`);
             instance.status = 'error';
             instance.error = err.message;
             return false;
@@ -536,7 +534,7 @@ export class PluginManager {
             await fs.mkdir(dir, { recursive: true });
             await fs.writeFile(filePath, JSON.stringify(Array.from(this._disabledPlugins), null, 2), 'utf8');
         } catch (err) {
-            console.warn(`[PluginManager] Failed to save disabled list:`, err.message);
+            consoleStyler.log('warning', `Failed to save disabled plugin list: ${err.message}`);
         }
     }
 
@@ -552,7 +550,7 @@ export class PluginManager {
                 try {
                     await this.deactivatePlugin(name);
                 } catch (err) {
-                    console.error(`[PluginManager] Error shutting down ${name}:`, err.message);
+                    consoleStyler.log('error', `Error shutting down plugin ${name}: ${err.message}`);
                 }
             }
         }

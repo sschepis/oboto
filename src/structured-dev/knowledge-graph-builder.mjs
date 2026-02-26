@@ -1,5 +1,6 @@
 import path from 'path';
 import { FileTools } from '../tools/file-tools.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Builds a knowledge graph of the codebase.
@@ -75,7 +76,7 @@ export class KnowledgeGraphBuilder {
                 }
 
             } catch (e) {
-                console.error(`Failed to parse ${file}: ${e.message}`);
+                consoleStyler.log('error', `Failed to parse ${file}: ${e.message}`);
             }
         }
 

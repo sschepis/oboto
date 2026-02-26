@@ -23,6 +23,7 @@ import { useChat } from './hooks/useChat';
 import { useSurface } from './hooks/useSurface';
 import { useSecrets } from './hooks/useSecrets';
 import { SurfaceRenderer } from './components/features/SurfaceRenderer';
+import { SurfaceSourceViewer } from './components/features/SurfaceSourceViewer';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useTheme } from './hooks/useTheme';
 import { useDisplayNames } from './hooks/useDisplayNames';
@@ -369,6 +370,7 @@ function App() {
             onRenameConversation={renameConversation}
             onDeleteConversation={deleteConversation}
             onClearConversation={clearConversation}
+            onViewSource={tabManager.handleViewSource}
           />
 
           <div className="flex-1 flex min-h-0 min-w-0 relative">
@@ -459,6 +461,19 @@ function App() {
                   onDelete={() => {
                       tabManager.handleCloseTab(tab.id);
                   }}
+                />
+              </div>
+            ))}
+
+            {tabManager.tabs.filter(t => t.type === 'source-view').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <SurfaceSourceViewer
+                  surfaceId={tab.surfaceId!}
+                  data={loadedSurfaces[tab.surfaceId!] ?? null}
+                  sources={componentSources}
                 />
               </div>
             ))}

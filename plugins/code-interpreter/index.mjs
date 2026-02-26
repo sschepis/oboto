@@ -17,6 +17,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -107,7 +108,7 @@ class CodeInterpreter {
 
     async init() {
         this.dockerAvailable = await this.checkDocker();
-        console.log(`[code-interpreter] Docker available: ${this.dockerAvailable}, fallback allowed: ${this.allowFallback}`);
+        consoleStyler.log('plugin', `Docker available: ${this.dockerAvailable}, fallback allowed: ${this.allowFallback}`);
 
         this.cleanupInterval = setInterval(() => this.cleanupSessions(), 60000);
     }
@@ -347,7 +348,7 @@ class CodeInterpreter {
 // new module starts fresh.
 
 export async function activate(api) {
-    console.log('[code-interpreter] Activating...');
+    consoleStyler.log('plugin', 'Activating...');
 
     // Pre-create instance object to avoid race condition with onSettingsChange callback
     const instanceState = { interpreter: null, settings: null };
@@ -500,11 +501,11 @@ export async function activate(api) {
         }));
     });
 
-    console.log(`[code-interpreter] Activated (Docker: ${interpreter.dockerAvailable})`);
+    consoleStyler.log('plugin', `Activated (Docker: ${interpreter.dockerAvailable})`);
 }
 
 export async function deactivate(api) {
-    console.log('[code-interpreter] Deactivating...');
+    consoleStyler.log('plugin', 'Deactivating...');
     if (api.getInstance()?.interpreter) {
         api.getInstance().interpreter.destroy();
     }

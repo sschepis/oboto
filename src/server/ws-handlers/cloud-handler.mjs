@@ -5,6 +5,7 @@
 import { wsSend } from '../../lib/ws-utils.mjs';
 import { setProviderEnabled } from '../../config.mjs';
 import { fetchModelsForProvider } from '../../core/model-registry.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 /** Send a cloud:error to the requesting client */
 function sendCloudError(ws, message) {
@@ -43,7 +44,7 @@ export const handlers = {
             setProviderEnabled('cloud', true);
             // Fetch cloud models so they appear in the model registry
             fetchModelsForProvider('cloud').catch(err => {
-                console.warn(`[cloud-handler] Failed to fetch cloud models after login: ${err.message}`);
+                consoleStyler.log('warning', `☁️ Failed to fetch cloud models after login: ${err.message}`);
                 wsSend(ctx.ws, 'cloud:error', { error: `Cloud models couldn't be loaded: ${err.message}. Try refreshing the model list.` });
             });
         } catch (err) {

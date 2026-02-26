@@ -1,5 +1,7 @@
 import React from 'react';
 import { IComponentRegistry } from './types';
+// @ts-ignore - .mjs module (see console-styler.d.ts for types)
+import { consoleStyler } from '../console-styler.mjs';
 
 class ComponentRegistry implements IComponentRegistry {
   private components: Map<string, React.ComponentType<any>>;
@@ -10,7 +12,7 @@ class ComponentRegistry implements IComponentRegistry {
 
   register(name: string, component: React.ComponentType<any>): void {
     if (this.components.has(name)) {
-      console.warn(`Component ${name} already registered. Overwriting.`);
+      consoleStyler.log('warning', `Component ${name} already registered. Overwriting.`);
     }
     this.components.set(name, component);
   }

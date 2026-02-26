@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { buildMarkdownTable, parseMarkdownTable } from './markdown-utils.mjs';
 import { generateId } from './id-utils.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Base class providing common manifest file operations.
@@ -151,7 +152,7 @@ export class BaseManifest {
             // Append to snapshots section in the manifest
             await this._appendSnapshotLog(description, snapshotFilename);
         } catch (error) {
-            console.error(`Failed to create snapshot: ${error.message}`);
+            consoleStyler.log('error', `Failed to create snapshot: ${error.message}`);
         }
     }
 

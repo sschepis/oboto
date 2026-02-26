@@ -23,10 +23,14 @@ let tray = null;
 let preferences = null;
 let daemon = null;
 
+/** Track whether we should auto-open the browser on the next 'running' state. */
+let _pendingBrowserOpen = false;
+
 // ── Icon helpers ─────────────────────────────────────────────────────────
 
 function createTrayIcon() {
-    // Use the actual bot icon for the tray (not Template, so it shows in full colour)
+    // On macOS, use a monochrome white icon that blends with the menu bar.
+    // The @2x variant is automatically picked up by Electron for Retina displays.
     const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
     try {
         const icon = nativeImage.createFromPath(iconPath);
@@ -54,7 +58,11 @@ function createFallbackIcon() {
 
 function buildContextMenu() {
     const currentWorkspace = preferences.get('currentWorkspace');
-    const isRunning = daemon.isRunning();
+    // The daemon is considered usable once it reports 'running' state and has
+    // a live server process — this happens as soon as "Server running at" is
+    // detected in stdout, *before* the WS monitor connects.
+    const hasWorkspace = !!currentWorkspace;
+    const isRunning = daemon.state === 'running' && daemon.serverProcess !== null;
     const recentWorkspaces = preferences.getRecentWorkspaces();
     const port = preferences.get('port') || 3000;
 
@@ -72,7 +80,9 @@ function buildContextMenu() {
 
     const statusLabel = isRunning
         ? `Running — ${currentWorkspace || 'no workspace'}`
-        : 'Stopped';
+        : hasWorkspace
+            ? `Starting — ${currentWorkspace}`
+            : 'Stopped';
 
     const template = [
         { label: `Oboto: ${statusLabel}`, enabled: false },
@@ -93,22 +103,35 @@ function buildContextMenu() {
         },
         { type: 'separator' },
         {
-            label: 'Auto-start on Login',
-            type: 'checkbox',
-            checked: AutoStart.isEnabled(),
-            click: (menuItem) => {
-                if (menuItem.checked) {
-                    AutoStart.enable();
-                    preferences.set('autoStart', true);
-                } else {
-                    AutoStart.disable();
-                    preferences.set('autoStart', false);
-                }
-            },
-        },
-        {
-            label: `Port: ${port}`,
-            enabled: false,
+            label: 'Settings',
+            submenu: [
+                {
+                    label: 'Open Browser on Workspace Load',
+                    type: 'checkbox',
+                    checked: preferences.get('openBrowserOnLoad') !== false,
+                    click: (menuItem) => {
+                        preferences.set('openBrowserOnLoad', menuItem.checked);
+                    },
+                },
+                {
+                    label: 'Auto-start on Login',
+                    type: 'checkbox',
+                    checked: AutoStart.isEnabled(),
+                    click: (menuItem) => {
+                        if (menuItem.checked) {
+                            AutoStart.enable();
+                            preferences.set('autoStart', true);
+                        } else {
+                            AutoStart.disable();
+                            preferences.set('autoStart', false);
+                        }
+                    },
+                },
+                {
+                    label: `Port: ${port}`,
+                    enabled: false,
+                },
+            ],
         },
         { type: 'separator' },
         {
@@ -165,6 +188,12 @@ async function loadWorkspace(workspacePath) {
     try {
         setTrayStatus('yellow', `Starting — ${workspacePath}`);
         preferences.setCurrentWorkspace(workspacePath);
+
+        // Flag so that the state-changed handler opens the browser once 'running'
+        if (preferences.get('openBrowserOnLoad') !== false) {
+            _pendingBrowserOpen = true;
+        }
+
         await daemon.switchWorkspace(workspacePath);
         refreshMenu();
 
@@ -176,6 +205,7 @@ async function loadWorkspace(workspacePath) {
             }).show();
         }
     } catch (err) {
+        _pendingBrowserOpen = false;
         setTrayStatus('red', `Error: ${err.message}`);
         refreshMenu();
 
@@ -224,14 +254,22 @@ app.whenReady().then(async () => {
         switch (state) {
             case 'running':
                 setTrayStatus('green', `Running — ${daemon.workspacePath || 'ready'}`);
+                // Auto-open browser if a workspace was just loaded
+                if (_pendingBrowserOpen) {
+                    _pendingBrowserOpen = false;
+                    const port = preferences.get('port') || 3000;
+                    shell.openExternal(`http://localhost:${port}`);
+                }
                 break;
             case 'starting':
                 setTrayStatus('yellow', 'Starting...');
                 break;
             case 'stopped':
+                _pendingBrowserOpen = false;
                 setTrayStatus('yellow', 'Service stopped');
                 break;
             case 'error':
+                _pendingBrowserOpen = false;
                 setTrayStatus('red', 'Service error');
                 break;
         }

@@ -85,7 +85,7 @@ function restoreAISettings(assistant) {
             Object.assign(config.routing, data.routing);
         }
 
-        consoleStyler.log('system', `⚙️  Restored AI settings from global config (model: ${data.model})`);
+        consoleStyler.log('system', `Restored AI settings from global config (model: ${data.model})`);
         return true;
     } catch (err) {
         consoleStyler.log('warning', `Failed to restore AI settings: ${err.message}`);
@@ -203,7 +203,7 @@ async function handleUpdateSettings(data, ctx) {
             const resolvedNew = path.resolve(settings.workingDirectory);
             const currentDir = assistant.workingDir ? path.resolve(assistant.workingDir) : null;
             if (currentDir !== resolvedNew) {
-                consoleStyler.log('system', `🔄 update-settings: switching workspace to ${resolvedNew}`);
+                consoleStyler.log('system', `update-settings: switching workspace to ${resolvedNew}`);
                 const actualPath = await assistant.changeWorkingDirectory(settings.workingDirectory);
 
                 // Migrate legacy .ai-man → .oboto in the new workspace if needed
@@ -238,7 +238,7 @@ async function handleUpdateSettings(data, ctx) {
                 const tree = await getDirectoryTree(actualPath, 2);
                 wsSend(ws, 'file-tree', tree);
 
-                consoleStyler.log('system', `✅ update-settings: workspace switched to ${actualPath}`);
+                consoleStyler.log('system', `update-settings: workspace switched to ${actualPath}`);
             }
         } catch (err) {
             consoleStyler.log('error', `update-settings workspace switch failed: ${err.message}`);

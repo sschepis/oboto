@@ -1,3 +1,5 @@
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
+
 export class GraphStore {
   constructor(api) {
     this.api = api;
@@ -32,9 +34,9 @@ export class GraphStore {
         }
       }
 
-      console.log(`[Knowledge Graph] Loaded ${this.triples.length} triples, ${this.entities.size} entities`);
+      consoleStyler.log('plugin', `Loaded ${this.triples.length} triples, ${this.entities.size} entities`);
     } catch (e) {
-      console.warn('[Knowledge Graph] Could not load from storage:', e.message);
+      consoleStyler.log('warning', `Knowledge Graph could not load from storage: ${e.message}`);
     }
   }
 
@@ -44,7 +46,7 @@ export class GraphStore {
       await this.api.storage.set('entities', Array.from(this.entities.values()));
       await this.api.storage.set('relations', Array.from(this.relations.values()));
     } catch (e) {
-      console.warn('[Knowledge Graph] Could not save to storage:', e.message);
+      consoleStyler.log('warning', `Knowledge Graph could not save to storage: ${e.message}`);
     }
   }
 

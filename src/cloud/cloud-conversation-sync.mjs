@@ -3,6 +3,7 @@
 // Maps local conversation names to cloud conversation UUIDs.
 
 import crypto from 'crypto';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Syncs conversations and messages between local ConversationManager
@@ -110,7 +111,7 @@ export class CloudConversationSync {
                 await this.client.post('/rest/v1/messages', body);
                 pushed++;
             } catch (err) {
-                console.warn(`[CloudConversationSync] Failed to push message: ${err.message}`);
+                consoleStyler.log('cloud', `Failed to push message: ${err.message}`);
                 // Continue with remaining messages
             }
         }

@@ -9,6 +9,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 export class PluginStorage {
     /**
@@ -53,7 +54,7 @@ export class PluginStorage {
         this._writeTimer = setTimeout(() => {
             this._writeTimer = null;
             this._flush().catch(err => {
-                console.error(`[PluginStorage:${this.pluginName}] Flush error:`, err.message);
+                consoleStyler.log('error', `Plugin storage flush error (${this.pluginName}): ${err.message}`);
             });
         }, 500);
     }

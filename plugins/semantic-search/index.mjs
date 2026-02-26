@@ -1,4 +1,5 @@
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -107,7 +108,7 @@ Format strictly as JSON array of strings: ["id1", "id2"]`;
             rankedIds = JSON.parse(aiResponse);
           }
         } catch (e) {
-          console.error('[semantic-search] Failed to parse AI response as JSON:', aiResponse);
+          consoleStyler.logError('error', `Failed to parse AI response as JSON: ${aiResponse}`, e);
           // Fallback to naive keyword match if AI fails to return JSON
           if (pluginSettings.fallbackToKeywordSearch) {
             const keywords = query.toLowerCase().split(' ');

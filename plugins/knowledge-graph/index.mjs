@@ -3,6 +3,7 @@ import { MemoryFieldStore } from './memory-field-store.mjs';
 import { HolographicProjection } from './holographic-projection.mjs';
 import { SemanticComputing } from './semantic-computing.mjs';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ const SETTINGS_SCHEMA = [
 // starts fresh.
 
 export async function activate(api) {
-  console.log('[Knowledge Graph] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   // Pre-create instance object to avoid race condition with onSettingsChange callback
   const instanceState = { graphStore: null, memoryStore: null, holographicProjection: null, semanticComputing: null, settings: null, autoSaveTimer: null };
@@ -83,7 +84,7 @@ export async function activate(api) {
               if (graphStore) await graphStore.saveToStorage();
               if (memoryStore) await memoryStore.save();
             } catch (e) {
-              console.error('[Knowledge Graph] Auto-save failed:', e.message);
+              consoleStyler.log('error', `Auto-save failed: ${e.message}`);
             }
           }, mergedSettings.autoSaveInterval);
         }
@@ -265,13 +266,13 @@ export async function activate(api) {
         await graphStore.saveToStorage();
         await memoryStore.save();
       } catch (e) {
-        console.error('[Knowledge Graph] Auto-save failed:', e.message);
+        consoleStyler.log('error', `Auto-save failed: ${e.message}`);
       }
     }, settings.autoSaveInterval);
   }
   instanceState.autoSaveTimer = autoSaveTimer;
 
-  console.log('[Knowledge Graph] Activated successfully');
+  consoleStyler.log('plugin', 'Activated successfully');
 }
 
 export async function deactivate(api) {
@@ -282,5 +283,5 @@ export async function deactivate(api) {
     if (memoryStore) await memoryStore.save();
   }
   api.setInstance(null);
-  console.log('[Knowledge Graph] Deactivated');
+  consoleStyler.log('plugin', 'Deactivated');
 }

@@ -1,4 +1,5 @@
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -34,7 +35,7 @@ class CanvasService {
                     this.addNode(node);
                 }
             } catch (e) {
-                console.error('Canvas Viz: Failed to add observation node', e);
+                consoleStyler.logError('error', 'Canvas Viz: Failed to add observation node', e);
             }
         });
     }
@@ -56,7 +57,7 @@ class CanvasService {
 }
 
 export async function activate(api) {
-  console.log('[Canvas Viz] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   let service;
 
@@ -141,9 +142,9 @@ export async function activate(api) {
     }
   });
 
-  console.log('[Canvas Viz] Ready');
+  consoleStyler.log('plugin', 'Ready');
 }
 
 export function deactivate(api) {
-  console.log('[Canvas Viz] Deactivated');
+  consoleStyler.log('plugin', 'Deactivated');
 }

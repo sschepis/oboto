@@ -9,6 +9,7 @@ import { CloudConversationSync } from './cloud-conversation-sync.mjs';
 import { CloudAgent } from './cloud-agent.mjs';
 import { CloudRealtime } from './cloud-realtime.mjs';
 import { CloudFileSync } from './cloud-file-sync.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * CloudSync is the single entry point for all cloud features.
@@ -62,6 +63,9 @@ export class CloudSync {
 
         /** @type {ReturnType<typeof setInterval>|null} */
         this._presenceTimer = null;
+
+        /** @type {number} Consecutive usage fetch failures — suppresses repeated log spam */
+        this._usageFailCount = 0;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -337,7 +341,7 @@ export class CloudSync {
             const result = await this.client.get('/functions/v1/cloud-models');
             return result?.models || [];
         } catch (err) {
-            console.warn(`[CloudSync] Failed to fetch cloud models: ${err.message}`);
+            consoleStyler.log('cloud', `Failed to fetch cloud models: ${err.message}`);
             return [];
         }
     }
@@ -358,9 +362,17 @@ export class CloudSync {
             if (usage) {
                 usage.is_unlimited = isAdmin;
             }
+            // Reset failure counter on success
+            this._usageFailCount = 0;
             return usage;
         } catch (err) {
-            console.warn(`[CloudSync] Failed to fetch usage: ${err.message}`);
+            this._usageFailCount++;
+            // Only log the first failure and every 50th thereafter to avoid spam
+            if (this._usageFailCount === 1) {
+                consoleStyler.log('cloud', `Failed to fetch usage: ${err.message}`);
+            } else if (this._usageFailCount % 50 === 0) {
+                consoleStyler.log('cloud', `Failed to fetch usage (${this._usageFailCount} consecutive failures): ${err.message}`);
+            }
             return null;
         }
     }
@@ -465,7 +477,7 @@ export class CloudSync {
                     }
                 })
                 .catch(err => {
-                    console.warn(`[CloudSync] Realtime connection failed: ${err.message}`);
+                    consoleStyler.log('cloud', `Realtime connection failed: ${err.message}`);
                 });
         }
 

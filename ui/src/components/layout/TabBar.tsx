@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle } from 'lucide-react';
+import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle, Code2 } from 'lucide-react';
 import type { ConversationInfo } from '../../hooks/useChat';
 
 export interface EditorTab {
   id: string;        // 'chat' or file path
   label: string;     // display name
-  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf' | 'plugin';
+  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'source-view' | 'image' | 'pdf' | 'plugin';
   filePath?: string;
   surfaceId?: string;
   isDirty?: boolean;
@@ -22,6 +22,14 @@ interface ContextMenuState {
   isMainChat: boolean;
 }
 
+interface SurfaceTabContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  tabId: string;
+  surfaceId: string;
+}
+
 interface TabBarProps {
   tabs: EditorTab[];
   activeTabId: string;
@@ -30,6 +38,7 @@ interface TabBarProps {
   onNewChat?: () => void;
   onNewFile?: () => void;
   onNewSurface?: () => void;
+  onViewSource?: (surfaceId: string) => void;
   // Conversation management
   conversations?: ConversationInfo[];
   activeConversation?: string;
@@ -47,6 +56,7 @@ const TabBar: React.FC<TabBarProps> = ({
   onNewChat,
   onNewFile,
   onNewSurface,
+  onViewSource,
   conversations = [],
   activeConversation = 'chat',
   onSwitchConversation,
@@ -56,10 +66,12 @@ const TabBar: React.FC<TabBarProps> = ({
 }) => {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, tabId: '', isMainChat: false });
+  const [surfaceMenu, setSurfaceMenu] = useState<SurfaceTabContextMenuState>({ visible: false, x: 0, y: 0, tabId: '', surfaceId: '' });
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const surfaceMenuRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   // Close dropdown on outside click
@@ -95,6 +107,27 @@ const TabBar: React.FC<TabBarProps> = ({
       document.removeEventListener('keydown', handleKey);
     };
   }, [contextMenu.visible]);
+
+  // Close surface context menu on outside click or Escape
+  useEffect(() => {
+    if (!surfaceMenu.visible) return;
+    const handleClick = (e: MouseEvent) => {
+      if (surfaceMenuRef.current && !surfaceMenuRef.current.contains(e.target as Node)) {
+        setSurfaceMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSurfaceMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [surfaceMenu.visible]);
 
   // Focus edit input when entering edit mode
   useEffect(() => {
@@ -309,6 +342,7 @@ const TabBar: React.FC<TabBarProps> = ({
           const iconColor = isActive
             ? tab.type === 'html-preview' ? 'text-emerald-400'
               : tab.type === 'surface' ? 'text-purple-400'
+              : tab.type === 'source-view' ? 'text-cyan-400'
               : tab.type === 'plugin' ? 'text-teal-400'
               : 'text-amber-400'
             : 'text-zinc-600';
@@ -317,6 +351,19 @@ const TabBar: React.FC<TabBarProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
+              onContextMenu={(e) => {
+                if ((tab.type === 'surface' || tab.type === 'source-view') && tab.surfaceId) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSurfaceMenu({
+                    visible: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    tabId: tab.id,
+                    surfaceId: tab.surfaceId,
+                  });
+                }
+              }}
               className={`
                 group flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-medium
                 border-r border-zinc-800/30 transition-all duration-200 relative shrink-0
@@ -344,6 +391,8 @@ const TabBar: React.FC<TabBarProps> = ({
                 <Eye size={12} className={`${iconColor} transition-colors duration-200`} />
               ) : tab.type === 'surface' ? (
                 <LayoutDashboard size={12} className={`${iconColor} transition-colors duration-200`} />
+              ) : tab.type === 'source-view' ? (
+                <Code2 size={12} className={`${iconColor} transition-colors duration-200`} />
               ) : tab.type === 'image' ? (
                 <ImageIcon size={12} className={`${iconColor} transition-colors duration-200`} />
               ) : tab.type === 'pdf' ? (
@@ -512,6 +561,40 @@ const TabBar: React.FC<TabBarProps> = ({
           >
             <Trash2 size={12} className={contextMenu.isMainChat ? 'text-zinc-700' : 'text-zinc-400'} />
             Delete
+          </button>
+        </div>
+      )}
+
+      {/* Context menu for surface/source-view tabs */}
+      {surfaceMenu.visible && (
+        <div
+          ref={surfaceMenuRef}
+          className="fixed z-[99999] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl shadow-black/50 py-1 min-w-[160px]"
+          style={{
+            left: Math.min(surfaceMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 180),
+            top: Math.min(surfaceMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 100),
+          }}
+        >
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer text-zinc-300 hover:bg-zinc-700/60 hover:text-zinc-100"
+            onClick={() => {
+              setSurfaceMenu(prev => ({ ...prev, visible: false }));
+              onViewSource?.(surfaceMenu.surfaceId);
+            }}
+          >
+            <Code2 size={12} className="text-cyan-400" />
+            View Source
+          </button>
+          <div className="border-t border-zinc-700/50 my-0.5" />
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors cursor-pointer text-zinc-300 hover:bg-zinc-700/60 hover:text-zinc-100"
+            onClick={() => {
+              setSurfaceMenu(prev => ({ ...prev, visible: false }));
+              onCloseTab(surfaceMenu.tabId);
+            }}
+          >
+            <X size={12} className="text-zinc-400" />
+            Close Tab
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { AiMan } from '../lib/index.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const server = new Server({
     name: 'oboto',
@@ -62,5 +63,5 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-    main().catch(console.error);
+    main().catch(err => consoleStyler.logError('system', 'MCP server failed to start', err));
 }

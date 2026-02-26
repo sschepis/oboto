@@ -122,7 +122,7 @@ export class CLIInterface {
                     'Try restarting the application'
                 ]
             });
-            console.log(errorDisplay);
+            consoleStyler.log('error', errorDisplay);
             process.exit(1);
         }
         
@@ -155,7 +155,7 @@ export class CLIInterface {
         if (cwdOverride) {
             cwdOverride = path.resolve(cwdOverride);
             if (!fs.existsSync(cwdOverride) || !fs.statSync(cwdOverride).isDirectory()) {
-                console.error(`Error: --cwd path is not a valid directory: ${cwdOverride}`);
+                consoleStyler.log('error', `--cwd path is not a valid directory: ${cwdOverride}`);
                 process.exit(1);
             }
             workingDir = cwdOverride;
@@ -243,7 +243,7 @@ ${theme.accent('THEMES:')}
         }
         
         const errorDisplay = consoleStyler.formatError(error, { suggestions });
-        console.log(errorDisplay);
+        consoleStyler.log('error', errorDisplay);
     }
 
     // Handle process signals for graceful shutdown
@@ -276,7 +276,7 @@ ${theme.accent('THEMES:')}
         process.on('unhandledRejection', (reason, promise) => {
             consoleStyler.clearAllSpinners();
             consoleStyler.log('error', `UNHANDLED REJECTION: ${reason}`);
-            console.error('At promise:', promise);
+            consoleStyler.log('error', `At promise: ${promise}`);
             process.exit(1);
         });
     }

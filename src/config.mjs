@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { consoleStyler } from './ui/console-styler.mjs';
 
 // Load environment variables
 dotenv.config();
@@ -140,7 +141,7 @@ export function validateConfig() {
   // }
 
   if (missingKeys.length > 0) {
-    console.warn(`Warning: Missing configuration for: ${missingKeys.join(', ')}`);
+    consoleStyler.log('warning', `Missing configuration for: ${missingKeys.join(', ')}`);
     return false;
   }
   

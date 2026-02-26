@@ -1,4 +1,5 @@
 import { FileTools } from '../tools/file-tools.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Generates API documentation from source code.
@@ -37,7 +38,7 @@ export class ApiDocSmith {
                     markdown += fileDocs;
                 }
             } catch (e) {
-                console.error(`Failed to process ${file}: ${e.message}`);
+                consoleStyler.log('error', `Failed to process ${file}: ${e.message}`);
             }
         }
 

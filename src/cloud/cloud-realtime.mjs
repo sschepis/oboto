@@ -6,6 +6,7 @@
 // Uses the `ws` package already in ai-man's dependencies.
 
 import WebSocket from 'ws';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const HEARTBEAT_INTERVAL = 30000; // 30s
 const RECONNECT_BASE_DELAY = 1000;
@@ -113,7 +114,7 @@ export class CloudRealtime {
             });
 
             this.ws.on('error', (err) => {
-                console.warn(`[CloudRealtime] WebSocket error: ${err.message}`);
+                consoleStyler.log('cloud', `WebSocket error: ${err.message}`);
                 if (!this._connected) {
                     reject(err);
                 }

@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 export class WorkflowService {
     /**
@@ -96,7 +97,7 @@ export class WorkflowService {
 
         // Execute asynchronously
         this._executeWorkflow(workflowId, flowScript, triggerPayload).catch(err => {
-            console.error(`[WorkflowService] Workflow ${workflowId} execution error:`, err);
+            consoleStyler.logError('error', `Workflow ${workflowId} execution error`, err);
         });
 
         return { workflowId };

@@ -21,6 +21,7 @@ try {
 
 import { promises as fs } from 'fs';
 import path from 'path';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 // ── Embedding ────────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ export class FactInferenceEngine {
       }
     } catch (err) {
       // Log but don't throw — persistence failure is non-critical
-      console.error(`[FactInferenceEngine] Failed to persist data: ${err.message}`);
+      consoleStyler.log('error', `Failed to persist reasoning data: ${err.message}`);
     }
   }
 

@@ -15,6 +15,7 @@
 
 import { AgenticProvider } from './base-provider.mjs';
 import { CognitiveAgent } from './cognitive/agent.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 export class CognitiveProvider extends AgenticProvider {
     get id() { return 'cognitive'; }
@@ -44,10 +45,7 @@ export class CognitiveProvider extends AgenticProvider {
             this._agent.cognitive.tick();
         }
 
-        console.log(
-            `[CognitiveProvider] Initialized — coherence=${this._agent.cognitive.coherence.toFixed(3)}, ` +
-            `entropy=${this._agent.cognitive.entropy.toFixed(3)}`
-        );
+        consoleStyler.log('agentic', `Initialized cognitive provider — coherence=${this._agent.cognitive.coherence.toFixed(3)}, entropy=${this._agent.cognitive.entropy.toFixed(3)}`);
     }
 
     /**

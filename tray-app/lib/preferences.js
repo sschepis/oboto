@@ -18,6 +18,7 @@ const DEFAULTS = {
     port: 3000,
     autoStart: false,
     autoActivateOnStart: true,
+    openBrowserOnLoad: true,
     maxRecentWorkspaces: 5,
 };
 

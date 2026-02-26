@@ -2,13 +2,14 @@
 // Handles phase transitions with validation and hooks
 // Enforces the project lifecycle flow
 
-import { 
-    PROJECT_PHASES, 
-    PHASE_ORDER, 
+import {
+    PROJECT_PHASES,
+    PHASE_ORDER,
     PROJECT_STATUS,
     DELIVERABLE_STATUS,
-    TASK_STATUS 
+    TASK_STATUS
 } from './project-manifest.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * @typedef {Object} PhaseTransitionResult
@@ -94,7 +95,7 @@ export class PhaseController {
             try {
                 await hook(context);
             } catch (error) {
-                console.error(`Hook error for ${event}:`, error.message);
+                consoleStyler.log('error', `Hook error for ${event}: ${error.message}`);
             }
         }
     }

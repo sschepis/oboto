@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { wsSend } from '../../lib/ws-utils.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.oboto');
 const SETUP_FILE = path.join(GLOBAL_DIR, 'setup.json');
@@ -33,7 +34,7 @@ async function handleCompleteSetup(data, ctx) {
         await fs.promises.writeFile(filePath, JSON.stringify(setupData, null, 2));
         wsSend(ws, 'setup-complete', { success: true });
     } catch (err) {
-        console.error('[SetupHandler] Failed to save setup status:', err);
+        consoleStyler.logError('error', 'Failed to save setup status', err);
         wsSend(ws, 'setup-complete', { success: false, error: err.message });
     }
 }

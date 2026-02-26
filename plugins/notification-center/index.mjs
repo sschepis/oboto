@@ -1,4 +1,5 @@
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 /**
  * Oboto Notification Center Plugin
@@ -28,7 +29,7 @@ const SETTINGS_SCHEMA = [
 ];
 
 export async function activate(api) {
-  console.log('[notification-center] Activating...');
+  consoleStyler.log('plugin', 'Activating notification-center...');
 
   let notifications = [];
 
@@ -39,7 +40,7 @@ export async function activate(api) {
       notifications = storedNotifications;
     }
   } catch (err) {
-    console.error('[notification-center] Failed to load storage:', err);
+    consoleStyler.logError('plugin', 'Failed to load notification-center storage', err);
   }
 
   const { pluginSettings } = await registerSettingsHandlers(
@@ -50,7 +51,7 @@ export async function activate(api) {
     try {
       await api.storage.set('notifications', notifications);
     } catch (err) {
-      console.error('[notification-center] Failed to save storage:', err);
+      consoleStyler.logError('plugin', 'Failed to save notification-center storage', err);
     }
   };
 
@@ -209,9 +210,9 @@ export async function activate(api) {
       }
   });
 
-  console.log('[notification-center] Activated');
+  consoleStyler.log('plugin', 'notification-center activated');
 }
 
 export async function deactivate(api) {
-  console.log('[notification-center] Deactivated');
+  consoleStyler.log('plugin', 'notification-center deactivated');
 }

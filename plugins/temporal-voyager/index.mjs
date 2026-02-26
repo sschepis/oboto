@@ -1,4 +1,5 @@
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -15,7 +16,7 @@ const SETTINGS_SCHEMA = [
 ];
 
 export async function activate(api) {
-  console.log('[Temporal Voyager] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   const { pluginSettings } = await registerSettingsHandlers(
     api, 'temporal-voyager', DEFAULT_SETTINGS, SETTINGS_SCHEMA
@@ -101,9 +102,9 @@ export async function activate(api) {
     }
   });
 
-  console.log('[Temporal Voyager] Activated.');
+  consoleStyler.log('plugin', 'Activated.');
 }
 
 export function deactivate(api) {
-  console.log('[Temporal Voyager] Deactivated.');
+  consoleStyler.log('plugin', 'Deactivated.');
 }

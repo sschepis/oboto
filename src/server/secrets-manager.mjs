@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 // ─── Known Secret Definitions ────────────────────────────────────────────
 
@@ -210,16 +211,16 @@ export class SecretsManager {
             const store = await this._read();
             if (store) {
                 this._store = store;
-                console.log(`[SecretsManager] Loaded ${Object.keys(store.secrets).length} secret(s) from vault`);
+                consoleStyler.log('security', `Loaded ${Object.keys(store.secrets).length} secret(s) from vault`);
             } else {
-                console.log('[SecretsManager] No secrets file found — starting with empty vault');
+                consoleStyler.log('security', 'No secrets file found');
             }
         } catch (err) {
-            console.warn(`[SecretsManager] ${err.message}`);
+            consoleStyler.log('warning', `Error loading secrets: ${err.message}`);
             // Backup corrupt file
             try {
                 await fs.promises.copyFile(this._filePath, this._backupPath);
-                console.warn(`[SecretsManager] Corrupt file backed up to .secrets.enc.bak`);
+                consoleStyler.log('warning', 'Corrupt secrets file backed up');
             } catch {
                 // Ignore backup failures
             }

@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec, execFile } from 'child_process';
 import util from 'util';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const execAsync = util.promisify(exec);
 const execFileAsync = util.promisify(execFile);
@@ -53,7 +54,7 @@ export class SkillsManager {
             try {
                 packageJson = JSON.parse(content);
             } catch (e) {
-                console.error(`Error parsing package.json: ${e.message}`);
+                consoleStyler.log('error', `Error parsing package.json: ${e.message}`);
                 return;
             }
 
@@ -99,7 +100,7 @@ export class SkillsManager {
                 }
             }
         } catch (error) {
-            console.error(`Failed to load npm skills: ${error.message}`);
+            consoleStyler.log('error', `Failed to load npm skills: ${error.message}`);
         }
     }
 
@@ -170,7 +171,7 @@ export class SkillsManager {
                 }
             }
         } catch (error) {
-            console.error(`Failed to load skills from ${directory}: ${error.message}`);
+            consoleStyler.log('error', `Failed to load skills from ${directory}: ${error.message}`);
         }
     }
 
@@ -190,7 +191,7 @@ export class SkillsManager {
                 source
             });
         } catch (error) {
-            console.error(`Error parsing skill at ${filePath}: ${error.message}`);
+            consoleStyler.log('error', `Error parsing skill at ${filePath}: ${error.message}`);
         }
     }
 
@@ -570,7 +571,7 @@ export class SkillsManager {
                         // Uninstall globally
                         await execFileAsync('npm', ['uninstall', '-g', npmSource.packageName], { timeout: 30000 });
                     } catch (e) {
-                        console.error(`Warning: npm uninstall -g ${npmSource.packageName} failed: ${e.message}`);
+                        consoleStyler.log('error', `npm uninstall -g ${npmSource.packageName} failed: ${e.message}`);
                     }
                 }
             } catch (e) {

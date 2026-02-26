@@ -13,6 +13,12 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 
+/** Strip ANSI escape codes (gradients, colors, etc.) from a string. */
+function stripAnsi(str) {
+    // eslint-disable-next-line no-control-regex
+    return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+}
+
 /** How long to wait for a graceful shutdown before SIGKILL. */
 const KILL_TIMEOUT_MS = 5000;
 
@@ -102,8 +108,9 @@ class DaemonManager extends EventEmitter {
                 const line = data.toString().trim();
                 if (line) {
                     this.emit('log', line);
-                    // Detect readiness
-                    if (line.includes('Server running at')) {
+                    // Detect readiness — strip ANSI codes (gradients) before matching
+                    const plain = stripAnsi(line);
+                    if (plain.includes('Server running at')) {
                         this._onServerReady();
                     }
                 }

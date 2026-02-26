@@ -1,6 +1,7 @@
 import { computeAsync, computationalTool, getCacheStats, clearCache } from './native.mjs';
 import { callSympy, shutdown as shutdownSympy, getCacheStats as getSympyCacheStats } from './sympy-bridge.mjs';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   pythonPath: 'python3',
@@ -72,7 +73,7 @@ const SETTINGS_SCHEMA = [
 // starts fresh.
 
 export async function activate(api) {
-  console.log(`[poorman-alpha] Activating plugin ${api.id}`);
+  consoleStyler.log('plugin', `Activating plugin ${api.id}`);
 
   // Pre-create instance object to avoid race condition with onSettingsChange callback
   const instanceState = { settings: null };
@@ -231,14 +232,14 @@ export async function activate(api) {
 
   api.tools.register(cacheTool);
 
-  console.log(`[poorman-alpha] Registered tools: compute, sympy_compute, matrix_compute, compute_cache_stats`);
-  console.log(`[poorman-alpha] Settings:`, JSON.stringify(pluginSettings));
+  consoleStyler.log('plugin', `Registered tools: compute, sympy_compute, matrix_compute, compute_cache_stats`);
+  consoleStyler.log('plugin', `Settings: ${JSON.stringify(pluginSettings)}`);
 }
 
 export function deactivate(api) {
-  console.log(`[poorman-alpha] Deactivating...`);
+  consoleStyler.log('plugin', `Deactivating...`);
   shutdownSympy();
   clearCache();
   api.setInstance(null);
-  console.log(`[poorman-alpha] Deactivated`);
+  consoleStyler.log('plugin', `Deactivated`);
 }

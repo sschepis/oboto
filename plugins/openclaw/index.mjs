@@ -20,6 +20,7 @@ import path from 'path';
 import fs from 'fs';
 import { OpenClawManager } from './manager.mjs';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ export async function activate(api) {
 
     // Start connecting in the background (non-blocking)
     manager.start().catch((err) => {
-        console.error('[openclaw-plugin] Manager failed to start:', err.message);
+        consoleStyler.log('error', `Manager failed to start: ${err.message}`);
     });
 
     // ── Register tools ───────────────────────────────────────────────────

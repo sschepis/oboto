@@ -387,7 +387,7 @@ export class ToolExecutor {
      */
     registerPluginTool(name, handler, schema, options = {}) {
         if (this.toolRegistry.has(name)) {
-            console.warn(`[ToolExecutor] Plugin tool "${name}" conflicts with a core tool — the core handler and schema take priority. The plugin handler is stored as fallback.`);
+            consoleStyler.log('warning', `Plugin tool "${name}" conflicts with a core tool — the core handler and schema take priority. The plugin handler is stored as fallback.`);
             // Store handler for fallback but do NOT override the core schema
             this._pluginHandlers.set(name, handler);
             // Don't add to _pluginSchemas — core schema takes priority
@@ -397,7 +397,7 @@ export class ToolExecutor {
             return;
         }
         if (this._pluginHandlers.has(name)) {
-            console.warn(`[ToolExecutor] Plugin tool name collision: "${name}" — overwriting`);
+            consoleStyler.log('warning', `Plugin tool name collision: "${name}" — overwriting`);
         }
         this._pluginHandlers.set(name, handler);
         this._pluginSchemas.set(name, schema);
@@ -507,7 +507,7 @@ export class ToolExecutor {
             // Security Check: Path Access Confirmation
             const securityCheck = await this._validatePathAccess(functionName, args);
             if (securityCheck && securityCheck.needed) {
-                consoleStyler.log('security', `🔒 Access outside workspace detected: ${args.path}`);
+                consoleStyler.log('security', `Access outside workspace detected: ${args.path}`);
                 try {
                     const confirmed = await this.requestConfirmation(functionName, args, securityCheck.message, {
                         pathPrefix: securityCheck.pathPrefix

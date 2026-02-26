@@ -5,6 +5,8 @@
  * @module src/core/agentic/provider-registry
  */
 
+import { consoleStyler } from '../../ui/console-styler.mjs';
+
 export class AgenticProviderRegistry {
     constructor() {
         /** @type {Map<string, import('./base-provider.mjs').AgenticProvider>} */
@@ -74,7 +76,7 @@ export class AgenticProviderRegistry {
             try {
                 await this._active.dispose();
             } catch (e) {
-                console.warn(`[AgenticProviderRegistry] Error disposing provider "${this._active.id}":`, e.message);
+                consoleStyler.log('warning', `Error disposing agentic provider "${this._active.id}": ${e.message}`);
             }
         }
 
@@ -82,7 +84,7 @@ export class AgenticProviderRegistry {
         await provider.initialize(deps);
         this._active = provider;
 
-        console.log(`[AgenticProviderRegistry] Active provider: ${provider.name} (${provider.id})`);
+        consoleStyler.log('agentic', `Active agentic provider: ${provider.name} (${provider.id})`);
         return provider;
     }
 

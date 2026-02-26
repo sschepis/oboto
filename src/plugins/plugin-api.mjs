@@ -12,6 +12,7 @@
 
 import { PluginStorage } from './plugin-storage.mjs';
 import { PluginSettingsStore } from './plugin-settings.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Tools that non-builtin plugins are forbidden from invoking via `tools.execute()`.
@@ -265,7 +266,7 @@ export function createPluginAPI(pluginName, deps, options = {}) {
          */
         onSystem(event, handler) {
             if (source !== 'builtin' && !ALLOWED_SYSTEM_EVENTS.has(event)) {
-                console.warn(`[PluginAPI:${pluginName}] Denied access to system event "${event}" — only builtin plugins may listen to this event`);
+                consoleStyler.log('security', `Denied plugin "${pluginName}" access to system event "${event}" — only builtin plugins may listen to this event`);
                 return;
             }
             if (eventBus) {

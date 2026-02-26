@@ -70,9 +70,9 @@ async function main() {
         if (process.env.OPENCLAW_MODE || process.env.OPENCLAW_URL) {
             try {
                 await openClawManager.start(workingDir);
-                console.log('[Main] OpenClaw integration started');
+                consoleStyler.log('system', 'OpenClaw integration started');
             } catch (err) {
-                console.warn(`[Main] OpenClaw integration failed to start: ${err.message}`);
+                consoleStyler.log('warning', `OpenClaw integration failed to start: ${err.message}`);
                 // Keep the manager instance so it can be reconfigured later
             }
         }
@@ -159,7 +159,7 @@ async function main() {
                     const { setCloudSyncForModels } = await import('./core/model-registry.mjs');
                     setCloudSyncForModels(cloudSync);
 
-                    consoleStyler.log('system', '☁️  Cloud integration initialized');
+                    consoleStyler.log('cloud', 'Cloud integration initialized');
                 }
             } catch (err) {
                 consoleStyler.log('warning', `Cloud integration failed to initialize: ${err.message}`);
@@ -221,7 +221,7 @@ const _rejectionWindow = 60_000; // 1 minute window
 let _rejectionWindowStart = Date.now();
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ [ERROR] UNHANDLED REJECTION:', reason);
+    consoleStyler.logError('error', 'UNHANDLED REJECTION', reason);
     
     const msg = reason?.message || String(reason);
 
@@ -249,13 +249,13 @@ process.on('unhandledRejection', (reason, promise) => {
     
     // If too many non-transient rejections accumulate, exit to prevent silent corruption
     if (_unhandledRejectionCount > 10) {
-        console.error('❌ [FATAL] Too many unhandled rejections in the last minute, exiting.');
+        consoleStyler.log('error', 'Too many unhandled rejections in the last minute, exiting.');
         process.exit(1);
     }
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('❌ [ERROR] UNCAUGHT EXCEPTION:', err);
+    consoleStyler.logError('error', 'UNCAUGHT EXCEPTION', err);
     // After an uncaught exception, Node.js is in an undefined state.
     // Perform a graceful shutdown.
     setTimeout(() => process.exit(1), 1000);
@@ -266,7 +266,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch(err => {
         // Import consoleStyler for error display
         import('./ui/console-styler.mjs').then(({ consoleStyler }) => {
-            consoleStyler.log('error', `An unexpected error occurred: ${err.message}`);
+            consoleStyler.logError('error', 'An unexpected error occurred', err);
         }).catch(() => {
             console.error("\x1b[31mAn unexpected error occurred:\x1b[0m", err);
         });

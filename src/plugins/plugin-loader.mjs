@@ -15,6 +15,7 @@ import path from 'path';
 import os from 'os';
 import { pathToFileURL } from 'url';
 import { fileURLToPath } from 'url';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -122,7 +123,7 @@ export class PluginLoader {
                 }
             }
         } catch (err) {
-            console.warn(`[PluginLoader] Error scanning ${dir}: ${err.message}`);
+            consoleStyler.log('warning', `Error scanning plugin directory ${dir}: ${err.message}`);
         }
 
         return results;
@@ -142,7 +143,7 @@ export class PluginLoader {
 
             // Validate required fields
             if (!manifest.name) {
-                console.warn(`[PluginLoader] Missing 'name' in ${manifestPath}`);
+                consoleStyler.log('warning', `Plugin missing name in manifest: ${manifestPath}`);
                 return null;
             }
 
@@ -151,7 +152,7 @@ export class PluginLoader {
             // and other path constructions. Allowing `..`, `/`, or `\` would let a
             // malicious plugin.json escape the intended `.plugins-data/` directory.
             if (/[/\\]/.test(manifest.name) || manifest.name.includes('..')) {
-                console.warn(`[PluginLoader] Invalid plugin name in ${manifestPath}: "${manifest.name}" — contains path-traversal characters`);
+                consoleStyler.log('warning', `Invalid plugin name (path traversal) in ${manifestPath}: "${manifest.name}"`);
                 return null;
             }
 
@@ -165,7 +166,7 @@ export class PluginLoader {
             try {
                 await fs.access(entryPath);
             } catch {
-                console.warn(`[PluginLoader] Entry point not found: ${entryPath}`);
+                consoleStyler.log('warning', `Plugin entry point not found: ${entryPath}`);
                 return null;
             }
 
@@ -244,7 +245,7 @@ export class PluginLoader {
                 }
             }
         } catch (err) {
-            console.warn(`[PluginLoader] Error scanning npm plugins: ${err.message}`);
+            consoleStyler.log('warning', `Error scanning npm plugins: ${err.message}`);
         }
 
         return results;
@@ -278,7 +279,7 @@ export class PluginLoader {
             );
         }
 
-        console.warn(`[PluginLoader] Loading plugin code: ${plugin.name} (${plugin.source}) from ${entryPath}`);
+        consoleStyler.log('plugin', `Loading plugin: ${plugin.name} (${plugin.source}) from ${entryPath}`);
         // Append cache-busting query to force re-evaluation on reload.
         // Node.js treats each unique URL (including query) as a separate module entry.
         // NOTE: Node.js ES module cache cannot be evicted. Each reload creates a new
@@ -288,10 +289,7 @@ export class PluginLoader {
         const mod = await import(fileUrl);
 
         if (newCount > 3) {
-            console.warn(
-                `[PluginLoader] ⚠ Plugin "${plugin.name}" has been reloaded ${newCount} times. ` +
-                `Each reload leaks an ES module cache entry. Consider restarting the server to reclaim memory.`
-            );
+            consoleStyler.log('warning', `Plugin "${plugin.name}" has been reloaded ${newCount} times. Each reload leaks an ES module cache entry. Consider restarting the server to reclaim memory.`);
         }
 
         return mod.default || mod;
@@ -319,13 +317,13 @@ export class PluginLoader {
             const resolved = path.resolve(fullPath);
             const resolvedDir = path.resolve(pluginDir);
             if (resolved !== resolvedDir && !resolved.startsWith(resolvedDir + path.sep)) {
-                console.warn(`[PluginLoader] Path traversal blocked: ${componentFile}`);
+                consoleStyler.log('security', `Path traversal blocked: ${componentFile}`);
                 return null;
             }
             // Prevent reading directories
             const stat = await fs.stat(resolved);
             if (!stat.isFile()) {
-                console.warn(`[PluginLoader] Not a file: ${componentFile}`);
+                consoleStyler.log('warning', `Not a file: ${componentFile}`);
                 return null;
             }
             return await fs.readFile(resolved, 'utf8');

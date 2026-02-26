@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 // --- Device Identity helpers (ported from openclaw/src/infra/device-identity.ts) ---
 
@@ -320,12 +321,12 @@ export class OpenClawClient extends EventEmitter {
           }
 
         } catch (err) {
-          console.error('[OpenClawClient] Message parsing error:', err);
+          consoleStyler.logError('error', 'OpenClaw message parsing error', err);
         }
       });
 
       this.ws.on('error', (err) => {
-        console.error('[OpenClawClient] Socket error:', err);
+        consoleStyler.logError('error', 'OpenClaw socket error', err);
         if (!this.isConnected) {
             clearTimeout(timeout);
             this._connectionPromise = null;

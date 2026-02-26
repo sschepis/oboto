@@ -32,7 +32,7 @@ export class WorkflowHandlers {
         
         // Use the enhanced todo list display
         const todoDisplay = consoleStyler.formatTodoList(this.currentTodos);
-        console.log(todoDisplay);
+        consoleStyler.log('info', todoDisplay);
         
         return `Todo list created with ${todos.length} steps`;
     }

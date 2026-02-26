@@ -3,6 +3,7 @@ import { execSync, spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,82 +37,82 @@ function checkPython() {
 }
 
 function createVenv() {
-  console.log(`[setup-venv] Setting up virtual environment in ${VENV_DIR}`);
+  consoleStyler.log('plugin', `Setting up virtual environment in ${VENV_DIR}`);
   if (fs.existsSync(VENV_DIR)) {
-    console.log(`[setup-venv] Virtual environment already exists.`);
+    consoleStyler.log('plugin', `Virtual environment already exists.`);
     return true;
   }
 
   const sysPython = checkPython();
   if (!sysPython) {
-    console.error(`[setup-venv] ERROR: Python 3 is not installed or not in PATH.`);
-    console.error(`[setup-venv] Please install Python 3 to use the poorman-alpha plugin's SymPy features.`);
+    consoleStyler.log('error', `ERROR: Python 3 is not installed or not in PATH.`);
+    consoleStyler.log('error', `Please install Python 3 to use the poorman-alpha plugin's SymPy features.`);
     return false;
   }
 
   try {
-    console.log(`[setup-venv] Creating venv using '${sysPython} -m venv .venv'...`);
+    consoleStyler.log('plugin', `Creating venv using '${sysPython} -m venv .venv'...`);
     spawnSync(sysPython, ['-m', 'venv', '.venv'], { cwd: PLUGIN_DIR, stdio: 'inherit' });
     if (!fs.existsSync(VENV_DIR)) {
       throw new Error('venv directory not created');
     }
-    console.log(`[setup-venv] Virtual environment created successfully.`);
+    consoleStyler.log('plugin', `Virtual environment created successfully.`);
     return true;
   } catch (err) {
-    console.error(`[setup-venv] ERROR: Failed to create virtual environment: ${err.message}`);
+    consoleStyler.log('error', `ERROR: Failed to create virtual environment: ${err.message}`);
     return false;
   }
 }
 
 function installPackages() {
-  console.log(`[setup-venv] Installing required packages: ${REQUIRED_PACKAGES.join(', ')}...`);
+  consoleStyler.log('plugin', `Installing required packages: ${REQUIRED_PACKAGES.join(', ')}...`);
   try {
     spawnSync(PIP_BIN, ['install', '--upgrade', 'pip'], { cwd: PLUGIN_DIR, stdio: 'ignore' });
     const result = spawnSync(PIP_BIN, ['install', ...REQUIRED_PACKAGES], { cwd: PLUGIN_DIR, stdio: 'inherit' });
     if (result.status !== 0) {
-      console.warn(`[setup-venv] WARNING: Failed to install some required packages.`);
+      consoleStyler.log('warning', `WARNING: Failed to install some required packages.`);
     } else {
-      console.log(`[setup-venv] Required packages installed successfully.`);
+      consoleStyler.log('plugin', `Required packages installed successfully.`);
     }
 
-    console.log(`[setup-venv] Installing optional packages: ${OPTIONAL_PACKAGES.join(', ')}...`);
+    consoleStyler.log('plugin', `Installing optional packages: ${OPTIONAL_PACKAGES.join(', ')}...`);
     spawnSync(PIP_BIN, ['install', ...OPTIONAL_PACKAGES], { cwd: PLUGIN_DIR, stdio: 'inherit' });
 
     return true;
   } catch (err) {
-    console.error(`[setup-venv] ERROR: Package installation failed: ${err.message}`);
+    consoleStyler.log('error', `ERROR: Package installation failed: ${err.message}`);
     return false;
   }
 }
 
 function verifySetup() {
-  console.log(`[setup-venv] Verifying SymPy installation...`);
+  consoleStyler.log('plugin', `Verifying SymPy installation...`);
   try {
     const testCode = 'import sympy; print(sympy.__version__)';
     const result = spawnSync(PYTHON_BIN, ['-c', testCode], { encoding: 'utf-8' });
     if (result.status === 0 && result.stdout) {
-      console.log(`[setup-venv] OK: SymPy version ${result.stdout.trim()} is installed and working.`);
+      consoleStyler.log('plugin', `OK: SymPy version ${result.stdout.trim()} is installed and working.`);
       return true;
     }
-    console.error(`[setup-venv] FAIL: Python executed but failed to load sympy.`);
+    consoleStyler.log('error', `FAIL: Python executed but failed to load sympy.`);
     return false;
   } catch (err) {
-    console.error(`[setup-venv] FAIL: Could not execute Python from venv: ${err.message}`);
+    consoleStyler.log('error', `FAIL: Could not execute Python from venv: ${err.message}`);
     return false;
   }
 }
 
 function cleanVenv() {
   if (fs.existsSync(VENV_DIR)) {
-    console.log(`[setup-venv] Removing virtual environment at ${VENV_DIR}...`);
+    consoleStyler.log('plugin', `Removing virtual environment at ${VENV_DIR}...`);
     try {
       fs.rmSync(VENV_DIR, { recursive: true, force: true });
-      console.log(`[setup-venv] Removed successfully.`);
+      consoleStyler.log('plugin', `Removed successfully.`);
     } catch (err) {
-      console.error(`[setup-venv] ERROR: Failed to remove directory: ${err.message}`);
+      consoleStyler.log('error', `ERROR: Failed to remove directory: ${err.message}`);
     }
   } else {
-    console.log(`[setup-venv] No virtual environment found.`);
+    consoleStyler.log('plugin', `No virtual environment found.`);
   }
 }
 
@@ -125,7 +126,7 @@ function main() {
 
   if (args.includes('--check')) {
     if (!fs.existsSync(PYTHON_BIN)) {
-      console.log(`[setup-venv] Venv not found. Run without --check to create it.`);
+      consoleStyler.log('plugin', `Venv not found. Run without --check to create it.`);
       process.exit(1);
     }
     if (!verifySetup()) {
@@ -134,12 +135,12 @@ function main() {
     return;
   }
 
-  console.log(`--- poorman-alpha: Setting up Python Environment ---`);
+  consoleStyler.log('plugin', `--- poorman-alpha: Setting up Python Environment ---`);
   if (createVenv()) {
     installPackages();
     verifySetup();
   }
-  console.log(`--- poorman-alpha: Setup Complete ---`);
+  consoleStyler.log('plugin', `--- poorman-alpha: Setup Complete ---`);
 }
 
 main();

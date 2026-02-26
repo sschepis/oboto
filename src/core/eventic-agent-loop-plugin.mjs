@@ -1,5 +1,6 @@
 import { emitStatus } from './status-reporter.mjs';
 import { isCancellationError } from './ai-provider.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Gracefully clean up error listeners and persist state on early exit
@@ -14,7 +15,7 @@ async function gracefulCleanup(ctx, engine) {
             await ctx.stateManager.complete(ctx);
         } catch (e) {
             // Best-effort cleanup — don't mask the original error
-            console.error('[gracefulCleanup] State persistence failed:', e.message);
+            consoleStyler.log('error', `State persistence failed: ${e.message}`);
         }
     }
 }
@@ -137,7 +138,7 @@ export const EventicAgentLoopPlugin = {
                         }
                     }
                 } catch (e) {
-                    console.error('[AGENT_START] Consciousness preProcess failed:', e);
+                    consoleStyler.logError('error', 'Consciousness preProcess failed', e);
                 }
             }
 
@@ -263,7 +264,7 @@ export const EventicAgentLoopPlugin = {
                             });
                         }
                     } catch (e) {
-                        console.error('[ACTOR_CRITIC_LOOP] renderFactContext failed:', e);
+                        consoleStyler.logError('error', 'renderFactContext failed', e);
                     }
                 }
             } else {

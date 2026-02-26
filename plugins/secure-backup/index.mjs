@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;       // 256 bits
@@ -97,7 +98,7 @@ class CryptoEngine {
 }
 
 export async function activate(api) {
-  console.log('[Secure Backup] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   const cryptoEngine = new CryptoEngine(DEFAULT_SETTINGS);
 
@@ -127,7 +128,7 @@ export async function activate(api) {
     try {
       await fs.mkdir(getBackupsDir(), { recursive: true });
     } catch (e) {
-      console.error('[Secure Backup] Could not create backup directory', e);
+      consoleStyler.logError('error', 'Could not create backup directory', e);
     }
   }
 
@@ -234,7 +235,7 @@ export async function activate(api) {
 
       const data = JSON.parse(decrypted.toString('utf-8'));
       
-      console.log('[Secure Backup] Successfully decrypted data:', data.name);
+      consoleStyler.log('plugin', `[Secure Backup] Successfully decrypted data: ${data.name}`);
 
       return { success: true, message: `Restored backup ${data.name}` };
     }
@@ -272,9 +273,9 @@ export async function activate(api) {
     }
   });
 
-  console.log('[Secure Backup] Activated.');
+  consoleStyler.log('plugin', 'Activated.');
 }
 
 export function deactivate(api) {
-  console.log('[Secure Backup] Deactivated.');
+  consoleStyler.log('plugin', 'Deactivated.');
 }

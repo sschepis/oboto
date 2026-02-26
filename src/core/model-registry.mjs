@@ -4,6 +4,7 @@
 // Users can register custom models at runtime (e.g. for local Ollama/LMStudio models).
 
 import { config } from '../config.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * @typedef {Object} ModelCapabilities
@@ -211,7 +212,7 @@ async function fetchOpenAIModels() {
             headers: { 'Authorization': `Bearer ${apiKey}` },
         });
         if (!resp.ok) {
-            console.warn(`[model-registry] OpenAI models API returned ${resp.status}`);
+            consoleStyler.log('warning', `OpenAI models API returned ${resp.status}`);
             return {};
         }
         const json = await resp.json();
@@ -235,10 +236,10 @@ async function fetchOpenAIModels() {
                 _fromAPI: true,
             };
         }
-        console.log(`[model-registry] Fetched ${Object.keys(models).length} models from OpenAI API`);
+        consoleStyler.log('status', `Fetched ${Object.keys(models).length} models from OpenAI API`);
         return models;
     } catch (err) {
-        console.warn(`[model-registry] Failed to fetch OpenAI models: ${err.message}`);
+        consoleStyler.log('warning', `Failed to fetch OpenAI models: ${err.message}`);
         return {};
     }
 }
@@ -280,10 +281,10 @@ async function fetchGeminiModels() {
                 _fromAPI: true,
             };
         }
-        console.log(`[model-registry] Fetched ${Object.keys(models).length} models from Gemini API`);
+        consoleStyler.log('status', `Fetched ${Object.keys(models).length} models from Gemini API`);
         return models;
     } catch (err) {
-        console.warn(`[model-registry] Failed to fetch Gemini models: ${err.message}`);
+        consoleStyler.log('warning', `Failed to fetch Gemini models: ${err.message}`);
         return {};
     }
 }
@@ -363,7 +364,7 @@ async function fetchLMStudioModels() {
 
     const count = Object.keys(models).length;
     if (count > 0) {
-        console.log(`[model-registry] Fetched ${count} models from LMStudio (${baseUrl})`);
+        consoleStyler.log('status', `Fetched ${count} models from LMStudio (${baseUrl})`);
     }
     return models;
 }
@@ -396,10 +397,10 @@ async function fetchCloudModels() {
                 _fromAPI: true,
             };
         }
-        console.log(`[model-registry] Fetched ${Object.keys(result).length} models from Oboto Cloud`);
+        consoleStyler.log('cloud', `Fetched ${Object.keys(result).length} models from Oboto Cloud`);
         return result;
     } catch (err) {
-        console.warn(`[model-registry] Failed to fetch cloud models: ${err.message}`);
+        consoleStyler.log('warning', `Failed to fetch cloud models: ${err.message}`);
         return {};
     }
 }
@@ -421,16 +422,16 @@ export async function fetchRemoteModels() {
     // Anthropic has no list API — always include the curated known models
     const anthropicCount = Object.keys(ANTHROPIC_KNOWN_MODELS).length;
     if (anthropicCount > 0) {
-        console.log(`[model-registry] Included ${anthropicCount} curated Anthropic models (no list API)`);
+        consoleStyler.log('status', `Included ${anthropicCount} curated Anthropic models (no list API)`);
     }
     _remoteModels = { ...ANTHROPIC_KNOWN_MODELS, ...openai, ...gemini, ...lmstudio, ...cloud };
     _remoteFetched = true;
 
     const total = Object.keys(_remoteModels).length;
     if (total > 0) {
-        console.log(`[model-registry] Remote model registry updated: ${total} models`);
+        consoleStyler.log('status', `Remote model registry updated: ${total} models`);
     } else {
-        console.log(`[model-registry] No remote models fetched — using fallback list`);
+        consoleStyler.log('status', `No remote models fetched — using fallback list`);
     }
 }
 
@@ -474,7 +475,7 @@ export async function fetchModelsForProvider(provider) {
             fetched = await fetchCloudModels();
             break;
         default:
-            console.warn(`[model-registry] Unknown provider: ${provider}`);
+            consoleStyler.log('warning', `Unknown provider: ${provider}`);
             return {};
     }
 
@@ -490,7 +491,7 @@ export async function fetchModelsForProvider(provider) {
     _remoteFetched = true;
 
     const count = Object.keys(fetched).length;
-    console.log(`[model-registry] Refreshed ${count} models for provider: ${provider}`);
+    consoleStyler.log('status', `Refreshed ${count} models for provider: ${provider}`);
     return fetched;
 }
 

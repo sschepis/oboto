@@ -1,5 +1,6 @@
 import { config } from '../config.mjs';
 import { callProvider, callProviderStream, isCancellationError } from './ai-provider.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Eventic AI Plugin wrapping the existing ai-provider.mjs
@@ -234,7 +235,7 @@ export class EventicAIProvider {
                     if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
                     return JSON.parse(jsonStr.trim());
                 } catch (e) {
-                    console.error('[EventicAIProvider] JSON parse error:', e.message);
+                    consoleStyler.log('error', `AI response JSON parse error: ${e.message}`);
                     return { error: 'JSON parse failed', raw: content };
                 }
             }
@@ -248,7 +249,7 @@ export class EventicAIProvider {
             if (isCancellationError(error) || (options.signal && options.signal.aborted)) {
                 throw error;
             }
-            console.error('[EventicAIProvider] Request failed:', error.message);
+            consoleStyler.log('error', `AI request failed: ${error.message}`);
             throw error;
         }
     }

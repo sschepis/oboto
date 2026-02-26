@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { OpenClawClient } from './client.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 /**
  * Manages the OpenClaw integration lifecycle.
@@ -36,28 +37,28 @@ export class OpenClawManager {
         await this.loadConfig(workspaceDir);
     }
 
-    console.log(`[OpenClawManager] Starting in ${this.config.mode} mode...`);
+    consoleStyler.log('openclaw', `Starting in ${this.config.mode} mode...`);
 
     if (this.config.mode === 'integrated') {
       try {
         await this.spawnProcess();
       } catch (err) {
-        console.error('[OpenClawManager] Failed to spawn process, continuing without it:', err.message);
+        consoleStyler.log('error', `Failed to spawn OpenClaw process: ${err.message}`);
       }
     }
 
     this.client = new OpenClawClient(this.config.url, this.config.authToken);
 
     this.client.on('connected', () => {
-      console.log('[OpenClawManager] Client connected successfully');
+      consoleStyler.log('openclaw', 'Client connected successfully');
     });
 
     this.client.on('disconnected', () => {
-      console.log('[OpenClawManager] Client disconnected');
+      consoleStyler.log('openclaw', 'Client disconnected');
     });
 
     this.client.on('error', (err) => {
-      console.error('[OpenClawManager] Client error:', err);
+      consoleStyler.logError('error', 'OpenClaw client error', err);
     });
 
     // Attempt to connect with retries
@@ -84,10 +85,10 @@ export class OpenClawManager {
               try {
                   const content = await fs.promises.readFile(localConfigPath, 'utf8');
                   const localConfig = JSON.parse(content);
-                  console.log(`[OpenClawManager] Loaded workspace override from ${localConfigPath}`);
+                  consoleStyler.log('openclaw', `Loaded workspace override config from ${localConfigPath}`);
                   this.config = { ...this.config, ...localConfig };
               } catch (err) {
-                  console.warn(`[OpenClawManager] Failed to load workspace config: ${err.message}`);
+                  consoleStyler.log('warning', `Failed to load workspace config: ${err.message}`);
               }
           }
       }
@@ -104,13 +105,12 @@ export class OpenClawManager {
         await this.client.connect();
         return;
       } catch (err) {
-        // console.warn(`[OpenClawManager] Connection attempt ${i + 1}/${retries} failed: ${err.message}`);
         if (i < retries - 1) {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
-    console.error('[OpenClawManager] Failed to connect after multiple attempts');
+    consoleStyler.log('error', 'Failed to connect to OpenClaw after max retries');
   }
 
   /**
@@ -265,7 +265,7 @@ export class OpenClawManager {
 
           return { success: true };
       } catch (err) {
-          console.error('[OpenClawManager] Install failed:', err);
+          consoleStyler.logError('error', 'OpenClaw install failed', err);
           return { success: false, error: err.message };
       }
   }
@@ -384,7 +384,7 @@ export class OpenClawManager {
         ? ['dist/index.js', 'gateway']
         : ['openclaw.mjs', 'gateway', 'run'];
 
-    console.log(`[OpenClawManager] Spawning OpenClaw from ${this.config.path}`);
+    consoleStyler.log('openclaw', `Spawning OpenClaw process from ${this.config.path}`);
 
     const gatewayEnv = {
         ...process.env,
@@ -412,25 +412,23 @@ export class OpenClawManager {
       });
 
       this.process.stdout?.on('data', (data) => {
-         // console.log(`[OpenClaw] ${data.toString().trim()}`);
       });
       this.process.stderr?.on('data', (data) => {
-         // console.error(`[OpenClaw:err] ${data.toString().trim()}`);
       });
 
       this.process.on('error', (err) => {
-        console.error('[OpenClawManager] Process spawn error:', err);
+        consoleStyler.logError('error', 'OpenClaw process spawn error', err);
       });
 
       this.process.on('exit', (code, signal) => {
-        console.log(`[OpenClawManager] Process exited with code ${code} signal ${signal}`);
+        consoleStyler.log('openclaw', `Process exited with code ${code} signal ${signal}`);
         this.process = null;
       });
 
       // Give the process a moment to initialize before we try to connect
       await this.waitForReady(10, 1500);
     } catch (err) {
-      console.error('[OpenClawManager] Failed to spawn process:', err);
+      consoleStyler.logError('error', 'Failed to spawn OpenClaw process', err);
       throw err;
     }
   }
@@ -442,7 +440,7 @@ export class OpenClawManager {
                 signal: AbortSignal.timeout(2000)
             });
             if (res.ok) {
-                console.log('[OpenClawManager] Gateway is ready');
+                consoleStyler.log('openclaw', 'Gateway is ready');
                 return;
             }
         } catch {}
@@ -451,7 +449,7 @@ export class OpenClawManager {
             await new Promise(r => setTimeout(r, delay));
         }
     }
-    console.warn('[OpenClawManager] Gateway may not be fully ready');
+    consoleStyler.log('warning', 'OpenClaw gateway may not be fully ready');
   }
   
   async healthCheck(retries = 5, delay = 2000) {
@@ -475,14 +473,14 @@ export class OpenClawManager {
    * Stops the OpenClaw integration.
    */
   async stop() {
-    console.log('[OpenClawManager] Stopping...');
+    consoleStyler.log('openclaw', 'Stopping OpenClaw...');
     if (this.client) {
       this.client.disconnect();
       this.client = null;
     }
 
     if (this.process) {
-      console.log('[OpenClawManager] Killing process...');
+      consoleStyler.log('openclaw', 'Killing OpenClaw process...');
       this.process.kill(); // SIGTERM
       
       // Force kill if it doesn't exit
@@ -504,14 +502,14 @@ export class OpenClawManager {
    */
   async setConfig(newConfig, scope = 'session', workspaceDir = null) {
     this.config = { ...this.config, ...newConfig };
-    console.log('[OpenClawManager] Configuration updated:', this.config);
+    consoleStyler.log('openclaw', 'Configuration updated');
 
     if (scope === 'global' && this.secretsManager) {
         if (newConfig.mode) await this.secretsManager.set('OPENCLAW_MODE', newConfig.mode, 'Integrations', 'OpenClaw integration mode');
         if (newConfig.url) await this.secretsManager.set('OPENCLAW_URL', newConfig.url, 'Endpoints', 'OpenClaw WebSocket URL');
         if (newConfig.authToken) await this.secretsManager.set('OPENCLAW_AUTH_TOKEN', newConfig.authToken, 'Integrations', 'OpenClaw gateway authentication token');
         if (newConfig.path) await this.secretsManager.set('OPENCLAW_PATH', newConfig.path, 'Endpoints', 'Path to OpenClaw binary');
-        console.log('[OpenClawManager] Global configuration saved to vault');
+        consoleStyler.log('openclaw', 'Global config saved');
     } else if (scope === 'workspace' && workspaceDir) {
         const configDir = path.join(workspaceDir, '.oboto');
         if (!fs.existsSync(configDir)) {
@@ -526,7 +524,7 @@ export class OpenClawManager {
             path: this.config.path
         };
         await fs.promises.writeFile(localConfigPath, JSON.stringify(toSave, null, 2));
-         console.log(`[OpenClawManager] Workspace configuration saved to ${localConfigPath}`);
+         consoleStyler.log('openclaw', `Workspace config saved to ${localConfigPath}`);
     }
   }
 
@@ -538,12 +536,12 @@ export class OpenClawManager {
     // Debounce: ignore rapid-fire restarts (e.g. from duplicate set-cwd messages).
     const now = Date.now();
     if (now - this._lastRestartAt < OpenClawManager.RESTART_DEBOUNCE_MS) {
-      console.log('[OpenClawManager] Restart debounced — skipping (too soon after last restart)');
+      consoleStyler.log('openclaw', 'Restart debounced');
       return;
     }
     this._lastRestartAt = now;
 
-    console.log('[OpenClawManager] Restarting...');
+    consoleStyler.log('openclaw', 'Restarting OpenClaw...');
     await this.stop();
     await this.start(workspaceDir);
   }

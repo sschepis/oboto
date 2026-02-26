@@ -1,6 +1,8 @@
 import * as chokidar from 'chokidar';
 import { readFile } from 'fs/promises';
 import { UiManifest } from './types';
+// @ts-ignore - .mjs module (see console-styler.d.ts for types)
+import { consoleStyler } from '../console-styler.mjs';
 
 export class ManifestWatcher {
   private watcher: chokidar.FSWatcher | null = null;
@@ -35,7 +37,7 @@ export class ManifestWatcher {
           this.currentManifest = manifest;
           this.onChange(manifest);
         } catch (error) {
-          console.error('Error reading manifest:', error);
+          consoleStyler.logError('system', 'Error reading manifest', error);
         }
       }, this.debounceDelay);
     };

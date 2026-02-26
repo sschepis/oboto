@@ -1,4 +1,5 @@
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -29,7 +30,7 @@ export class WorkflowEngine {
 
   async execute(workflow, inputs = {}) {
     if (this.settings.verboseLogging) {
-      console.log(`[WorkflowEngine] Starting workflow: ${workflow.id}`);
+      consoleStyler.log('plugin', `Starting workflow: ${workflow.id}`);
     }
     const context = { ...inputs };
     const results = {};
@@ -37,13 +38,13 @@ export class WorkflowEngine {
     for (const step of workflow.steps) {
       const handler = this.stepHandlers[step.type];
       if (!handler) {
-        console.warn(`[WorkflowEngine] Unknown step type: ${step.type}`);
+        consoleStyler.log('warning', `Unknown step type: ${step.type}`);
         continue;
       }
 
       try {
         if (this.settings.verboseLogging) {
-          console.log(`[WorkflowEngine] Executing step ${step.id} (${step.type})...`);
+          consoleStyler.log('plugin', `Executing step ${step.id} (${step.type})...`);
         }
         // Resolve inputs from context
         const resolvedParams = this.resolveParams(step.params, context, results);
@@ -57,7 +58,7 @@ export class WorkflowEngine {
         }
 
       } catch (error) {
-        console.error(`[WorkflowEngine] Error in step ${step.id}:`, error);
+        consoleStyler.logError('error', `Error in step ${step.id}`, error);
         throw error;
       }
     }
@@ -95,7 +96,7 @@ export class WorkflowEngine {
 }
 
 export async function activate(api) {
-  console.log('[Workflow Weaver] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   // engine is declared here so the onSettingsChange callback can reference it
   let engine;
@@ -114,7 +115,7 @@ export async function activate(api) {
   // Register basic step types
   engine.registerStepType('log', async (params) => {
     if (pluginSettings.verboseLogging) {
-      console.log('[Workflow Log]', params.message);
+      consoleStyler.log('plugin', `[Workflow Log] ${params.message}`);
     }
     api.events.emit('workflow-weaver:log', { message: params.message });
     return { logged: true };
@@ -122,20 +123,20 @@ export async function activate(api) {
 
   engine.registerStepType('tool', async (params) => {
     if (pluginSettings.verboseLogging) {
-      console.log(`[Workflow Tool] Calling tool ${params.toolName} with`, params.args);
+      consoleStyler.log('plugin', `Calling tool ${params.toolName} with ${JSON.stringify(params.args)}`);
     }
     try {
       const result = await api.tools.execute(params.toolName, params.args || {});
       return { toolOutput: result };
     } catch (e) {
-      console.error(`[Workflow Tool] Error invoking ${params.toolName}:`, e);
+      consoleStyler.logError('error', `Error invoking ${params.toolName}`, e);
       throw e;
     }
   });
 
   engine.registerStepType('agent', async (params) => {
     if (pluginSettings.verboseLogging) {
-      console.log(`[Workflow Agent] Querying agent with: ${params.prompt}`);
+      consoleStyler.log('plugin', `Querying agent with: ${params.prompt}`);
     }
     try {
       const response = await api.ai.ask(params.prompt, {
@@ -144,7 +145,7 @@ export async function activate(api) {
       });
       return { response };
     } catch (e) {
-      console.error(`[Workflow Agent] Error querying agent:`, e);
+      consoleStyler.logError('error', 'Error querying agent', e);
       throw e;
     }
   });
@@ -241,9 +242,9 @@ export async function activate(api) {
     }
   });
 
-  console.log('[Workflow Weaver] Activated.');
+  consoleStyler.log('plugin', 'Activated.');
 }
 
 export function deactivate(api) {
-  console.log('[Workflow Weaver] Deactivated.');
+  consoleStyler.log('plugin', 'Deactivated.');
 }

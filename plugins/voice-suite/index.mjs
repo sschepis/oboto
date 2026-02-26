@@ -1,6 +1,7 @@
 import { OpenAIProvider } from './providers/openai.mjs';
 import { ElevenLabsProvider } from './providers/elevenlabs.mjs';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -19,7 +20,7 @@ const SETTINGS_SCHEMA = [
 ];
 
 export async function activate(api) {
-  console.log(`[voice-suite] Activating plugin ${api.id}`);
+  consoleStyler.log('plugin', `Activating plugin ${api.id}`);
 
   const { pluginSettings } = await registerSettingsHandlers(
     api, 'voice-suite', DEFAULT_SETTINGS, SETTINGS_SCHEMA
@@ -123,9 +124,9 @@ export async function activate(api) {
     }
   });
 
-  console.log(`[voice-suite] Tools registered: text_to_speech, transcribe_audio, get_voices, clone_voice, generate_sound_effect`);
+  consoleStyler.log('plugin', `Tools registered: text_to_speech, transcribe_audio, get_voices, clone_voice, generate_sound_effect`);
 }
 
 export function deactivate(api) {
-  console.log(`[voice-suite] Deactivating plugin ${api.id}`);
+  consoleStyler.log('plugin', `Deactivating plugin ${api.id}`);
 }

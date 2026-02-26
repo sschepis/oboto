@@ -19,6 +19,7 @@ import { sanitizePython } from './lib/sanitizer.mjs';
 import { LRUCache } from './lib/cache.mjs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -98,11 +99,11 @@ function getPersistentProcess(pythonPath) {
 
     persistentProcess.stderr.on('data', (data) => {
       const msg = data.toString().trim();
-      if (msg) console.warn(`[sympy-bridge] stderr: ${msg}`);
+      if (msg) consoleStyler.log('warning', `stderr: ${msg}`);
     });
 
     persistentProcess.on('close', (code) => {
-      console.log(`[sympy-bridge] Python process exited with code ${code}`);
+      consoleStyler.log('plugin', `Python process exited with code ${code}`);
       processReady = false;
       persistentProcess = null;
       // Reject all pending requests

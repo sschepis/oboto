@@ -172,7 +172,7 @@ export class McpClientManager {
                    await connection.transport.close();
                 }
             } catch (e) {
-                console.error(`Error closing connection ${name}:`, e);
+                consoleStyler.logError('error', 'Error closing MCP connection', e);
             }
             this.clients.delete(name);
             consoleStyler.log('system', `Disconnected from MCP server: ${name}`);

@@ -99,6 +99,12 @@ export class ConsoleStyler {
             custom: '🛠️',
             loading: '⟳',
             status: '📡',
+            cloud: '☁️',
+            plugin: '🔌',
+            agentic: '🧬',
+            openclaw: '⚖️',
+            security: '🔒',
+            migration: '🚚',
             check: figures.tick,
             cross: figures.cross,
             bullet: figures.bullet,
@@ -242,6 +248,30 @@ export class ConsoleStyler {
                 colorFunc = theme.accent;
                 label = 'CUSTOM';
                 break;
+            case 'cloud':
+                colorFunc = theme.info || theme.primary;
+                label = 'CLOUD';
+                break;
+            case 'plugin':
+                colorFunc = theme.accent || theme.primary;
+                label = 'PLUGIN';
+                break;
+            case 'agentic':
+                colorFunc = theme.reasoning || theme.primary;
+                label = 'AGENTIC';
+                break;
+            case 'openclaw':
+                colorFunc = theme.system || theme.primary;
+                label = 'OPENCLAW';
+                break;
+            case 'security':
+                colorFunc = theme.warning || theme.primary;
+                label = 'SECURITY';
+                break;
+            case 'migration':
+                colorFunc = theme.system || theme.primary;
+                label = 'MIGRATION';
+                break;
             default:
                 colorFunc = theme.info;
                 label = type.toUpperCase();
@@ -275,7 +305,13 @@ export class ConsoleStyler {
             tools: 'cyan',
             todo: 'magenta',
             workspace: 'blue',
-            quality: 'yellow'
+            quality: 'yellow',
+            cloud: '#0077b6',
+            plugin: '#6c5ce7',
+            agentic: '#e17055',
+            openclaw: '#00cec9',
+            security: '#fdcb6e',
+            migration: '#636e72'
         };
         return colorMap[type] || 'cyan';
     }
@@ -417,6 +453,35 @@ export class ConsoleStyler {
         // Additionally forward to listener (e.g. eventBus for WebSocket broadcast)
         if (this.listener && typeof this.listener.log === 'function') {
             this.listener.log(type, content, options);
+        }
+    }
+
+    /**
+     * Log an error with stack trace preservation.
+     * Use this instead of console.error(msg, err) to maintain styled output
+     * while preserving the error's stack trace for debugging.
+     * 
+     * @param {string} type - The log type (e.g., 'error', 'plugin', 'cloud')
+     * @param {string} message - Human-readable error message
+     * @param {Error|any} errorObj - The error object whose stack should be preserved
+     * @param {Object} options - Additional formatting options
+     */
+    logError(type, message, errorObj, options = {}) {
+        // Log the styled message
+        this.log(type, message, options);
+        // Preserve the stack trace
+        if (errorObj) {
+            if (errorObj.stack) {
+                console.error(errorObj.stack);
+            } else if (errorObj instanceof Error) {
+                console.error(errorObj);
+            } else {
+                console.error(errorObj);
+            }
+            // Forward to listener if available (use positional args matching log() signature)
+            if (this.listener?.log) {
+                this.listener.log('error-stack', errorObj.stack || String(errorObj));
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { consoleStyler } from '../ui/console-styler.mjs';
 import { Eventic, defaultTools } from './eventic.mjs';
 import { EventicAIProvider } from './eventic-ai-plugin.mjs';
 import { EventicToolsPlugin } from './eventic-tools-plugin.mjs';
@@ -77,7 +78,7 @@ export class EventicFacade {
                 aiAssistantClass: EventicFacade
             });
             this._checkpointInitPromise = this.taskCheckpointManager.initialize().catch(err => {
-                console.error('[EventicFacade] CheckpointManager init error:', err);
+                consoleStyler.logError('error', 'CheckpointManager init error', err);
             });
         } else {
             // Lightweight stub for child agents — no checkpointing needed
@@ -100,7 +101,7 @@ export class EventicFacade {
                     if (options.statusAdapter && typeof options.statusAdapter.log === 'function') {
                         options.statusAdapter.log('info', msg);
                     } else {
-                        console.log(msg);
+                        consoleStyler.log('info', msg);
                     }
                 }
             ],
@@ -155,11 +156,11 @@ export class EventicFacade {
             defaultAgenticProvider,
             this._getAgenticDeps()
         ).catch(err => {
-            console.warn(`[EventicFacade] Failed to activate agentic provider "${defaultAgenticProvider}", falling back to eventic:`, err.message);
+            consoleStyler.log('warning', `Failed to activate agentic provider "${defaultAgenticProvider}", falling back to eventic: ${err.message}`);
             return this.agenticRegistry.setActive('eventic', this._getAgenticDeps());
         }).catch(err => {
             // Both primary and fallback failed — log and let run()/runStream() handle the null provider
-            console.error(`[EventicFacade] All agentic providers failed to initialize:`, err.message);
+            consoleStyler.log('error', `All agentic providers failed to activate: ${err.message}`);
         });
 
         // Track the facade's busy state
@@ -232,7 +233,7 @@ export class EventicFacade {
             // Providers may return a string or { response, streamed }
             return typeof result === 'string' ? result : (result.response || 'No response generated.');
         } catch (err) {
-            console.error('[EventicFacade] Run error:', err);
+            consoleStyler.logError('error', 'Run error', err);
             throw err;
         } finally {
             this._isBusy = false;
@@ -276,7 +277,7 @@ export class EventicFacade {
             
             return responseText || 'No response generated.';
         } catch (err) {
-            console.error('[EventicFacade] Stream error:', err);
+            consoleStyler.logError('error', 'Stream error', err);
             return `Error: ${err.message}`;
         } finally {
             this._isBusy = false;
@@ -284,7 +285,7 @@ export class EventicFacade {
     }
 
     queueChimeIn(message) {
-        console.warn('[EventicFacade] queueChimeIn not implemented in Eventic phase 1');
+        consoleStyler.log('warning', 'queueChimeIn not implemented for this provider');
         return false;
     }
 
@@ -402,7 +403,7 @@ export class EventicFacade {
         try {
             process.chdir(resolvedPath);
         } catch (e) {
-            console.warn(`[EventicFacade] Could not chdir to ${resolvedPath}`);
+            consoleStyler.log('warning', `Could not chdir to: ${resolvedPath}`);
         }
         
         if (this.personaManager) {
@@ -454,7 +455,7 @@ export class EventicFacade {
         const activeProvider = this.agenticRegistry.getActive();
         if (activeProvider) {
             this._agenticInitPromise = activeProvider.initialize(this._getAgenticDeps()).catch(err => {
-                console.warn('[EventicFacade] Failed to re-initialize agentic provider after workspace change:', err.message);
+                consoleStyler.log('warning', `Failed to re-init agentic provider: ${err.message}`);
             });
         }
 
@@ -556,7 +557,7 @@ export class EventicFacade {
             }
             return activeHm.getHistory().length > 1;
         } catch (error) {
-            console.error(`[EventicFacade] Failed to load conversation: ${error.message}`);
+            consoleStyler.log('error', `Failed to load conversation: ${error.message}`);
             return false;
         }
     }
@@ -668,7 +669,7 @@ COMPLETION:`;
             completion = completion.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
             return completion;
         } catch (e) {
-            console.error(`[EventicFacade] Code completion failed: ${e.message}`);
+            consoleStyler.log('error', `Code completion failed: ${e.message}`);
             return null;
         }
     }
@@ -692,7 +693,7 @@ COMPLETION:`;
             steps.push({ id: 'explain', label: 'Explain Project', icon: 'book-open', prompt: 'Explain what this project does based on the file structure.', type: 'prompt' });
 
         } catch (e) {
-            console.error(`[EventicFacade] Error generating next steps: ${e.message}`);
+            consoleStyler.log('error', `Error generating next steps: ${e.message}`);
         }
 
         if (this.eventBus) {

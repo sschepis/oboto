@@ -12,6 +12,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 // ── Settings ─────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ class StorageService {
         this.documents.push(storedDoc);
         await this.api.storage.set('documents', this.documents);
 
-        console.log(`[document-reader] Saved document ${storedDoc.id}`);
+        consoleStyler.log('plugin', `Saved document ${storedDoc.id}`);
         return storedDoc;
     }
 
@@ -111,7 +112,7 @@ class ExtractionService {
         let content = '';
         let metadata = { title: path.basename(filePath) };
 
-        console.log(`[document-reader] Extracting ${filePath} as ${mimeType}`);
+        consoleStyler.log('plugin', `Extracting ${filePath} as ${mimeType}`);
 
         if (mimeType === 'application/pdf') {
             if (!pdfParse) pdfParse = (await import('pdf-parse')).default;
@@ -180,7 +181,7 @@ class EnrichmentService {
     }
 
     async enrich(document) {
-        console.log('[document-reader] Enriching document...');
+        consoleStyler.log('plugin', 'Enriching document...');
         const summary = await this.generateSummary(document.content);
         const entities = this.extractEntities(document.content);
 
@@ -207,7 +208,7 @@ class EnrichmentService {
                 return response.trim();
             }
         } catch (err) {
-            console.warn('[document-reader] AI summarization failed, falling back to simple extraction', err.message);
+            consoleStyler.log('warning', `[document-reader] AI summarization failed, falling back to simple extraction ${err.message}`);
         }
 
         // Fallback to simple extraction (first few sentences)
@@ -227,7 +228,7 @@ class EnrichmentService {
 // ── Plugin Lifecycle ──────────────────────────────────────────────────────
 
 export async function activate(api) {
-    console.log('[document-reader] Activating...');
+    consoleStyler.log('plugin', 'Activating...');
 
     let enrichmentService;
 
@@ -357,9 +358,9 @@ export async function activate(api) {
         }
     });
 
-    console.log('[document-reader] Activated');
+    consoleStyler.log('plugin', 'Activated');
 }
 
 export async function deactivate(api) {
-    console.log('[document-reader] Deactivated');
+    consoleStyler.log('plugin', 'Deactivated');
 }

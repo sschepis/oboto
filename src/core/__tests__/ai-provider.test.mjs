@@ -3,25 +3,25 @@
  */
 
 import { jest } from '@jest/globals';
-
-// Mock config to avoid loading .env / real configuration
-jest.mock('../../config.mjs', () => ({
-    config: {
-        ai: { provider: 'lmstudio', model: 'test-model', endpoint: null },
-        keys: { openai: null, google: null },
-    },
-}));
-
 import { detectProvider, AI_PROVIDERS, _testExports } from '../ai-provider.mjs';
+import { consoleStyler } from '../../ui/console-styler.mjs';
 
 const { withRetry, isCancellationError } = _testExports;
+
+// Spy on consoleStyler.log so we can intercept warnings from the refactored code.
+// In ESM, jest.mock() is unreliable; spying on the live singleton works reliably.
+let consoleStylerLogSpy;
 
 // ─── detectProvider ──────────────────────────────────────────────────────
 
 describe('detectProvider', () => {
+    beforeEach(() => {
+        consoleStylerLogSpy = jest.spyOn(consoleStyler, 'log').mockImplementation(() => {});
+    });
     afterEach(() => {
         // Reset the one-time claude warning flag between tests
         detectProvider._claudeWarned = false;
+        consoleStylerLogSpy.mockRestore();
     });
 
     test('returns "gemini" for "gemini-2.0-flash"', () => {
@@ -57,31 +57,32 @@ describe('detectProvider', () => {
     });
 
     test('emits claude deprecation warning only once', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-        // First call — should warn
+        // First call — should warn via consoleStyler.log('warning', ...)
         detectProvider('claude-3-opus');
-        expect(warnSpy).toHaveBeenCalledTimes(1);
-        expect(warnSpy.mock.calls[0][0]).toMatch(/Anthropic Vertex SDK has been removed/);
+        const warningCalls = consoleStylerLogSpy.mock.calls.filter(
+            ([type]) => type === 'warning'
+        );
+        expect(warningCalls.length).toBe(1);
+        expect(warningCalls[0][1]).toMatch(/Anthropic Vertex SDK has been removed/);
 
         // Second call — should NOT warn again
         detectProvider('claude-3-haiku');
-        expect(warnSpy).toHaveBeenCalledTimes(1);
-
-        warnSpy.mockRestore();
+        const warningCallsAfter = consoleStylerLogSpy.mock.calls.filter(
+            ([type]) => type === 'warning'
+        );
+        expect(warningCallsAfter.length).toBe(1);
     });
 });
 
 // ─── withRetry ───────────────────────────────────────────────────────────
 
 describe('withRetry', () => {
-    // Suppress console.warn noise from retry logging
-    let warnSpy;
+    // Retry logging now goes through consoleStyler.log — spy and suppress output.
     beforeEach(() => {
-        warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        consoleStylerLogSpy = jest.spyOn(consoleStyler, 'log').mockImplementation(() => {});
     });
     afterEach(() => {
-        warnSpy.mockRestore();
+        consoleStylerLogSpy.mockRestore();
     });
 
     test('returns result on first success', async () => {

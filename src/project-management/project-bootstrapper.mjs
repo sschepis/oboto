@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { PROJECT_PHASES, PROJECT_TYPES, DELIVERABLE_STATUS } from './project-manifest.mjs';
 import { BaseBootstrapper } from '../lib/base-bootstrapper.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 // Files to search for existing project documentation
 const PROJECT_DOC_CANDIDATES = [
@@ -108,7 +109,7 @@ export class ProjectBootstrapper extends BaseBootstrapper {
             };
         }
 
-        console.log(`Found project documentation: ${path.basename(docPath)}`);
+        consoleStyler.log('system', `Found project documentation: ${path.basename(docPath)}`);
 
         // Read and parse the document
         let content;

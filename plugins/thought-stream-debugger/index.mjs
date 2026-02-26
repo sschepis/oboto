@@ -8,6 +8,7 @@
  */
 
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -81,7 +82,7 @@ class TraceCollector {
 }
 
 export async function activate(api) {
-  console.log('[thought-stream-debugger] Activating...');
+  consoleStyler.log('plugin', 'Activating...');
 
   const { pluginSettings } = await registerSettingsHandlers(
     api, 'thought-stream-debugger', DEFAULT_SETTINGS, SETTINGS_SCHEMA,
@@ -147,9 +148,9 @@ export async function activate(api) {
     }
   });
 
-  console.log('[thought-stream-debugger] Activated.');
+  consoleStyler.log('plugin', 'Activated.');
 }
 
 export async function deactivate(api) {
-  console.log('[thought-stream-debugger] Deactivated.');
+  consoleStyler.log('plugin', 'Deactivated.');
 }

@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * SurfaceManager handles the persistence and retrieval of Surface metadata and component source code.
@@ -33,7 +34,7 @@ export class SurfaceManager {
                 }
             }
         } catch (e) {
-            console.error('Migration error:', e);
+            consoleStyler.logError('error', 'Surface migration error', e);
         }
 
         this._initialized = true;

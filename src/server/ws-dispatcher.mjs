@@ -51,7 +51,7 @@ export class WsDispatcher {
             try {
                 await handler(data, ctx);
             } catch (err) {
-                console.error(`[WsDispatcher] Error handling "${data.type}":`, err.message);
+                consoleStyler.log('error', `WebSocket handler error "${data.type}": ${err.message}`);
                 // Try to send error back to client
                 try {
                     if (ctx.ws && ctx.ws.readyState === 1) {

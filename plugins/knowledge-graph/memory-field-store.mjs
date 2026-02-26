@@ -6,6 +6,7 @@ import {
   computeEntropy,
   computeChecksum,
 } from './helpers.mjs';
+import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 export class MemoryFieldStore {
   constructor(api) {
@@ -29,9 +30,9 @@ export class MemoryFieldStore {
           this.memoryFragments.set(fieldId, frags);
         }
       }
-      console.log(`[Knowledge Graph / Memory] Loaded ${this.memoryFields.size} fields`);
+      consoleStyler.log('plugin', `Knowledge Graph / Memory loaded ${this.memoryFields.size} fields`);
     } catch (e) {
-      console.warn('[Knowledge Graph / Memory] Could not load from storage:', e.message);
+      consoleStyler.log('warning', `Knowledge Graph / Memory could not load from storage: ${e.message}`);
     }
   }
 
@@ -44,7 +45,7 @@ export class MemoryFieldStore {
       }
       await this.api.storage.set('memoryFragments', fragObj);
     } catch (e) {
-      console.warn('[Knowledge Graph / Memory] Could not save to storage:', e.message);
+      consoleStyler.log('warning', `Knowledge Graph / Memory could not save to storage: ${e.message}`);
     }
   }
 

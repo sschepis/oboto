@@ -353,8 +353,8 @@ Include: current state + immediate next step.`;
                     consoleStyler.log('system', `Executing hook: ${cmd}`);
                     try {
                         const { stdout, stderr } = await execPromise(cmd, { cwd: this.manifestManager.workingDir });
-                        if (stdout) console.log(`Hook Output: ${stdout}`);
-                        if (stderr) console.error(`Hook Error: ${stderr}`);
+                        if (stdout) consoleStyler.log('system', `Hook Output: ${stdout}`);
+                        if (stderr) consoleStyler.log('error', `Hook Error: ${stderr}`);
                     } catch (e) {
                          consoleStyler.log('error', `Hook failed: ${e.message}`);
                     }

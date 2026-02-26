@@ -120,7 +120,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             });
 
             cloudSyncHolder.instance = newCloudSync;
-            consoleStyler.log('system', '☁️  Cloud initialized from secrets vault');
+            consoleStyler.log('cloud', 'Cloud initialized from secrets vault');
 
             return newCloudSync;
         } catch (err) {
@@ -417,7 +417,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
             assistant.pluginManager.setWsDispatcher(dispatcher);
             assistant.pluginManager.setBroadcast(broadcast);
             await assistant.pluginManager.initialize();
-            consoleStyler.log('system', '🔌 Plugin system initialized');
+            consoleStyler.log('plugin', 'Plugin system initialized');
         } catch (err) {
             consoleStyler.log('warning', `Plugin system initialization failed: ${err.message}`);
         }
@@ -427,7 +427,7 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     if (process.env.OBOTO_AUTO_ACTIVATE === 'true' && agentLoopController) {
         const autoActivateDelay = parseInt(process.env.OBOTO_AUTO_ACTIVATE_DELAY || '3000', 10);
         setTimeout(() => {
-            consoleStyler.log('system', '🤖 Auto-activating agent loop (OBOTO_AUTO_ACTIVATE=true)');
+            consoleStyler.log('ai', 'Auto-activating agent loop (OBOTO_AUTO_ACTIVATE=true)');
             agentLoopController.play().catch(err => {
                 consoleStyler.log('error', `Auto-activate agent loop failed: ${err.message}`);
             });
