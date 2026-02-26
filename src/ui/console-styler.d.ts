@@ -26,7 +26,7 @@ export interface ConsoleStylerInstance {
     getBoxColor(type: string): string;
 }
 
-export declare const consoleStyler: ConsoleStylerInstance;
+/** The ConsoleStyler class — use the exported singleton `consoleStyler` in most cases. */
 export declare class ConsoleStyler implements ConsoleStylerInstance {
     constructor(theme?: string);
     log(type: string, content: string, options?: Record<string, unknown>): void;
@@ -51,3 +51,6 @@ export declare class ConsoleStyler implements ConsoleStylerInstance {
     applyGradient(text: string, colors: string[]): string;
     getBoxColor(type: string): string;
 }
+
+/** Pre-initialized singleton instance — use this for all logging. */
+export declare const consoleStyler: ConsoleStylerInstance;

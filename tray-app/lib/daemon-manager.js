@@ -13,10 +13,10 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 
-/** Strip ANSI escape codes (gradients, colors, etc.) from a string. */
+/** Strip ANSI escape codes (CSI sequences, OSC sequences, hyperlinks, etc.) from a string. */
 function stripAnsi(str) {
     // eslint-disable-next-line no-control-regex
-    return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+    return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\))/g, '');
 }
 
 /** How long to wait for a graceful shutdown before SIGKILL. */

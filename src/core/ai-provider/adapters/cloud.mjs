@@ -90,7 +90,7 @@ export async function callCloudProxy(ctx, requestBody, options = {}) {
             response_format: requestBody.response_format,
         });
         // Extract and emit cloud usage metadata if present, without mutating the original response
-        const { _cloud_usage, ...cloudResponse } = rawCloudResponse || {};
+        const { _cloud_usage, ...cloudResponse } = rawCloudResponse ?? {};
         if (_cloud_usage && _eventBus) {
             _eventBus.emitTyped('cloud:usage-update', _cloud_usage);
         }
