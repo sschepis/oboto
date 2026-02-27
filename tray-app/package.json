@@ -4,6 +4,10 @@
   "description": "Oboto system tray service — manages the background AI daemon",
   "main": "main.js",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sschepis/oboto.git"
+  },
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
@@ -13,6 +17,7 @@
   },
   "build": {
     "appId": "com.oboto.tray",
+    "publish": null,
     "productName": "Oboto",
     "directories": {
       "output": "dist"
