@@ -36,6 +36,8 @@ export function useKeyboardShortcuts(actions: {
   openTaskManager?: () => void;
   toggleTerminal?: () => void;
   toggleConsole?: () => void;
+  toggleHelpPanel?: () => void;
+  toggleWhatIsThis?: () => void;
 }) {
   // Keep actions in a ref so we don't re-register listeners on every render
   const actionsRef = useRef(actions);
@@ -48,7 +50,8 @@ export function useKeyboardShortcuts(actions: {
     // General
     { id: 'palette', display: `${modSymbol}${shiftSymbol}P`, description: 'Open command palette', category: 'general' },
     { id: 'settings', display: `${modSymbol},`, description: 'Open settings', category: 'general' },
-    { id: 'shortcuts-help', display: `${modSymbol}/`, description: 'Show keyboard shortcuts', category: 'general' },
+    { id: 'help-panel', display: `${modSymbol}/`, description: 'Toggle help panel', category: 'general' },
+    { id: 'shortcuts-help', display: `${modSymbol}${shiftSymbol}/`, description: 'Show keyboard shortcuts', category: 'general' },
     { id: 'focus-chat', display: `${modSymbol}${shiftSymbol}C`, description: 'Focus chat input', category: 'general' },
     { id: 'task-manager', display: `${modSymbol}${shiftSymbol}T`, description: 'Open task manager', category: 'general' },
     { id: 'toggle-terminal', display: `${modSymbol}\``, description: 'Toggle drop-down terminal', category: 'general' },
@@ -93,8 +96,17 @@ export function useKeyboardShortcuts(actions: {
         return;
       }
 
-      // Cmd+/ — Shortcuts help
+      // Cmd+/ — Toggle help panel (only when Shift is NOT held)
       if (meta && !shift && key === '/') {
+        e.preventDefault();
+        a.toggleHelpPanel?.();
+        return;
+      }
+
+      // Cmd+Shift+/ — Keyboard shortcuts help
+      // On macOS, Cmd+Shift+/ produces key === '?' rather than '/',
+      // so we check for both to cover all platforms.
+      if (meta && shift && (key === '/' || key === '?')) {
         e.preventDefault();
         a.showShortcutsHelp();
         return;

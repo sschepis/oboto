@@ -1,6 +1,11 @@
+import path from 'path';
+import os from 'os';
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { convertHistoryToUIMessages } from './ws-helpers.mjs';
 import { isLLMAuthError, buildLLMAuthErrorPayload } from './llm-error-detector.mjs';
+import { readJsonFileSync } from '../lib/json-file-utils.mjs';
+
+const SETUP_FILE = path.join(os.homedir(), '.oboto', 'setup.json');
 
 /**
  * Send a JSON payload to a WebSocket only if it is still open.
@@ -154,6 +159,17 @@ export class ClientConnectionHandler {
             } catch (e) {
                 // Ignore
             }
+        }
+
+        // Send setup status (first-run detection) — Layer 1 of first-run strategy.
+        // Proactively push so the client doesn't need to request it.
+        try {
+            const setupData = readJsonFileSync(SETUP_FILE, null);
+            const isFirstRun = setupData === null;
+            safeSend(ws, { type: 'setup-status', payload: { isFirstRun, ...(setupData || {}) } });
+        } catch (e) {
+            // If we can't read setup file, assume first run
+            safeSend(ws, { type: 'setup-status', payload: { isFirstRun: true } });
         }
     }
 

@@ -435,7 +435,10 @@ export async function activate(api) {
 
     const workspaceRoot = api.workingDir || process.cwd();
     state.settingsPath = path.join(workspaceRoot, '.oboto', 'ui-settings.json');
-    // Use the PluginAPI ws.broadcast for WS-level broadcasting to all clients
+    // Broadcast theme events via the PluginAPI.
+    // api.ws.broadcast() auto-prefixes with "plugin:ui-themes:",
+    // so `broadcast('ui-style:theme', data)` → WS type "plugin:ui-themes:ui-style:theme".
+    // The frontend useTheme.ts listens for both the prefixed and unprefixed forms.
     state.broadcastFn = (type, payload) => api.ws.broadcast(type, payload);
 
     // Apply default theme from plugin settings

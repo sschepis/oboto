@@ -19,6 +19,7 @@ import TaskSidebar from './components/layout/TaskSidebar';
 import SecretsPanel from './components/features/SecretsPanel';
 import GuakeTerminal from './components/features/GuakeTerminal';
 import LogPanel from './components/features/LogPanel';
+import { HelpPanel, TourEngine, WhatIsThisMode } from './components/help';
 import { useChat } from './hooks/useChat';
 import { useSurface } from './hooks/useSurface';
 import { useSecrets } from './hooks/useSecrets';
@@ -35,6 +36,9 @@ import SetupWizard from './components/features/SetupWizard';
 import { useSetupWizard } from './hooks/useSetupWizard';
 import { useSkills } from './hooks/useSkills';
 import { useTaskManager } from './hooks/useTaskManager';
+import { useHelp } from './hooks/useHelp';
+import { useTour } from './hooks/useTour';
+import { useHelpTracking } from './hooks/useHelpTracking';
 
 import { useTabManager } from './hooks/useTabManager';
 import { useWorkspaceState } from './hooks/useWorkspaceState';
@@ -80,6 +84,11 @@ function App() {
   // Task Manager for running task count
   const { tasks } = useTaskManager();
   const runningTaskCount = tasks.filter(t => t.status === 'running').length;
+
+  // Help System Hooks
+  const help = useHelp();
+  const tour = useTour();
+  const helpTracking = useHelpTracking();
 
   // New Refactored Hooks
   const ui = useUIState();
@@ -145,7 +154,7 @@ function App() {
     updateSettings({ ...current, routing: newRouting });
   }, [setSelectedModel, updateSettings]);
 
-  const { handleSend } = useSendHandler({
+  const { handleSend: baseSend } = useSendHandler({
     send,
     setShowTaskManager: ui.setShowTaskManager,
     setShowTerminal: ui.setShowTerminal,
@@ -163,6 +172,23 @@ function App() {
     resetToOriginal,
     focusedSurfaceId
   });
+
+  // Wrap handleSend to intercept help commands from palette
+  const handleSend = useCallback((text: string) => {
+    if (text === 'Help & Documentation') {
+      help.openPanel();
+      return;
+    }
+    if (text === 'Start Tour') {
+      tour.startTour('onboarding');
+      return;
+    }
+    if (text === 'What Is This?') {
+      help.toggleWhatIsThis();
+      return;
+    }
+    baseSend(text);
+  }, [baseSend, help, tour]);
 
   // Setup Wizard logic
   // Derived state for wizard visibility to avoid effect loops
@@ -233,6 +259,8 @@ function App() {
     openTaskManager: () => ui.setShowTaskManager(p => !p),
     toggleTerminal: () => ui.setShowTerminal(p => !p),
     toggleConsole: () => setLogPanelOpen(p => !p),
+    toggleHelpPanel: () => help.togglePanel(),
+    toggleWhatIsThis: () => help.toggleWhatIsThis(),
   });
 
   return (
@@ -347,6 +375,12 @@ function App() {
           onCreateConversation={createConversation}
           onDeleteConversation={deleteConversation}
           onRenameConversation={renameConversation}
+
+          onOpenHelp={() => help.openPanel()}
+          onOpenShortcuts={() => ui.setShowShortcutsHelp(true)}
+          onStartTour={(tourId) => tour.startTour(tourId)}
+          onWhatIsThis={() => help.toggleWhatIsThis()}
+          onResetHelp={() => helpTracking.resetAll()}
         />
       </div>
 
@@ -579,15 +613,58 @@ function App() {
         onClear={clearAllLogs}
       />
       <ToastProvider />
-      
+
+      {/* Help System Overlays */}
+      <HelpPanel
+        isOpen={help.isPanelOpen}
+        onClose={help.closePanel}
+        currentArticleId={help.currentArticleId}
+        searchQuery={help.searchQuery}
+        onSearchChange={help.setSearchQuery}
+        onNavigateArticle={(articleId) => {
+          help.navigateToArticle(articleId);
+          helpTracking.markArticleViewed(articleId);
+        }}
+        onBack={help.goBack}
+        onHome={help.goHome}
+        onStartTour={(tourId) => tour.startTour(tourId)}
+        onRate={helpTracking.rateArticle}
+        ratings={helpTracking.tracking.helpfulRatings}
+        viewedArticles={helpTracking.tracking.viewedArticles}
+      />
+
+      <TourEngine
+        isActive={tour.isActive}
+        currentStep={tour.currentStep}
+        currentStepIndex={tour.currentStepIndex}
+        totalSteps={tour.totalSteps}
+        isLastStep={tour.isLastStep}
+        onNext={tour.nextStep}
+        onPrev={tour.prevStep}
+        onEnd={tour.endTour}
+        onComplete={() => {
+          if (tour.activeTourId) {
+            helpTracking.completeTour(tour.activeTourId);
+          }
+        }}
+      />
+
+      <WhatIsThisMode
+        isActive={help.isWhatIsThisMode}
+        onExit={help.exitWhatIsThis}
+        onSelectHelpId={(helpId) => {
+          help.openPanel(helpId);
+        }}
+      />
+
       {shouldShowWizard && (
-        <SetupWizard 
+        <SetupWizard
           onComplete={() => ui.setShowWizard(false)}
           onSkip={() => ui.setShowWizard(false)}
           config={{
             provider: settings?.ai?.provider || 'openai',
             model: settings?.ai?.model || 'gpt-4o',
-            apiKey: '', 
+            apiKey: ((settings?.ai as unknown as Record<string, string>)?.apiKey) || '',
             workspace: projectStatus?.cwd || '',
             openClawEnabled: !!openClawStatus?.available,
             openClawMode: (openClawStatus?.mode as 'external' | 'integrated') || 'external',

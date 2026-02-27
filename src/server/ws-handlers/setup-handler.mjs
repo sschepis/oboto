@@ -33,6 +33,9 @@ async function handleCompleteSetup(data, ctx) {
         
         await fs.promises.writeFile(filePath, JSON.stringify(setupData, null, 2));
         wsSend(ws, 'setup-complete', { success: true });
+        // Also send updated setup-status so ALL useSetupWizard hook instances
+        // (including the one in App.tsx) update their isFirstRun state.
+        wsSend(ws, 'setup-status', { isFirstRun: false, ...setupData });
     } catch (err) {
         consoleStyler.logError('error', 'Failed to save setup status', err);
         wsSend(ws, 'setup-complete', { success: false, error: err.message });

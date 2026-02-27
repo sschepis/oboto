@@ -1,7 +1,8 @@
-import { 
-  Moon, Download, Users, Settings, Zap, Activity, Code2, Trash2, HelpCircle, 
-  FlaskConical, KeyRound, Terminal, ListTodo, FileSearch, FileCode, Eraser, 
-  Keyboard, BookOpen, FolderOpen, Palette, RotateCcw, FileText
+import {
+  Moon, Download, Users, Settings, Zap, Activity, Code2, Trash2, HelpCircle,
+  FlaskConical, KeyRound, Terminal, ListTodo, FileSearch, FileCode, Eraser,
+  Keyboard, BookOpen, FolderOpen, Palette, RotateCcw, FileText,
+  GraduationCap, MousePointerClick
 } from 'lucide-react';
 import type { Command } from '../types';
 
@@ -16,7 +17,10 @@ export const globalActions: Command[] = [
   { id: 'tasks', label: 'Task Manager', desc: 'Track implementation', icon: <ListTodo size={14} />, shortcut: '⌘⇧T' },
   { id: 'terminal', label: 'Toggle Terminal', desc: 'Drop-down shell', icon: <Terminal size={14} />, shortcut: '⌘`' },
   { id: 'console', label: 'Toggle Console', desc: 'Server log console', icon: <Terminal size={14} />, shortcut: '⌘J' },
-  { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View key bindings', icon: <Keyboard size={14} />, shortcut: '⌘/' },
+  { id: 'help', label: 'Help & Documentation', desc: 'Open help panel', icon: <BookOpen size={14} />, shortcut: '⌘/' },
+  { id: 'help-tour', label: 'Start Tour', desc: 'Interactive feature tour', icon: <GraduationCap size={14} /> },
+  { id: 'help-what-is-this', label: 'What Is This?', desc: 'Click any element for help', icon: <MousePointerClick size={14} /> },
+  { id: 'shortcuts', label: 'Keyboard Shortcuts', desc: 'View key bindings', icon: <Keyboard size={14} />, shortcut: '⌘⇧/' },
   { id: 'workspace', label: 'Change Workspace', desc: 'Switch project directory', icon: <FolderOpen size={14} /> },
   { id: 'lock', label: 'Lock Terminal', desc: 'Secure session', icon: <Settings size={14} />, shortcut: 'L' },
   { id: 'clear', label: 'Clear Chat', desc: 'Wipe thread memory', icon: <Eraser size={14} /> },

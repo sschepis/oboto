@@ -3,6 +3,10 @@ class WSService {
   private listeners: Record<string, ((payload: unknown) => void)[]> = {};
   private pendingRequests: Record<string, { resolve: (val: string | null) => void; reject: (err: unknown) => void; timer: ReturnType<typeof setTimeout> }> = {};
   private reconnectAttempts = 0;
+  /** Messages queued while the WebSocket was not yet open (Layer 2 of first-run strategy). */
+  private _pendingMessages: string[] = [];
+  /** Maximum number of messages to queue while disconnected. */
+  private static MAX_PENDING = 100;
 
   requestCompletion(payload: { filePath: string; language: string; content: string; cursorOffset: number; line: number; column: number }): Promise<string | null> {
     const id = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -49,6 +53,7 @@ class WSService {
     this.ws.onopen = () => {
       console.log('WS Connected');
       this.reconnectAttempts = 0;
+      this._flushPending();
       this.emit('connected', null);
     };
 
@@ -535,10 +540,27 @@ class WSService {
     this.sendMessage('cloud:list-models');
   }
 
-  /** Send a raw typed message to the server (bypasses the chat wrapper) */
+  /** Send a raw typed message to the server (bypasses the chat wrapper).
+   *  Messages sent before the WebSocket is open are queued and flushed on connect. */
   sendMessage(type: string, payload?: unknown) {
+    const msg = JSON.stringify({ type, payload });
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type, payload }));
+      this.ws.send(msg);
+    } else {
+      this._pendingMessages.push(msg);
+      if (this._pendingMessages.length > WSService.MAX_PENDING) {
+        this._pendingMessages.shift(); // Drop oldest to prevent unbounded growth
+      }
+    }
+  }
+
+  /** Flush any messages that were queued while the WS was connecting. */
+  private _flushPending() {
+    while (this._pendingMessages.length > 0) {
+      const msg = this._pendingMessages.shift()!;
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(msg);
+      }
     }
   }
 

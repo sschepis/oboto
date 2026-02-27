@@ -18,7 +18,7 @@ export default function ReviewStep({ config, onFinish, onBack }: ReviewStepProps
   ];
 
   return (
-    <div className="flex flex-col h-full animate-fade-in-up">
+    <div className="flex flex-col animate-fade-in-up">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white mb-2">Review & Finish</h2>
         <p className="text-zinc-400 text-sm">
@@ -26,7 +26,7 @@ export default function ReviewStep({ config, onFinish, onBack }: ReviewStepProps
         </p>
       </div>
 
-      <div className="space-y-6 mb-auto">
+      <div className="space-y-6">
         <div className="bg-zinc-900/20 rounded-xl border border-zinc-800/30 overflow-hidden">
             {items.map((item, i) => (
                 <div key={item.label} className={`flex items-center justify-between p-4 ${i !== items.length - 1 ? 'border-b border-zinc-800/30' : ''}`}>
@@ -51,8 +51,8 @@ export default function ReviewStep({ config, onFinish, onBack }: ReviewStepProps
       </div>
 
       <div className="flex justify-between mt-8 pt-4 border-t border-zinc-800">
-        <Button variant="ghost" onClick={onBack}>Back</Button>
-        <Button onClick={onFinish} className="bg-emerald-600 hover:bg-emerald-500 text-white">
+        <Button type="button" variant="ghost" onClick={onBack}>Back</Button>
+        <Button type="button" onClick={() => onFinish()} className="bg-emerald-600 hover:bg-emerald-500 text-white">
             Finish Setup ✨
         </Button>
       </div>

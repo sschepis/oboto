@@ -114,7 +114,7 @@ async function handleChat(data, ctx) {
 
         await assistant.generateNextSteps();
     } catch (err) {
-        if (err.name === 'AbortError' || err.message.includes('cancelled')) {
+        if (err.name === 'AbortError' || err.message?.includes('cancelled') || err.message?.includes('aborted')) {
             consoleStyler.log('system', 'Task execution cancelled by user');
             sendAiMessage(ws, '🛑 Task cancelled.');
         } else if (isLLMAuthError(err)) {
@@ -123,7 +123,9 @@ async function handleChat(data, ctx) {
             broadcast('llm-auth-error', payload);
             sendAiMessage(ws, `🔑 **LLM API Key Error**\n\n${payload.suggestion}\n\n_Original error: ${payload.errorMessage}_`);
         } else {
-            throw err;
+            // Catch-all: log and notify the user instead of crashing the server
+            consoleStyler.log('error', `Chat error: ${err.message || err}`);
+            sendAiMessage(ws, `❌ An error occurred: ${err.message || 'Unknown error'}`);
         }
     } finally {
         activeRef.controller = null;

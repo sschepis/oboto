@@ -86,6 +86,7 @@
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "check:deps": "node --input-type=module -e \"import{readFileSync}from'node:fs';const p=JSON.parse(readFileSync('./package.json','utf8'));if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}else{console.log('Dependencies OK')}\"",
     "check:exports": "node --input-type=module -e \"import('./src/lib/index.mjs').then(m=>{const exports=['AiMan','Oboto','ConsoleStatusAdapter','NetworkLLMAdapter','MemoryAdapter','AiManEventBus','MiddlewareChain','CancellationError','DesignResult'];const missing=exports.filter(e=>!m[e]);if(missing.length){console.error('Missing exports:',missing);process.exit(1)}console.log('All',exports.length,'exports OK')}).catch(e=>{console.error('Library entry FAILED:',e.message);process.exit(1)})\"",
+    "postinstall": "node -e \"try{require('child_process').execSync('npx node-gyp rebuild --directory=node_modules/node-pty',{stdio:'inherit'})}catch{console.log('node-pty rebuild skipped (optional)')}\"",
     "prepublishOnly": "npm run check:deps && npm run check:exports"
   },
   "dependencies": {

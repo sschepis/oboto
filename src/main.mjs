@@ -256,6 +256,36 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('uncaughtException', (err) => {
     consoleStyler.logError('error', 'UNCAUGHT EXCEPTION', err);
+
+    const msg = err?.message || '';
+
+    // Broadcast to UI via event bus if available
+    if (_globalEventBus) {
+        _globalEventBus.emit('system:error', {
+            type: 'uncaughtException',
+            message: msg,
+            stack: err?.stack
+        });
+    }
+
+    // In server mode, tolerate recoverable native-addon and I/O errors
+    // (e.g. node-pty segfaults, EPIPE, ECONNRESET) instead of killing the
+    // entire process.  Only truly fatal errors (OOM, stack overflow) should
+    // force a shutdown.
+    const recoverable = (
+        err?.code === 'EPIPE' ||
+        err?.code === 'ECONNRESET' ||
+        err?.code === 'ERR_IPC_CHANNEL_CLOSED' ||
+        msg.includes('node-pty') ||
+        msg.includes('pty.node') ||
+        msg.includes('Napi::Error')
+    );
+
+    if (recoverable) {
+        consoleStyler.log('warning', 'Recovered from non-fatal uncaught exception — server continues running');
+        return;
+    }
+
     // After an uncaught exception, Node.js is in an undefined state.
     // Perform a graceful shutdown.
     setTimeout(() => process.exit(1), 1000);

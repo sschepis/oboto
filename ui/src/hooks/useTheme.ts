@@ -320,7 +320,8 @@ export function useTheme() {
 
   // ── WS Event listeners ─────────────────────────────────────────────
   useEffect(() => {
-    const unsubTheme = wsService.on('ui-style-theme', (payload: unknown) => {
+    // Theme event handler
+    const handleTheme = (payload: unknown) => {
       const { theme, tokens } = payload as { theme: string; tokens: TokenMap };
       applyTokens(tokens);
       setThemeState(prev => ({
@@ -328,43 +329,63 @@ export function useTheme() {
         currentTheme: theme,
         activeTokenOverrides: theme === 'custom' ? tokens : {},
       }));
-    });
+    };
 
-    const unsubTokens = wsService.on('ui-style-tokens', (payload: unknown) => {
+    // Token event handler
+    const handleTokens = (payload: unknown) => {
       const { tokens } = payload as { tokens: TokenMap };
       applyTokens(tokens);
       setThemeState(prev => ({
         ...prev,
         activeTokenOverrides: { ...prev.activeTokenOverrides, ...tokens },
       }));
-    });
+    };
 
-    const unsubCSS = wsService.on('ui-style-css', (payload: unknown) => {
+    // CSS injection handler
+    const handleCSS = (payload: unknown) => {
       const { css } = payload as { css: string; mode: string };
       applyInjectedCSS(css);
       setThemeState(prev => ({
         ...prev,
         hasInjectedCSS: css.length > 0,
       }));
-    });
+    };
 
-    const unsubReset = wsService.on('ui-style-reset', (payload: unknown) => {
+    // Reset handler
+    const handleReset = (payload: unknown) => {
       const { tokens } = payload as { theme: string; tokens: TokenMap };
       clearAllStyling();
-      // Apply the default theme tokens
       applyTokens(tokens);
       setThemeState({
         currentTheme: 'midnight',
         activeTokenOverrides: {},
         hasInjectedCSS: false,
       });
-    });
+    };
+
+    // Listen for BOTH event-broadcaster events (unprefixed, e.g. "ui-style-theme")
+    // AND plugin-scoped events (prefixed, e.g. "plugin:ui-themes:ui-style:theme")
+    const unsubTheme = wsService.on('ui-style-theme', handleTheme);
+    const unsubThemePlugin = wsService.on('plugin:ui-themes:ui-style:theme', handleTheme);
+
+    const unsubTokens = wsService.on('ui-style-tokens', handleTokens);
+    const unsubTokensPlugin = wsService.on('plugin:ui-themes:ui-style:tokens', handleTokens);
+
+    const unsubCSS = wsService.on('ui-style-css', handleCSS);
+    const unsubCSSPlugin = wsService.on('plugin:ui-themes:ui-style:css', handleCSS);
+
+    const unsubReset = wsService.on('ui-style-reset', handleReset);
+    const unsubResetPlugin = wsService.on('plugin:ui-themes:ui-style:reset', handleReset);
 
     return () => {
       unsubTheme();
+      unsubThemePlugin();
       unsubTokens();
+      unsubTokensPlugin();
       unsubCSS();
+      unsubCSSPlugin();
       unsubReset();
+      unsubResetPlugin();
     };
   }, [applyTokens, applyInjectedCSS, clearAllStyling]);
 

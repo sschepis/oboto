@@ -5,6 +5,7 @@ import type { AgentLoopStatus, AgentLoopInvocation } from '../../hooks/useAgentL
 import type { ConversationInfo } from '../../hooks/useChat';
 import { AgentLoopControls } from '../features/AgentLoopControls';
 import ConversationSwitcher from '../features/ConversationSwitcher';
+import { HelpButton } from '../help';
 
 interface OpenClawStatus {
   available: boolean;
@@ -42,6 +43,13 @@ interface HeaderProps {
   onCreateConversation: (name: string) => void;
   onDeleteConversation: (name: string) => void;
   onRenameConversation: (oldName: string, newName: string) => void;
+
+  // Help Props
+  onOpenHelp?: () => void;
+  onOpenShortcuts?: () => void;
+  onStartTour?: (tourId: string) => void;
+  onWhatIsThis?: () => void;
+  onResetHelp?: () => void;
 }
 
 /** Small OpenClaw connection badge shown in the header. */
@@ -115,6 +123,11 @@ const Header: React.FC<HeaderProps> = ({
   onCreateConversation,
   onDeleteConversation,
   onRenameConversation,
+  onOpenHelp,
+  onOpenShortcuts,
+  onStartTour,
+  onWhatIsThis,
+  onResetHelp,
 }) => {
   // Shortened workspace path for display
   const shortWorkspace = activeWorkspace
@@ -158,7 +171,7 @@ const Header: React.FC<HeaderProps> = ({
       <div className="absolute inset-x-0 bottom-0 h-3 bg-gradient-to-b from-transparent to-black/20 pointer-events-none translate-y-full z-10" />
 
       {/* Left: App identity + workspace + conversation */}
-      <div className="flex items-center gap-2.5 min-w-0 relative z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-2.5 min-w-0 relative z-10" data-help-id="header-left" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <div className={`
           w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden shrink-0
           transition-all duration-300 shadow-lg
@@ -177,6 +190,7 @@ const Header: React.FC<HeaderProps> = ({
             <span className="text-zinc-700/60 text-[11px]">›</span>
             <button
               onClick={onWorkspaceClick}
+              data-help-id="workspace-selector"
               className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-500 truncate max-w-[200px] hover:text-indigo-400 transition-all duration-200 px-1.5 py-0.5 rounded-md hover:bg-indigo-500/5 cursor-pointer"
               title={`${activeWorkspace} — click to change`}
             >
@@ -202,7 +216,7 @@ const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Center: Agent Loop Controls & Status */}
-      <div className="flex items-center gap-3 absolute left-1/2 -translate-x-1/2 z-10" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-3 absolute left-1/2 -translate-x-1/2 z-10" data-help-id="agent-loop-controls" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <AgentLoopControls
           status={agentLoopStatus}
           lastInvocation={agentLoopLastInvocation}
@@ -268,6 +282,7 @@ const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={onSettingsClick}
+          data-help-id="settings-button"
           className="
             flex items-center gap-1.5 text-zinc-500 hover:text-zinc-200 p-1.5 rounded-lg
             transition-all duration-200 hover:bg-zinc-800/50 active:scale-95
@@ -277,8 +292,17 @@ const Header: React.FC<HeaderProps> = ({
           <Settings size={13} />
         </button>
 
+        <HelpButton
+          onOpenHelp={onOpenHelp}
+          onOpenShortcuts={onOpenShortcuts}
+          onStartTour={onStartTour}
+          onWhatIsThis={onWhatIsThis}
+          onResetHelp={onResetHelp}
+        />
+
         <button
           onClick={onOpenPalette}
+          data-help-id="command-palette-button"
           className="
             flex items-center gap-1.5 text-zinc-500 hover:text-zinc-200 p-1.5 rounded-lg
             transition-all duration-200 hover:bg-zinc-800/50 active:scale-95

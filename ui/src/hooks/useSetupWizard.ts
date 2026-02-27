@@ -29,9 +29,12 @@ export interface ExistingInstallInfo {
     hasNodeModules?: boolean;
 }
 
+// Layer 4: synchronous localStorage check — computed once before any render
+const _setupCompleted = typeof window !== 'undefined' && !!localStorage.getItem('oboto-setup-completed');
+
 export function useSetupWizard() {
   const [isFirstRun, setIsFirstRun] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(!_setupCompleted);
   
   // Install Progress State
   const [installProgress, setInstallProgress] = useState<{
@@ -53,14 +56,43 @@ export function useSetupWizard() {
   } | null>(null);
 
   useEffect(() => {
-    // Listen for setup status
+    // Layer 4: if localStorage already flags completion, skip server query entirely.
+    // State is already correct via useState initializers above.
+    let resolved = _setupCompleted;
+
+    // Listen for setup status (receives from both server push and client request)
     const unsubStatus = wsService.on('setup-status', (payload: unknown) => {
-      setIsFirstRun((payload as { isFirstRun: boolean }).isFirstRun);
+      resolved = true;
+      const data = payload as { isFirstRun: boolean };
+      setIsFirstRun(data.isFirstRun);
       setIsLoading(false);
+      // If server says setup is done, sync localStorage
+      if (!data.isFirstRun) {
+        localStorage.setItem('oboto-setup-completed', 'true');
+      }
     });
 
-    // Request status on mount
-    wsService.getSetupStatus();
+    // Request status on mount (queued if WS not yet open — Layer 2)
+    if (!_setupCompleted) {
+      wsService.getSetupStatus();
+    }
+
+    // Layer 3: Retry after 3s if no response yet
+    const retryTimer = setTimeout(() => {
+      if (!resolved) {
+        wsService.getSetupStatus();
+      }
+    }, 3000);
+
+    // Layer 3: Hard timeout after 6s — never stay stuck in loading
+    const hardTimer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        setIsLoading(false);
+        // No localStorage flag and no server response ⇒ assume first run
+        setIsFirstRun(true);
+      }
+    }, 6000);
     
     // Listen for install progress
     const unsubProgress = wsService.on('openclaw-install-progress', (payload: unknown) => {
@@ -89,6 +121,8 @@ export function useSetupWizard() {
 
     return () => {
       unsubStatus();
+      clearTimeout(retryTimer);
+      clearTimeout(hardTimer);
       unsubProgress();
       unsubComplete();
       unsubPrereqs();
@@ -102,6 +136,7 @@ export function useSetupWizard() {
   const completeSetup = useCallback((config: { provider: string; openclawEnabled: boolean }) => {
     wsService.completeSetup(config);
     setIsFirstRun(false); // Optimistically update local state
+    localStorage.setItem('oboto-setup-completed', new Date().toISOString()); // Layer 4
   }, []);
 
   const skipSetup = useCallback(() => {

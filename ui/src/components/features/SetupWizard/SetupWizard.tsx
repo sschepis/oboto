@@ -66,15 +66,18 @@ export default function SetupWizard({ onComplete, onSkip, initialStep = 0, confi
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-2xl bg-[#09090b] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="w-full max-w-2xl bg-[#09090b] border border-zinc-800 rounded-xl shadow-2xl"
+        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      >
         {/* Header / Progress */}
         {step > 0 && (
-            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
+            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30" style={{ flexShrink: 0 }}>
             <div className="flex items-center gap-2">
                 <div className="flex gap-1">
                 {Array.from({ length: totalSteps - 1 }).map((_, i) => (
-                    <div 
-                    key={i} 
+                    <div
+                    key={i}
                     className={`h-1.5 w-6 rounded-full transition-colors ${i < step ? 'bg-indigo-500' : i === step ? 'bg-indigo-500/50' : 'bg-zinc-800'}`}
                     />
                 ))}
@@ -86,8 +89,8 @@ export default function SetupWizard({ onComplete, onSkip, initialStep = 0, confi
             </div>
         )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+        {/* Content — scrollable area */}
+        <div className="p-6 md:p-8" style={{ flexGrow: 1, height: 0, overflowY: 'auto' }}>
           {renderStep()}
         </div>
       </div>

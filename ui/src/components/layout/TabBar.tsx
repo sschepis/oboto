@@ -74,17 +74,32 @@ const TabBar: React.FC<TabBarProps> = ({
   const surfaceMenuRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click.
+  // Use requestAnimationFrame to defer listener registration so the
+  // mousedown event that opened the menu isn't immediately caught by
+  // the outside-click handler (React hasn't rendered the dropdown ref yet).
   useEffect(() => {
+    if (!showPlusMenu) return;
+
+    let listening = false;
+
     const handleClickOutside = (e: MouseEvent) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setShowPlusMenu(false);
       }
     };
-    if (showPlusMenu) {
+
+    const rafId = requestAnimationFrame(() => {
       document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+      listening = true;
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (listening) {
+        document.removeEventListener('mousedown', handleClickOutside);
+      }
+    };
   }, [showPlusMenu]);
 
   // Close context menu on outside click or Escape
