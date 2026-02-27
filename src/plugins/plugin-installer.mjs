@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
+import { globalPluginDataDir } from '../lib/paths.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -141,7 +142,7 @@ export class PluginInstaller {
      *
      * @param {string} name — plugin directory name or package name
      * @param {object} [options]
-     * @param {boolean} [options.cleanData=false] — remove `.plugins-data/<name>/`
+     * @param {boolean} [options.cleanData=false] — remove `~/.oboto/plugins-data/<name>/`
      * @param {string} [options.target='global'] — 'builtin' | 'global' | 'workspace'
      * @returns {Promise<boolean>}
      */
@@ -205,9 +206,9 @@ export class PluginInstaller {
             }
         }
 
-        // Clean up plugin data if requested
+        // Clean up plugin data if requested (global: ~/.oboto/plugins-data/<name>/)
         if (options.cleanData) {
-            const dataDir = path.join(this.workingDir, '.plugins-data', name);
+            const dataDir = globalPluginDataDir(name);
             if (await this._exists(dataDir)) {
                 await fs.rm(dataDir, { recursive: true, force: true });
             }

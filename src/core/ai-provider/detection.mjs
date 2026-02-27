@@ -1,6 +1,7 @@
 import { config } from '../../config.mjs';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { AI_PROVIDERS, PROVIDER_ENDPOINTS } from './constants.mjs';
+import { getModelInfo } from '../model-registry.mjs';
 
 /**
  * Detect the AI provider from the model name.
@@ -44,6 +45,25 @@ export function detectProvider(model) {
     // OpenAI models
     if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4') || m.startsWith('chatgpt-')) {
         return AI_PROVIDERS.OPENAI;
+    }
+
+    // Cloud models: check if the model is registered as a cloud model in the
+    // model registry (fetched from Oboto Cloud's AI gateway).
+    try {
+        const modelInfo = getModelInfo(model);
+        if (modelInfo && modelInfo.provider === AI_PROVIDERS.CLOUD) {
+            return AI_PROVIDERS.CLOUD;
+        }
+    } catch {
+        // Model registry not yet initialized — fall through to config check
+    }
+
+    // If the user has explicitly configured the provider as 'cloud', honor it.
+    // Cloud models have arbitrary names (e.g., "meta-llama/llama-3-70b") that
+    // don't match any prefix above, so we must respect the explicit setting.
+    if (config.ai.provider === AI_PROVIDERS.CLOUD) {
+        consoleStyler.log('routing', `detectProvider: falling back to cloud for unrecognized model "${model}" (config.ai.provider is cloud)`);
+        return AI_PROVIDERS.CLOUD;
     }
 
     // Default: local server (LMStudio, Ollama, etc.)

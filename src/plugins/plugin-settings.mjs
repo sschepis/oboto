@@ -1,7 +1,7 @@
 /**
  * PluginSettingsStore — persistent settings for plugins.
  * 
- * Settings are stored per-plugin in `.plugins-data/<pluginName>/settings.json`.
+ * Settings are stored per-plugin in `~/.oboto/plugins-data/<pluginName>/settings.json` (global).
  * Unlike PluginStorage (general KV), settings are typically defined by a schema
  * and displayed in the Settings UI.
  * 
@@ -10,6 +10,8 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { globalPluginDataDir } from '../lib/paths.mjs';
+import { consoleStyler } from '../ui/console-styler.mjs';
 
 /**
  * Sensitive key pattern — matches keys that should not be stored in plaintext.
@@ -33,11 +35,16 @@ function toEnvVarName(key) {
 export class PluginSettingsStore {
     /**
      * @param {string} pluginName
-     * @param {string} baseDir — workspace root directory
+     * @param {string} _baseDir — @deprecated Ignored since storage moved to global
+     *   `~/.oboto/plugins-data/`. Kept for API compatibility; will be removed in a
+     *   future major version. Callers should stop passing this argument.
      */
-    constructor(pluginName, baseDir) {
+    constructor(pluginName, _baseDir) {
+        if (_baseDir !== undefined) {
+            consoleStyler.log('warning', `[PluginSettingsStore] _baseDir parameter is deprecated and ignored (plugin: ${pluginName}). Storage is global at ~/.oboto/plugins-data/.`);
+        }
         this.pluginName = pluginName;
-        this.dir = path.join(baseDir, '.plugins-data', pluginName);
+        this.dir = globalPluginDataDir(pluginName);
         this.filePath = path.join(this.dir, 'settings.json');
         /** @type {Record<string, unknown> | null} */
         this._data = null;

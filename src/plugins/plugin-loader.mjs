@@ -150,7 +150,7 @@ export class PluginLoader {
             // Security: block path-traversal characters in plugin names.
             // Plugin names are used as directory components for storage, settings,
             // and other path constructions. Allowing `..`, `/`, or `\` would let a
-            // malicious plugin.json escape the intended `.plugins-data/` directory.
+            // malicious plugin.json escape the intended `~/.oboto/plugins-data/` directory.
             if (/[/\\]/.test(manifest.name) || manifest.name.includes('..')) {
                 consoleStyler.log('warning', `Invalid plugin name (path traversal) in ${manifestPath}: "${manifest.name}"`);
                 return null;

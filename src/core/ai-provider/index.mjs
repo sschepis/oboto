@@ -52,8 +52,7 @@ export async function callProvider(requestBody, options = {}) {
 
     // ── Gemini: use native SDK ──
     if (ctx.provider === AI_PROVIDERS.GEMINI) {
-        // TODO: Add cancellation support to Gemini SDK call if possible
-        return await callGeminiSDK(ctx, requestBody);
+        return await callGeminiSDK(ctx, requestBody, options.signal);
     }
 
     // ── OpenAI / Local: use REST fetch ──
@@ -80,8 +79,7 @@ export async function callProviderStream(requestBody, options = {}) {
 
     // ── Gemini: use SDK (non-streaming, wrapped as synthetic stream) ──
     if (ctx.provider === AI_PROVIDERS.GEMINI) {
-        // TODO: Add cancellation support to Gemini SDK call if possible
-        return await callGeminiSDKStream(ctx, requestBody);
+        return await callGeminiSDKStream(ctx, requestBody, options.signal);
     }
 
     // ── OpenAI / Local: use REST SSE ──

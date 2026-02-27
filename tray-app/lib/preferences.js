@@ -8,6 +8,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const logger = require('./logger');
 
 const PREFS_DIR = path.join(os.homedir(), '.oboto');
 const PREFS_FILE = path.join(PREFS_DIR, 'preferences.json');
@@ -94,7 +95,7 @@ class Preferences {
                 this._data = { ...DEFAULTS, ...parsed };
             }
         } catch (err) {
-            console.error('[Preferences] Failed to load:', err.message);
+            logger.error('Preferences', 'Failed to load:', err.message);
         }
     }
 
@@ -105,7 +106,7 @@ class Preferences {
             }
             fs.writeFileSync(PREFS_FILE, JSON.stringify(this._data, null, 2), 'utf8');
         } catch (err) {
-            console.error('[Preferences] Failed to save:', err.message);
+            logger.error('Preferences', 'Failed to save:', err.message);
         }
     }
 }

@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { consoleStyler } from '../../ui/console-styler.mjs';
-import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider, listModels } from '../../core/model-registry.mjs';
+import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
 import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
@@ -23,17 +23,29 @@ const GLOBAL_CONFIG_DIR = path.join(os.homedir(), '.oboto');
  * Save current AI/routing settings to ~/.oboto/ai-settings.json (global config).
  * AI provider settings are global data, not workspace-specific.
  */
-async function persistAISettings() {
+async function persistAISettings(assistant) {
     try {
         if (!fs.existsSync(GLOBAL_CONFIG_DIR)) {
             await fs.promises.mkdir(GLOBAL_CONFIG_DIR, { recursive: true });
         }
+
+        // Deep-copy per-provider config so we persist enabled state, model, endpoint, etc.
+        const providers = {};
+        if (config.ai.providers) {
+            for (const [key, val] of Object.entries(config.ai.providers)) {
+                providers[key] = { ...val };
+            }
+        }
+
         const settings = {
             model: config.ai.model,
             provider: config.ai.provider,
             endpoint: config.ai.endpoint,
             temperature: config.ai.temperature,
+            providers,
             routing: { ...config.routing },
+            maxTurns: assistant?.maxTurns ?? undefined,
+            maxSubagents: assistant?.maxSubagents ?? undefined,
             updatedAt: new Date().toISOString()
         };
         await fs.promises.writeFile(
@@ -72,6 +84,30 @@ function restoreAISettings(assistant) {
         if (data.temperature !== undefined) {
             config.ai.temperature = data.temperature;
         }
+
+        // Restore per-provider configuration (enabled state, model, endpoint, etc.)
+        if (data.providers && typeof data.providers === 'object') {
+            for (const [prov, pCfg] of Object.entries(data.providers)) {
+                if (config.ai.providers && config.ai.providers[prov]) {
+                    config.ai.providers[prov] = { ...config.ai.providers[prov], ...pCfg };
+                } else if (config.ai.providers) {
+                    // Provider didn't exist in defaults — add it
+                    config.ai.providers[prov] = { ...pCfg };
+                }
+            }
+        }
+
+        // Restore maxTurns and maxSubagents (parseInt for safety — the JSON
+        // file could be hand-edited or contain legacy string values)
+        if (data.maxTurns !== undefined && assistant) {
+            const parsedTurns = parseInt(data.maxTurns, 10);
+            if (!Number.isNaN(parsedTurns)) assistant.maxTurns = parsedTurns;
+        }
+        if (data.maxSubagents !== undefined && assistant) {
+            const parsedAgents = parseInt(data.maxSubagents, 10);
+            if (!Number.isNaN(parsedAgents)) assistant.maxSubagents = parsedAgents;
+        }
+
         if (data.routing && assistant.promptRouter) {
             // Apply explicit routing overrides (empty = follow primary)
             const primaryModel = config.ai.model;
@@ -85,7 +121,7 @@ function restoreAISettings(assistant) {
             Object.assign(config.routing, data.routing);
         }
 
-        consoleStyler.log('system', `Restored AI settings from global config (model: ${data.model})`);
+        consoleStyler.log('system', `Restored AI settings from global config (model: ${data.model}, provider: ${data.provider})`);
         return true;
     } catch (err) {
         consoleStyler.log('warning', `Failed to restore AI settings: ${err.message}`);
@@ -114,30 +150,21 @@ function buildSettingsPayload(assistant, ctx) {
             }
         }
 
-        // Build providers map with auto-detection from live API keys
+        // Build providers map — faithfully reflect config.ai.providers as-is.
+        // No auto-enable logic here; the user's explicit enabled/disabled choices
+        // are respected. Auto-detection only happens during initial setup (restoreAISettings)
+        // when no saved settings file exists.
         const providers = {};
         if (config.ai.providers) {
             for (const [key, val] of Object.entries(config.ai.providers)) {
                 providers[key] = { ...val };
             }
         }
-        // Auto-enable providers that have API keys configured
-        if (secretsStatus.OPENAI_API_KEY?.isConfigured && providers.openai && !providers.openai.enabled) {
-            providers.openai = { ...providers.openai, enabled: true };
-        }
-        if (secretsStatus.GOOGLE_API_KEY?.isConfigured && providers.gemini && !providers.gemini.enabled) {
-            providers.gemini = { ...providers.gemini, enabled: true };
-        }
-        if (secretsStatus.ANTHROPIC_API_KEY?.isConfigured && providers.anthropic && !providers.anthropic.enabled) {
-            providers.anthropic = { ...providers.anthropic, enabled: true };
-        }
-        // Auto-enable LMStudio if models were discovered (LMStudio has no API key)
-        if (providers.lmstudio && !providers.lmstudio.enabled) {
-            const lmstudioModels = listModels({ provider: 'lmstudio' });
-            if (lmstudioModels.length > 0) {
-                providers.lmstudio = { ...providers.lmstudio, enabled: true };
-            }
-        }
+
+        // Derive list of enabled provider keys for UI filtering
+        const enabledProviders = Object.entries(providers)
+            .filter(([, v]) => v.enabled)
+            .map(([k]) => k);
 
         // Build routing with defaults
         let routing = {};
@@ -160,10 +187,15 @@ function buildSettingsPayload(assistant, ctx) {
             routing,
             modelRegistry: getRegistrySnapshot(),
             secretsStatus,
+            enabledProviders,
         };
     } catch (err) {
         // Fallback — always return a valid payload
         consoleStyler.log('warning', `buildSettingsPayload error: ${err.message}`);
+        // Derive enabledProviders from config in fallback path
+        const fallbackEnabled = config.ai.providers
+            ? Object.entries(config.ai.providers).filter(([, v]) => v.enabled).map(([k]) => k)
+            : [];
         return {
             maxTurns: assistant.maxTurns || 100,
             maxSubagents: assistant.maxSubagents || 1,
@@ -171,6 +203,7 @@ function buildSettingsPayload(assistant, ctx) {
             routing: config.routing,
             modelRegistry: getRegistrySnapshot(),
             secretsStatus: {},
+            enabledProviders: fallbackEnabled,
         };
     }
 }
@@ -288,6 +321,31 @@ async function handleUpdateSettings(data, ctx) {
             }
         }
 
+        // ── Fallback: if the active provider was just disabled, switch to first enabled ──
+        const currentProvider = config.ai.provider;
+        const currentProviderConfig = config.ai.providers?.[currentProvider];
+        if (currentProviderConfig && !currentProviderConfig.enabled) {
+            const fallback = Object.entries(config.ai.providers)
+                .find(([key, val]) => val.enabled && key !== currentProvider);
+            if (fallback) {
+                const [fallbackProvider, fallbackConfig] = fallback;
+                config.ai.provider = fallbackProvider;
+                config.ai.model = fallbackConfig.model || '';
+                process.env.AI_PROVIDER = fallbackProvider;
+                process.env.AI_MODEL = config.ai.model;
+                assistant.model = config.ai.model;
+                consoleStyler.log('system', `Active provider "${currentProvider}" was disabled — switched to "${fallbackProvider}" (model: ${config.ai.model})`);
+            } else {
+                // All providers disabled
+                config.ai.provider = '';
+                config.ai.model = '';
+                process.env.AI_PROVIDER = '';
+                process.env.AI_MODEL = '';
+                assistant.model = '';
+                consoleStyler.log('warning', `All AI providers disabled — no active model`);
+            }
+        }
+
         // Trigger model refresh since AI config changed
         fetchRemoteModels().then(() => {
             try {
@@ -334,7 +392,7 @@ async function handleUpdateSettings(data, ctx) {
     wsSend(ws, 'settings', buildSettingsPayload(assistant, ctx));
 
     // Persist to global config so settings survive restarts
-    persistAISettings();
+    await persistAISettings(assistant);
 }
 
 async function handleGetStatus(data, ctx) {
@@ -533,6 +591,8 @@ async function handleGetAgenticProvider(data, ctx) {
         wsSendError(ws, `Failed to get active agentic provider: ${err.message}`);
     }
 }
+
+export { persistAISettings, restoreAISettings };
 
 export const handlers = {
     'get-settings': handleGetSettings,

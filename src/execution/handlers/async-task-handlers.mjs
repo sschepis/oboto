@@ -23,6 +23,49 @@ export class AsyncTaskHandlers {
         return `Background task spawned successfully.\nTask ID: ${task.id}\nDescription: ${task.description}\n\nUse check_task_status(task_id) to monitor progress.`;
     }
 
+    /**
+     * Spawn a background task in a different workspace directory.
+     * The task gets a fully isolated EventicFacade instance.
+     */
+    async spawnWorkspaceTask(args) {
+        const { workspace_path, task_description, query, context, init_git = false } = args;
+
+        if (!this.taskManager) {
+            return "Error: Task Manager is not available. Background tasks are disabled.";
+        }
+
+        if (!workspace_path) {
+            return "Error: workspace_path is required.";
+        }
+
+        try {
+            const task = await this.taskManager.spawnWorkspaceTask({
+                workspacePath: workspace_path,
+                description: task_description,
+                query,
+                context,
+                initGit: init_git,
+                aiAssistantClass: this.aiAssistantClass,
+                eventBus: this.eventBus,
+                originWorkspace: process.cwd(),
+                originConversation: 'chat', // default; overridden by caller if available
+            });
+
+            return [
+                `Workspace task spawned successfully.`,
+                `Task ID: ${task.id}`,
+                `Description: ${task.description}`,
+                `Workspace: ${task.workspacePath}`,
+                task.dirCreated ? `(Directory was created)` : `(Existing directory)`,
+                ``,
+                `Use check_task_status("${task.id}") to monitor progress.`,
+                `Results will be reported back to this conversation when complete.`
+            ].join('\n');
+        } catch (error) {
+            return `Error spawning workspace task: ${error.message}`;
+        }
+    }
+
     async checkTaskStatus(args) {
         const { task_id } = args;
         

@@ -459,6 +459,16 @@ class WSService {
     this.sendMessage('set-agentic-provider', { providerId });
   }
 
+  // --- Workspace Task methods ---
+
+  spawnWorkspaceTask(opts: { workspace_path: string; task_description?: string; query: string; context?: string; init_git?: boolean }) {
+    this.sendMessage('spawn-workspace-task', opts);
+  }
+
+  getWorkspaceTasks() {
+    this.sendMessage('get-workspace-tasks');
+  }
+
   // --- Cloud methods ---
 
   cloudLogin(email: string, password: string) {

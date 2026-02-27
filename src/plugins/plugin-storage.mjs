@@ -2,7 +2,7 @@
  * PluginStorage — sandboxed key-value storage for plugins.
  * 
  * Each plugin gets its own namespace backed by a JSON file
- * in `.plugins-data/<pluginName>/storage.json`.
+ * in `~/.oboto/plugins-data/<pluginName>/storage.json` (global).
  * 
  * @module src/plugins/plugin-storage
  */
@@ -10,15 +10,21 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { globalPluginDataDir } from '../lib/paths.mjs';
 
 export class PluginStorage {
     /**
      * @param {string} pluginName — used as the storage namespace
-     * @param {string} baseDir — workspace root directory
+     * @param {string} _baseDir — @deprecated Ignored since storage moved to global
+     *   `~/.oboto/plugins-data/`. Kept for API compatibility; will be removed in a
+     *   future major version. Callers should stop passing this argument.
      */
-    constructor(pluginName, baseDir) {
+    constructor(pluginName, _baseDir) {
+        if (_baseDir !== undefined) {
+            consoleStyler.log('warning', `[PluginStorage] _baseDir parameter is deprecated and ignored (plugin: ${pluginName}). Storage is global at ~/.oboto/plugins-data/.`);
+        }
         this.pluginName = pluginName;
-        this.dir = path.join(baseDir, '.plugins-data', pluginName);
+        this.dir = globalPluginDataDir(pluginName);
         this.filePath = path.join(this.dir, 'storage.json');
         /** @type {Map<string, unknown>} */
         this._cache = null;

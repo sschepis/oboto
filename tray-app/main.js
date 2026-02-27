@@ -8,6 +8,7 @@
 
 const { app, Tray, Menu, dialog, shell, nativeImage, Notification } = require('electron');
 const path = require('path');
+const logger = require('./lib/logger');
 const { Preferences } = require('./lib/preferences');
 const { DaemonManager } = require('./lib/daemon-manager');
 const { AutoStart } = require('./lib/auto-start');
@@ -295,10 +296,7 @@ app.whenReady().then(async () => {
     });
 
     daemon.on('log', (line) => {
-        // In dev mode, print daemon logs to the Electron process stdout
-        if (process.argv.includes('--dev')) {
-            console.log(`[daemon] ${line}`);
-        }
+        logger.passthrough(line);
     });
 
     // Create the system tray
@@ -306,7 +304,10 @@ app.whenReady().then(async () => {
     tray.setToolTip('Oboto — Initialising...');
     tray.setContextMenu(buildContextMenu());
 
-    // If there's a saved workspace, auto-start the daemon
+    // If there's a saved workspace, auto-start the daemon.
+    // Otherwise, this is the first run — prompt the user to pick a workspace
+    // directory, then start the daemon and open the browser so they see the
+    // setup wizard.
     const savedWorkspace = preferences.get('currentWorkspace');
     if (savedWorkspace) {
         try {
@@ -316,7 +317,22 @@ app.whenReady().then(async () => {
             setTrayStatus('red', `Failed to start: ${err.message}`);
         }
     } else {
-        setTrayStatus('yellow', 'No workspace — click to load');
+        setTrayStatus('yellow', 'First run — choose a workspace');
+        // Prompt for workspace directory immediately on first launch
+        const result = await dialog.showOpenDialog({
+            title: 'Welcome to Oboto — Choose Your Workspace',
+            message: 'Select (or create) a folder where Oboto will manage your projects.',
+            properties: ['openDirectory', 'createDirectory'],
+            buttonLabel: 'Use This Folder',
+        });
+
+        if (!result.canceled && result.filePaths.length > 0) {
+            // Open browser after startup so the setup wizard is shown
+            _pendingBrowserOpen = true;
+            await loadWorkspace(result.filePaths[0]);
+        } else {
+            setTrayStatus('yellow', 'No workspace — click tray to load');
+        }
     }
 
     refreshMenu();

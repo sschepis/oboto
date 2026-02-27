@@ -1,15 +1,20 @@
+import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom'; // Import matchers
-import { UiRenderer } from '../uiRenderer';
-import { componentRegistry } from '../componentRegistry';
+import '@testing-library/jest-dom';
 
-// Mock component registry
-jest.mock('../componentRegistry', () => ({
+// Define mock function
+const mockGet = jest.fn();
+
+// Mock the module before importing the component that uses it
+jest.unstable_mockModule('../componentRegistry', () => ({
   componentRegistry: {
-    get: jest.fn(),
+    get: mockGet,
   },
 }));
+
+// Import the component dynamically after mocking
+const { UiRenderer } = await import('../uiRenderer');
 
 describe('UiRenderer', () => {
   const mockManifest: any = {
@@ -22,7 +27,8 @@ describe('UiRenderer', () => {
   };
 
   beforeEach(() => {
-    (componentRegistry.get as jest.Mock).mockImplementation((name) => {
+    mockGet.mockReset();
+    mockGet.mockImplementation((name) => {
       if (name === 'MetricCard') {
         // @ts-ignore
         return ({ title }: { title: string }) => <div>{title}</div>;

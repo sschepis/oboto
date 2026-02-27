@@ -6,6 +6,7 @@ import { wsSend } from '../../lib/ws-utils.mjs';
 import { setProviderEnabled } from '../../config.mjs';
 import { fetchModelsForProvider } from '../../core/model-registry.mjs';
 import { consoleStyler } from '../../ui/console-styler.mjs';
+import { persistAISettings } from './settings-handler.mjs';
 
 /** Send a cloud:error to the requesting client */
 function sendCloudError(ws, message) {
@@ -42,6 +43,8 @@ export const handlers = {
 
             // Auto-enable the cloud AI provider on successful login
             setProviderEnabled('cloud', true);
+            // Persist the enabled state so it survives restarts
+            await persistAISettings(ctx.assistant);
             // Fetch cloud models so they appear in the model registry
             fetchModelsForProvider('cloud').catch(err => {
                 consoleStyler.log('warning', `☁️ Failed to fetch cloud models after login: ${err.message}`);
@@ -58,6 +61,8 @@ export const handlers = {
             await ctx.cloudSync.logout();
             // Disable the cloud AI provider on logout
             setProviderEnabled('cloud', false);
+            // Persist the disabled state so it survives restarts
+            await persistAISettings(ctx.assistant);
             ctx.broadcast('cloud:status', ctx.cloudSync.getStatus());
         } catch (err) {
             sendCloudError(ctx.ws, `Logout failed: ${err.message}`);

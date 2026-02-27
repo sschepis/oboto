@@ -147,8 +147,21 @@ export const useChat = () => {
       wsService.on('settings', (payload: unknown) => {
         const newSettings = payload as AgentSettings;
         setSettings(newSettings);
-        // Set default model from agentic route if not already set
-        setSelectedModel(prev => prev || newSettings.routing?.agentic || null);
+
+        const enabledProviders = newSettings.enabledProviders || [];
+        const registry = newSettings.modelRegistry || {};
+
+        setSelectedModel(prev => {
+          // If current model belongs to a disabled provider, reset to the server's primary model
+          if (prev && registry[prev]) {
+            const modelProvider = (registry[prev] as { provider: string })?.provider;
+            if (modelProvider && !enabledProviders.includes(modelProvider)) {
+              return newSettings.ai?.model || null;
+            }
+          }
+          // If no model selected yet, use primary model or agentic route
+          return prev || newSettings.ai?.model || newSettings.routing?.agentic || null;
+        });
       }),
       wsService.on('history-loaded', (payload: unknown) => {
         setMessages(payload as Message[]);
@@ -196,7 +209,10 @@ export const useChat = () => {
           });
       }),
       
-      wsService.on('tool-start', (payload: unknown) => {
+      // Individual tool-call events from ToolExecutor (read_file, write_file, etc.)
+      // Distinct from high-level 'tool-start'/'tool-end' emitted by ServerStatusAdapter
+      // for facade operations (ai_man_chat, ai_man_execute, etc.)
+      wsService.on('tool-call-start', (payload: unknown) => {
          const p = payload as { toolName: string; args: unknown };
          setIsWorking(true);
          setMessages(prev => {
@@ -236,7 +252,7 @@ export const useChat = () => {
          });
       }),
       
-      wsService.on('tool-end', (payload: unknown) => {
+      wsService.on('tool-call-end', (payload: unknown) => {
          const p = payload as { toolName: string; result: unknown };
          setMessages(prev => {
              // Find the pending response message containing this tool call
@@ -279,7 +295,7 @@ export const useChat = () => {
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       wsService.on('progress', (_payload: unknown) => {
-         // Progress events are informational; tool progress is tracked via tool-start/tool-end.
+         // Progress events are informational; tool progress is tracked via tool-call-start/tool-call-end.
          // The activity log (ThinkingIndicator) already shows progress details.
          // No message mutation needed.
       }),
@@ -308,6 +324,20 @@ export const useChat = () => {
         setAgenticProviders(p.providers || []);
         setActiveAgenticProvider(p.activeId);
       }),
+
+      // --- Workspace task events ---
+      wsService.on('workspace-task-spawned', (payload: unknown) => {
+        const p = payload as { taskId: string; description: string; workspacePath: string };
+        setMessages(prev => [...prev, {
+          id: `ws-task-spawned-${Date.now()}`,
+          role: 'ai',
+          type: 'text',
+          content: `🚀 **Workspace Task Spawned**\n\nTask \`${p.taskId}\` started in \`${p.workspacePath}\`\n\n_${p.description}_`,
+          timestamp: new Date().toLocaleString(),
+        }]);
+      }),
+      // workspace-task-completed and workspace-task-failed are handled via
+      // the 'message' event (EventBroadcaster injects system messages)
     ];
 
     return () => {

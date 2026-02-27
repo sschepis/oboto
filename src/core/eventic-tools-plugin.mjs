@@ -23,18 +23,19 @@ export class EventicToolsPlugin {
         // Expose legacy ToolExecutor tool list directly on engine
         eventic.getAvailableTools = () => this.toolExecutor.getAllToolDefinitions();
 
-        // Proxy eventic.tools.get to dynamically resolve custom tools and MCP tools
+        // Proxy eventic.tools.get to dynamically resolve plugin, custom, and MCP tools.
+        // Uses getToolFunction() for plugin + custom tool lookup (avoids accessing private internals).
         const originalToolsGet = eventic.tools.get.bind(eventic.tools);
         eventic.tools.get = (name) => {
             let tool = originalToolsGet(name);
             if (tool) return tool;
 
-            // Check Custom Tools
-            if (this.toolExecutor.customToolsManager && this.toolExecutor.customToolsManager.hasCustomTool(name)) {
+            // Check Plugin Tools + Custom Tools via public API
+            if (this.toolExecutor.getToolFunction(name)) {
                 return async (args, options) => await this._execute(name, args, options);
             }
 
-            // Check MCP Tools
+            // Check MCP Tools (not covered by getToolFunction)
             if (this.toolExecutor.mcpClientManager && name.startsWith('mcp_')) {
                 return async (args, options) => await this._execute(name, args, options);
             }

@@ -1,6 +1,35 @@
 import { consoleStyler } from '../../ui/console-styler.mjs';
 
 /**
+ * Race a promise against an AbortSignal.
+ * If the signal is already aborted, rejects immediately.
+ * If the signal fires while the promise is pending, rejects with an AbortError.
+ * Cleans up the listener once the promise settles.
+ *
+ * @param {Promise<T>} promise - The promise to race
+ * @param {AbortSignal} [signal] - Optional abort signal
+ * @returns {Promise<T>}
+ */
+export function withCancellation(promise, signal) {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(signal.reason ?? new Error('Aborted'));
+
+    return new Promise((resolve, reject) => {
+        const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(signal.reason ?? err);
+        };
+        signal.addEventListener('abort', onAbort);
+        promise.then(
+            (val) => { signal.removeEventListener('abort', onAbort); resolve(val); },
+            (err) => { signal.removeEventListener('abort', onAbort); reject(err); }
+        );
+    });
+}
+
+/**
  * Detect whether an error represents a cancellation (user abort or provider-side cancel).
  * Gemini SDK throws ApiError with status 499 and message containing "CANCELLED".
  * Standard AbortController throws DOMException with name "AbortError".

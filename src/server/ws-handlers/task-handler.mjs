@@ -1,3 +1,4 @@
+import { EventicFacade } from '../../core/eventic-facade.mjs';
 import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 
 /**
@@ -75,6 +76,49 @@ async function handleTriggerSchedule(data, ctx) {
     }
 }
 
+// ── Workspace Task Handlers ─────────────────────────────────────────────
+
+async function handleSpawnWorkspaceTask(data, ctx) {
+    const { ws, assistant } = ctx;
+    if (!assistant.taskManager) {
+        wsSendError(ws, 'TaskManager not available');
+        return;
+    }
+    const { workspace_path, task_description, query, context, init_git } = data.payload || {};
+    if (!workspace_path || !query) {
+        wsSendError(ws, 'workspace_path and query are required');
+        return;
+    }
+    try {
+        const result = await assistant.taskManager.spawnWorkspaceTask({
+            workspacePath: workspace_path,
+            description: task_description || query,
+            query,
+            context,
+            initGit: init_git,
+            aiAssistantClass: EventicFacade,
+            eventBus: ctx.eventBus,
+            originWorkspace: assistant.workingDir,
+        });
+        wsSend(ws, 'workspace-task-spawned', result);
+    } catch (err) {
+        wsSendError(ws, `Failed to spawn workspace task: ${err.message}`);
+    }
+}
+
+async function handleGetWorkspaceTasks(data, ctx) {
+    const { ws, assistant } = ctx;
+    if (!assistant.taskManager) return;
+    const tasks = assistant.taskManager.listTasks()
+        .filter(t => t.type === 'workspace');
+    const simplified = tasks.map(t => ({
+        ...t,
+        outputLog: undefined,
+        abortController: undefined,
+    }));
+    wsSend(ws, 'workspace-task-list', simplified);
+}
+
 export const handlers = {
     'get-tasks': handleGetTasks,
     'get-task-output': handleGetTaskOutput,
@@ -83,5 +127,7 @@ export const handlers = {
     'pause-schedule': handlePauseSchedule,
     'resume-schedule': handleResumeSchedule,
     'delete-schedule': handleDeleteSchedule,
-    'trigger-schedule': handleTriggerSchedule
+    'trigger-schedule': handleTriggerSchedule,
+    'spawn-workspace-task': handleSpawnWorkspaceTask,
+    'get-workspace-tasks': handleGetWorkspaceTasks
 };

@@ -515,6 +515,9 @@ export function inferModelProvider(modelId) {
     if (m.startsWith('claude-')) return 'anthropic';
     // Check if model is known in the remote registry as a cloud model
     if (_remoteModels[modelId]?.provider === 'cloud') return 'cloud';
+    // If the user has explicitly set their provider to cloud, honor it
+    // (cloud models have arbitrary names that won't match any prefix above)
+    if (config.ai.provider === 'cloud') return 'cloud';
     return 'lmstudio';
 }
 

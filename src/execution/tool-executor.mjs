@@ -267,6 +267,7 @@ export class ToolExecutor {
         // Recursive & Async Tools
         this.registerTool('call_ai_assistant', this.callAiAssistant.bind(this));
         this.registerTool('spawn_background_task', this.asyncTaskHandlers.spawnBackgroundTask.bind(this.asyncTaskHandlers));
+        this.registerTool('spawn_workspace_task', this.asyncTaskHandlers.spawnWorkspaceTask.bind(this.asyncTaskHandlers));
         this.registerTool('check_task_status', this.asyncTaskHandlers.checkTaskStatus.bind(this.asyncTaskHandlers));
         this.registerTool('list_background_tasks', this.asyncTaskHandlers.listBackgroundTasks.bind(this.asyncTaskHandlers));
         this.registerTool('cancel_background_task', this.asyncTaskHandlers.cancelBackgroundTask.bind(this.asyncTaskHandlers));
@@ -428,14 +429,27 @@ export class ToolExecutor {
 
     /**
      * Get the raw handler function for a registered tool by name.
+     * Checks core registry first, then plugin handlers, then custom tools.
      * Returns null if the tool is not found.
      * @param {string} name — tool name
      * @returns {Function|null}
      */
     getToolFunction(name) {
+        // 1. Core tool registry
         const entry = this.toolRegistry.get(name);
-        if (!entry) return null;
-        return typeof entry === 'function' ? entry : entry.handler;
+        if (entry) return typeof entry === 'function' ? entry : entry.handler;
+
+        // 2. Plugin-registered tools
+        if (this._pluginHandlers.has(name)) {
+            return this._pluginHandlers.get(name);
+        }
+
+        // 3. Custom tools
+        if (this.customToolsManager?.hasCustomTool(name)) {
+            return (args) => this.customToolsManager.executeCustomTool(name, args);
+        }
+
+        return null;
     }
 
     async executeTool(toolCall, options = {}) {
@@ -491,6 +505,15 @@ export class ToolExecutor {
 
             // Emit human-readable status for the UI
             emitToolStatus(functionName, args);
+
+            // Emit structured tool-call event so the UI can show ToolCall components
+            // (including BrowserPreview for browser plugin results).
+            // Uses 'server:tool-call-start/end' to distinguish from the high-level
+            // 'server:tool-start/end' emitted by ServerStatusAdapter for facade
+            // operations (ai_man_chat, ai_man_execute, etc.).
+            if (this.eventBus) {
+                this.eventBus.emitTyped('server:tool-call-start', { toolName: functionName, args });
+            }
 
             // Inject signal into args for tools that support cancellation
             if (options.signal) {
@@ -578,6 +601,12 @@ export class ToolExecutor {
                 throw new Error(`Unknown tool: ${functionName}`);
             }
 
+            // Emit structured tool-call-end event so the UI can update ToolCall
+            // components with the result (browser previews, file contents, etc.)
+            if (this.eventBus) {
+                this.eventBus.emitTyped('server:tool-call-end', { toolName: functionName, result: toolResultText });
+            }
+
             return {
                 role: 'tool',
                 tool_call_id: toolCall.id,
@@ -587,6 +616,10 @@ export class ToolExecutor {
 
         } catch (error) {
             consoleStyler.log('error', `Tool Error: ${error.message}`);
+            // Emit tool-call-end with error so the UI can show the failure
+            if (this.eventBus) {
+                this.eventBus.emitTyped('server:tool-call-end', { toolName: functionName, result: `Error: ${error.message}` });
+            }
             return {
                 role: 'tool',
                 tool_call_id: toolCall.id,

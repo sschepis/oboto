@@ -1,6 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
   roots: ['<rootDir>/src'],
   moduleNameMapper: {
@@ -8,8 +9,12 @@ module.exports = {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
-      isolatedModules: true,
+      useESM: true,
+      tsconfig: {
+        ...require('./tsconfig.json').compilerOptions,
+        module: 'esnext',
+        isolatedModules: true
+      },
       diagnostics: {
         warnOnly: true
       }

@@ -1,5 +1,5 @@
 import { config } from '../../../config.mjs';
-import { withRetry } from '../utils.mjs';
+import { withRetry, withCancellation } from '../utils.mjs';
 
 // Lazy-loaded SDK instance
 let _geminiAI = null;
@@ -309,7 +309,7 @@ export function geminiResponseToOpenai(geminiResponse) {
 /**
  * Call Gemini using the @google/genai SDK
  */
-export async function callGeminiSDK(ctx, requestBody) {
+export async function callGeminiSDK(ctx, requestBody, signal) {
     const ai = await getGeminiClient();
     const { systemInstruction, contents } = openaiMessagesToGemini(requestBody.messages);
     const geminiTools = openaiToolsToGemini(requestBody.tools);
@@ -344,17 +344,20 @@ export async function callGeminiSDK(ctx, requestBody) {
     // Race each attempt against a 60s per-call timeout to prevent indefinite hangs
     // when the network stalls without producing an error.
     const PER_CALL_TIMEOUT = 60_000;
+    
     const geminiResponse = await withRetry(() => {
-        return Promise.race([
+        let timeoutId;
+        const timeoutPromise = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('fetch failed: Gemini SDK call timed out')), PER_CALL_TIMEOUT);
+        });
+        return withCancellation(Promise.race([
             ai.models.generateContent({
                 model: ctx.model,
                 contents: contents,
                 config: generateConfig,
             }),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('fetch failed: Gemini SDK call timed out')), PER_CALL_TIMEOUT)
-            ),
-        ]);
+            timeoutPromise,
+        ]), signal).finally(() => clearTimeout(timeoutId));
     });
 
     // Translate response to OpenAI format
@@ -365,7 +368,7 @@ export async function callGeminiSDK(ctx, requestBody) {
  * Call Gemini streaming using the @google/genai SDK.
  * Returns a synthetic Response object that mimics SSE streaming.
  */
-export async function callGeminiSDKStream(ctx, requestBody) {
+export async function callGeminiSDKStream(ctx, requestBody, signal) {
     const ai = await getGeminiClient();
     const { systemInstruction, contents } = openaiMessagesToGemini(requestBody.messages);
     const geminiTools = openaiToolsToGemini(requestBody.tools);
@@ -381,6 +384,10 @@ export async function callGeminiSDKStream(ctx, requestBody) {
         generateConfig.systemInstruction = systemInstruction;
     }
 
+    if (signal?.aborted) {
+        throw signal.reason || new Error('Aborted');
+    }
+
     // Do NOT wrap streaming calls in withRetry — if the stream partially sends
     // data then errors, a retry would create a second stream, leading to
     // duplicated/garbled output sent to the client.
@@ -394,8 +401,25 @@ export async function callGeminiSDKStream(ctx, requestBody) {
     const stream = new ReadableStream({
         async start(controller) {
             const encoder = new TextEncoder();
+            let closed = false;
+            
+            // Handle abort during stream
+            let onAbort;
+            if (signal) {
+                onAbort = () => {
+                    if (closed) return;
+                    closed = true;
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    controller.error(err);
+                };
+                signal.addEventListener('abort', onAbort);
+            }
+
             try {
                 for await (const chunk of streamResult) {
+                    if (signal?.aborted || closed) break;
+
                     const text = chunk.text || '';
                     if (text) {
                         // Emit SSE-formatted data matching OpenAI streaming format
@@ -408,10 +432,18 @@ export async function callGeminiSDKStream(ctx, requestBody) {
                         controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
                     }
                 }
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                controller.close();
+                if (!closed) {
+                    closed = true;
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    controller.close();
+                }
             } catch (err) {
-                controller.error(err);
+                if (!closed) {
+                    closed = true;
+                    controller.error(err);
+                }
+            } finally {
+                if (onAbort) signal.removeEventListener('abort', onAbort);
             }
         },
     });

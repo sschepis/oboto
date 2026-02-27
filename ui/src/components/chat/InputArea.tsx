@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Paperclip, Image as ImageIcon, X, FileText, Zap, Activity, Trash2, Download, GitBranch, Folder, BookOpen, FlaskConical, Code2, Mic, MicOff, Square, Play, Bot, ChevronDown } from 'lucide-react';
+import { Send, Paperclip, Image as ImageIcon, X, FileText, Zap, Activity, Trash2, Download, GitBranch, Folder, BookOpen, FlaskConical, Code2, Mic, MicOff, Square, Play, Bot, ChevronDown, Check } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import VoiceWaveform from '../features/VoiceWaveform';
 import AgentActivityPanel from './AgentActivityPanel';
@@ -32,6 +32,8 @@ interface InputAreaProps {
   activityLog?: ActivityLogEntry[];
   /** Number of queued messages */
   queueCount?: number;
+  /** When true, the entire input area is disabled (e.g. no AI providers enabled) */
+  disabled?: boolean;
 }
 
 const getIcon = (iconName: string | React.ReactNode) => {
@@ -90,7 +92,8 @@ const InputArea: React.FC<InputAreaProps> = ({
   selectedModel,
   onSelectModel,
   activityLog,
-  queueCount
+  queueCount,
+  disabled = false,
 }) => {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -99,10 +102,12 @@ const InputArea: React.FC<InputAreaProps> = ({
   const [inlineFilter, setInlineFilter] = useState('');
   const [selectedInlineIndex, setSelectedInlineIndex] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = externalInputRef || internalInputRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const modelSelectorRef = useRef<HTMLDivElement>(null);
 
   const {
     isListening,
@@ -154,6 +159,43 @@ const InputArea: React.FC<InputAreaProps> = ({
     });
     return groups;
   }, [availableModels]);
+
+  const currentProvider = useMemo(() => {
+    if (!selectedModel || !availableModels[selectedModel]) return null;
+    return availableModels[selectedModel].provider;
+  }, [selectedModel, availableModels]);
+
+  const modelDisplayLabel = useMemo(() => {
+    if (!selectedModel) return null;
+    return currentProvider ? `${currentProvider}/${selectedModel}` : selectedModel;
+  }, [selectedModel, currentProvider]);
+
+  // Close model selector on outside click
+  useEffect(() => {
+    if (!showModelSelector) return;
+    const handleClick = (e: MouseEvent) => {
+      if (modelSelectorRef.current && !modelSelectorRef.current.contains(e.target as Node)) {
+        setShowModelSelector(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showModelSelector]);
+
+  // Close model selector on Escape
+  useEffect(() => {
+    if (!showModelSelector) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModelSelector(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [showModelSelector]);
+
+  const handleSelectModel = (modelId: string) => {
+    onSelectModel?.(modelId);
+    setShowModelSelector(false);
+  };
 
   // Listen for upload completion
   useEffect(() => {
@@ -429,26 +471,46 @@ const InputArea: React.FC<InputAreaProps> = ({
         <div className="flex items-end gap-2 px-3 py-2.5">
           <div className="flex items-center gap-0.5 shrink-0">
              {/* Model Selector */}
-             {Object.keys(groupedModels).length > 0 && (
-              <div className="relative group mr-1">
-                <select
-                  value={selectedModel || ''}
-                  onChange={(e) => onSelectModel?.(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  title={`Select AI Model (Current: ${selectedModel})`}
+             {Object.keys(groupedModels).length > 0 && !disabled && (
+              <div className="relative mr-1" ref={modelSelectorRef}>
+                <button
+                  onClick={() => setShowModelSelector(prev => !prev)}
+                  className="p-1.5 flex items-center gap-1 text-zinc-600 hover:text-indigo-400 transition-all duration-200 rounded-lg hover:bg-indigo-500/5 active:scale-90"
+                  title={modelDisplayLabel ? `Model: ${modelDisplayLabel}` : 'Select AI Model'}
                 >
-                  {Object.entries(groupedModels).map(([provider, models]) => (
-                    <optgroup key={provider} label={provider.toUpperCase()}>
-                      {models.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                <button className="p-1.5 flex items-center gap-1 text-zinc-600 hover:text-indigo-400 transition-all duration-200 rounded-lg hover:bg-indigo-500/5 active:scale-90">
                   <Bot size={15} />
-                  <ChevronDown size={10} className="opacity-50" />
+                  <ChevronDown size={10} className={`opacity-50 transition-transform duration-200 ${showModelSelector ? 'rotate-180' : ''}`} />
                 </button>
+
+                {showModelSelector && (
+                  <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto bg-zinc-900 border border-zinc-700/60 rounded-lg shadow-2xl shadow-black/60 z-[60] py-1">
+                    {Object.entries(groupedModels).map(([provider, models]) => (
+                      <div key={provider}>
+                        <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-500 bg-zinc-800/40 sticky top-0">
+                          {provider}
+                        </div>
+                        {models.map(m => {
+                          const isActive = m === selectedModel;
+                          return (
+                            <button
+                              key={m}
+                              onClick={() => handleSelectModel(m)}
+                              className={`
+                                w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors
+                                ${isActive
+                                  ? 'bg-indigo-500/15 text-indigo-300'
+                                  : 'text-zinc-300 hover:bg-white/5 hover:text-white'}
+                              `}
+                            >
+                              <span className="flex-1 truncate">{provider}/{m}</span>
+                              {isActive && <Check size={12} className="text-indigo-400 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -498,13 +560,21 @@ const InputArea: React.FC<InputAreaProps> = ({
               onPaste={handlePaste}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={isAgentWorking ? "Queue a message..." : "Message Oboto..."}
-              className="
+              disabled={disabled}
+              placeholder={
+                disabled
+                  ? "No AI providers enabled — configure in Settings"
+                  : isAgentWorking
+                    ? "Queue a message..."
+                    : "Message Oboto..."
+              }
+              className={`
                 w-full bg-transparent border-none focus:ring-0
-                text-[13px] text-white placeholder:text-zinc-400
+                text-[13px] placeholder:text-zinc-400
                 resize-none max-h-32 min-h-[28px] py-1 outline-none leading-relaxed
                 transition-colors duration-200
-              "
+                ${disabled ? 'text-zinc-600 cursor-not-allowed' : 'text-white'}
+              `}
               rows={1}
             />
           </div>
@@ -521,7 +591,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                 handleSendAction();
               }
             }}
-            disabled={(!input.trim() && attachments.length === 0) && !isAgentWorking}
+            disabled={disabled || ((!input.trim() && attachments.length === 0) && !isAgentWorking)}
             className={`
               h-8 w-8 flex items-center justify-center rounded-lg
               transition-all duration-250 shrink-0 active:scale-90

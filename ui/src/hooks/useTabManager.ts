@@ -245,6 +245,25 @@ export function useTabManager(
       console.log('Toggle pin', id);
   }, []);
 
+  // Open a plugin welcome page tab
+  const handlePluginClick = useCallback((pluginName: string) => {
+    const tabId = `plugin:${pluginName}`;
+    const existingTab = tabs.find(t => t.id === tabId);
+
+    if (existingTab) {
+      setActiveTabId(tabId);
+    } else {
+      const displayName = pluginName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      setTabs(prev => [...prev, {
+        id: tabId,
+        label: displayName,
+        type: 'plugin' as const,
+        pluginName,
+      }]);
+      setActiveTabId(tabId);
+    }
+  }, [tabs]);
+
   // Open a source-view tab for a surface
   const handleViewSource = useCallback((surfaceId: string) => {
     const tabId = `source-view:${surfaceId}`;
@@ -283,6 +302,7 @@ export function useTabManager(
     handleNewChat,
     handleNewFile,
     handleNewSurface,
+    handlePluginClick,
     handlePinSurface,
     handleViewSource,
     CHAT_TAB // Export for workspace state restoration usage

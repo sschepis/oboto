@@ -54,7 +54,10 @@ class CognitiveAgent {
     this.history = [];
     this.maxHistory = this.config.agent.maxHistory;
 
-    // System prompt
+    // System prompt — prefer the facade's dynamic prompt (which includes
+    // skills, plugins, persona, surfaces, etc.) over the static default.
+    // The aiProvider.systemPrompt is set by eventic-facade's updateSystemPrompt()
+    // and loadConversation(), so it reflects the full dynamic context.
     this.systemPrompt = this.config.agent.systemPrompt;
 
     // Stats
@@ -88,9 +91,12 @@ class CognitiveAgent {
     // ── Step 6: Recall relevant memories ──────────────────────────────
     const memories = this.cognitive.recall(input, 3);
 
-    // Build system prompt with cognitive state
+    // Build system prompt with cognitive state.
+    // Prefer the facade's dynamic system prompt (which includes skills,
+    // plugin summaries, persona, surfaces, etc.) over our static default.
+    const basePrompt = (this.aiProvider?.systemPrompt) || this.systemPrompt;
     const stateContext = this.cognitive.getStateContext();
-    let systemMessage = this.systemPrompt + '\n\n' + stateContext;
+    let systemMessage = basePrompt + '\n\n' + stateContext;
 
     // Append available tool names so the model knows what's at its disposal
     const toolDefs = this._getToolDefinitions();
@@ -359,7 +365,9 @@ class CognitiveAgent {
 
   /**
    * Execute a tool call. Handles cognitive-specific tools internally,
-   * delegates everything else to ai-man's ToolExecutor.
+   * delegates everything else to ai-man's ToolExecutor via its full
+   * `executeTool()` pipeline (which dispatches to core, plugin, MCP,
+   * and custom tools with proper security, timeout, and logging).
    *
    * @param {string} name
    * @param {object|string} args
@@ -391,13 +399,35 @@ class CognitiveAgent {
       };
     }
 
-    // Delegate to ai-man's ToolExecutor
+    // Delegate to ai-man's ToolExecutor via the full executeTool() pipeline.
+    // This ensures plugin tools (browse_open, etc.), MCP tools, custom tools,
+    // security checks, timeouts, and status reporting all work correctly.
     if (this.toolExecutor) {
       try {
-        const toolFn = this.toolExecutor.getToolFunction(name);
-        if (toolFn) {
-          const result = await toolFn(parsedArgs);
-          return typeof result === 'string' ? { result } : result;
+        const toolCall = {
+          id: `cognitive_${Date.now()}_${name}`,
+          function: {
+            name,
+            arguments: JSON.stringify(parsedArgs)
+          }
+        };
+        const result = await this.toolExecutor.executeTool(toolCall);
+        // executeTool returns { role, tool_call_id, name, content }
+        const content = result?.content || '';
+        // Try to parse as JSON for structured results.
+        // Preserve error indicators (success: false) so callers know it failed.
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed && parsed.success === false) {
+            return { success: false, error: parsed.error || content };
+          }
+          return parsed;
+        } catch {
+          // Check for plain-text error strings from the executor
+          if (content.startsWith('Error:')) {
+            return { success: false, error: content };
+          }
+          return { result: content };
         }
       } catch (e) {
         return { success: false, error: `Tool execution error: ${e.message}` };

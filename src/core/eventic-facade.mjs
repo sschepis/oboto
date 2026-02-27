@@ -150,8 +150,14 @@ export class EventicFacade {
         const cognitiveProvider = new CognitiveProvider();
         this.agenticRegistry.register(cognitiveProvider);
 
-        // Activate the configured provider (default: eventic)
-        const defaultAgenticProvider = config?.ai?.agenticProvider || 'eventic';
+        // Activate the configured provider (default: cognitive / TinyAleph).
+        // Changed from 'eventic' → 'cognitive' in 2026-02-26.
+        // NOTE: If the user explicitly set agenticProvider in config, that is
+        // honored.  The default only applies to fresh installations.
+        const defaultAgenticProvider = config?.ai?.agenticProvider || 'cognitive';
+        if (!config?.ai?.agenticProvider) {
+            consoleStyler.log('system', `Agentic provider defaulting to "${defaultAgenticProvider}" (override via config.ai.agenticProvider)`);
+        }
         this._agenticInitPromise = this.agenticRegistry.setActive(
             defaultAgenticProvider,
             this._getAgenticDeps()

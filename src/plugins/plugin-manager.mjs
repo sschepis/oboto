@@ -10,6 +10,7 @@
 import { PluginLoader } from './plugin-loader.mjs';
 import { createPluginAPI } from './plugin-api.mjs';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { GLOBAL_PLUGINS_DATA_DIR } from '../lib/paths.mjs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -507,12 +508,12 @@ export class PluginManager {
     // ── Disabled list persistence ────────────────────────────────────────
 
     /**
-     * Load the list of disabled plugins from `.plugins-data/.disabled.json`.
+     * Load the list of disabled plugins from `~/.oboto/plugins-data/.disabled.json`.
      * @private
      */
     async _loadDisabledList() {
         try {
-            const filePath = path.join(this.workingDir, '.plugins-data', '.disabled.json');
+            const filePath = path.join(GLOBAL_PLUGINS_DATA_DIR, '.disabled.json');
             const raw = await fs.readFile(filePath, 'utf8');
             const list = JSON.parse(raw);
             if (Array.isArray(list)) {
@@ -529,9 +530,8 @@ export class PluginManager {
      */
     async _saveDisabledList() {
         try {
-            const dir = path.join(this.workingDir, '.plugins-data');
-            const filePath = path.join(dir, '.disabled.json');
-            await fs.mkdir(dir, { recursive: true });
+            const filePath = path.join(GLOBAL_PLUGINS_DATA_DIR, '.disabled.json');
+            await fs.mkdir(GLOBAL_PLUGINS_DATA_DIR, { recursive: true });
             await fs.writeFile(filePath, JSON.stringify(Array.from(this._disabledPlugins), null, 2), 'utf8');
         } catch (err) {
             consoleStyler.log('warning', `Failed to save disabled plugin list: ${err.message}`);

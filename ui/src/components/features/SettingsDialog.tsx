@@ -33,6 +33,8 @@ export interface AgentSettings {
   routing?: Record<string, string>;
   modelRegistry?: Record<string, ModelCapabilities>;
   secretsStatus?: Record<string, { isConfigured: boolean; source: string }>;
+  /** List of provider keys that are currently enabled (e.g. ['openai', 'gemini']) */
+  enabledProviders?: string[];
 }
 
 interface SettingsDialogProps {

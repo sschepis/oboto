@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import Header from './components/layout/Header';
 import StatusBar from './components/layout/StatusBar';
 import MessageList from './components/chat/MessageList';
@@ -42,6 +42,7 @@ import { useUIState } from './hooks/useUIState';
 import { useMessageActions } from './hooks/useMessageActions';
 import { useSendHandler } from './hooks/useSendHandler';
 import { usePlugins } from './hooks/usePlugins';
+import PluginWelcomePage from './components/features/PluginWelcomePage';
 import { globalActions, inlineCommands } from './constants/commands';
 
 function App() {
@@ -74,7 +75,7 @@ function App() {
   const { isFirstRun, isLoading: setupLoading } = useSetupWizard();
 
   const skills = useSkills();
-  const { uiManifest } = usePlugins();
+  const { plugins: pluginsList, uiManifest, loading: pluginsLoading, enablePlugin, disablePlugin } = usePlugins();
 
   // Task Manager for running task count
   const { tasks } = useTaskManager();
@@ -112,6 +113,37 @@ function App() {
     const activeTab = tabManager.tabs.find(t => t.id === tabManager.activeTabId);
     return activeTab?.type === 'surface' ? activeTab.surfaceId : undefined;
   }, [tabManager.tabs, tabManager.activeTabId]);
+
+  // ── Model filtering: only show models from enabled providers ──────────
+  const enabledProviders = useMemo(
+    () => settings?.enabledProviders || [],
+    [settings?.enabledProviders]
+  );
+  const hasEnabledProvider = enabledProviders.length > 0;
+
+  const filteredModels = useMemo(() => {
+    const registry = settings?.modelRegistry || {};
+    if (enabledProviders.length === 0) return {};
+    const filtered: Record<string, { provider: string }> = {};
+    for (const [id, caps] of Object.entries(registry)) {
+      if (enabledProviders.includes(caps.provider)) {
+        filtered[id] = caps;
+      }
+    }
+    return filtered;
+  }, [settings?.modelRegistry, enabledProviders]);
+
+  // Use a ref to avoid re-creating handleSelectModel on every settings change
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+
+  const handleSelectModel = useCallback((model: string) => {
+    setSelectedModel(model);
+    // Persist the agentic model route to settings
+    const current = settingsRef.current;
+    const newRouting = { ...(current?.routing || {}), agentic: model };
+    updateSettings({ ...current, routing: newRouting });
+  }, [setSelectedModel, updateSettings]);
 
   const { handleSend } = useSendHandler({
     send,
@@ -334,6 +366,14 @@ function App() {
             tabManager.handleCloseTab(tabId);
           }}
           onSurfaceDuplicate={duplicateSurface}
+          installedSkills={skills.installedSkills}
+          isSkillsLoading={skills.isLoading}
+          onFetchSkills={skills.fetchSkills}
+          plugins={pluginsList}
+          pluginsLoading={pluginsLoading}
+          onEnablePlugin={enablePlugin}
+          onDisablePlugin={disablePlugin}
+          onPluginClick={tabManager.handlePluginClick}
         />
 
         {/* Resizer Handle */}
@@ -478,6 +518,20 @@ function App() {
               </div>
             ))}
 
+            {tabManager.tabs.filter(t => t.type === 'plugin').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <PluginWelcomePage
+                  pluginName={tab.pluginName!}
+                  plugin={pluginsList.find(p => p.name === tab.pluginName)}
+                  onEnable={enablePlugin}
+                  onDisable={disablePlugin}
+                />
+              </div>
+            ))}
+
               <InputArea
                 isAgentWorking={isWorking}
                 onSend={handleSend}
@@ -485,11 +539,12 @@ function App() {
                 commands={inlineCommands}
                 suggestions={nextSteps}
                 inputRef={chatInputRef}
-                availableModels={settings?.modelRegistry || {}}
+                availableModels={filteredModels}
                 selectedModel={selectedModel}
-                onSelectModel={setSelectedModel}
+                onSelectModel={handleSelectModel}
                 activityLog={activityLog}
                 queueCount={queueCount}
+                disabled={!hasEnabledProvider}
               />
             </div>
 
@@ -508,14 +563,6 @@ function App() {
           isAgentWorking={isWorking}
           queuedMessageCount={queueCount}
           projectStatus={projectStatus}
-          selectedModel={selectedModel ?? undefined}
-          availableModels={settings?.modelRegistry || {}}
-          onSelectModel={(model) => {
-            setSelectedModel(model);
-            // Persist the agentic model route to settings
-            const newRouting = { ...(settings?.routing || {}), agentic: model };
-            updateSettings({ ...settings, routing: newRouting });
-          }}
           activeConversation={activeConversation}
           onSettingsClick={() => ui.setShowSettings(true)}
           onTasksClick={() => ui.setShowTaskSidebar(p => !p)}

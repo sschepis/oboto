@@ -1,10 +1,10 @@
 /**
  * One-time migration: .ai-man → .oboto, ~/.ai-man → ~/.oboto,
- * ~/.oboto-service → ~/.oboto, and project-root .secrets.enc → ~/.oboto/
+ * ~/.oboto-service → ~/.oboto, project-root .secrets.enc → ~/.oboto/.
  *
  * Moves workspace-local config from .ai-man/ to .oboto/,
  * global config from ~/.ai-man/ and ~/.oboto-service/ to ~/.oboto/,
- * and legacy project-root .secrets.enc to ~/.oboto/.secrets.enc.
+ * legacy project-root .secrets.enc to ~/.oboto/.secrets.enc.
  *
  * Safe to call on every startup — it's a no-op once the old directories
  * and files are gone (or were never present).

@@ -1,12 +1,15 @@
 import FileTree from '../features/FileTree';
 import SurfaceContextMenu, { type SurfaceContextMenuState } from '../features/SurfaceContextMenu';
 import PluginHost from '../features/PluginHost';
+import SkillsSidebarPanel from '../features/SkillsSidebarPanel';
+import PluginsSidebarPanel from '../features/PluginsSidebarPanel';
 import SidebarToolbar, { type SidebarPanelDescriptor } from './SidebarToolbar';
 import type { FileNode } from '../../hooks/useChat';
 import type { SurfaceMeta } from '../../hooks/useSurface';
-import type { PluginSidebarSection } from '../../hooks/usePlugins';
+import type { PluginSidebarSection, PluginInfo } from '../../hooks/usePlugins';
+import type { SkillInfo } from '../../hooks/useSkills';
 import type { ProjectStatusData } from '../features/ProjectStatus';
-import { Activity, ChevronRight, FolderTree, GripVertical, LayoutDashboard, Pin, Puzzle } from 'lucide-react';
+import { Activity, ChevronRight, FolderTree, GripVertical, LayoutDashboard, Pin, Puzzle, Sparkles } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import ProjectStatus from '../features/ProjectStatus';
 
@@ -21,6 +24,16 @@ interface SidebarProps {
   onSurfaceDelete?: (surfaceId: string) => void;
   onSurfaceDuplicate?: (surfaceId: string) => void;
   width?: number;
+  // Skills panel data
+  installedSkills?: SkillInfo[];
+  isSkillsLoading?: boolean;
+  onFetchSkills?: () => void;
+  // Plugins panel data
+  plugins?: PluginInfo[];
+  pluginsLoading?: boolean;
+  onEnablePlugin?: (name: string) => void;
+  onDisablePlugin?: (name: string) => void;
+  onPluginClick?: (name: string) => void;
 }
 
 const COLLAPSE_KEY = 'ai-man:sidebar-collapse-state';
@@ -28,9 +41,9 @@ const PANEL_ORDER_KEY = 'ai-man:sidebar-panel-order';
 const PANEL_VISIBILITY_KEY = 'ai-man:sidebar-panel-visibility';
 const PANEL_EXPLICITLY_TOGGLED_KEY = 'ai-man:sidebar-explicitly-toggled';
 
-type BuiltinPanelId = 'projectStatus' | 'surfaces' | 'files';
+type BuiltinPanelId = 'projectStatus' | 'surfaces' | 'files' | 'skills' | 'plugins';
 type PanelId = string; // Supports both builtin IDs and plugin panel IDs
-const DEFAULT_BUILTIN_PANELS: BuiltinPanelId[] = ['projectStatus', 'surfaces', 'files'];
+const DEFAULT_BUILTIN_PANELS: BuiltinPanelId[] = ['projectStatus', 'surfaces', 'files', 'skills', 'plugins'];
 
 interface CollapseState {
   [key: string]: boolean;
@@ -114,7 +127,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSurfaceRename,
   onSurfaceDelete,
   onSurfaceDuplicate,
-  width
+  width,
+  installedSkills = [],
+  isSkillsLoading = false,
+  onFetchSkills,
+  plugins = [],
+  pluginsLoading = false,
+  onEnablePlugin,
+  onDisablePlugin,
+  onPluginClick,
 }) => {
   const [showAllSurfaces, setShowAllSurfaces] = useState(true);
   const [contextMenu, setContextMenu] = useState<SurfaceContextMenuState | null>(null);
@@ -218,6 +239,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'projectStatus', label: 'Project Status', icon: <Activity size={11} />, source: 'builtin' },
       { id: 'surfaces', label: 'Surfaces', icon: <LayoutDashboard size={11} />, source: 'builtin' },
       { id: 'files', label: 'Explorer', icon: <FolderTree size={11} />, source: 'builtin' },
+      { id: 'skills', label: 'Skills', icon: <Sparkles size={11} />, source: 'builtin' },
+      { id: 'plugins', label: 'Plug-ins', icon: <Puzzle size={11} />, source: 'builtin' },
     ];
     const pluginDescs: SidebarPanelDescriptor[] = pluginSidebarSections.map(section => ({
       id: `plugin:${section.id}`,
@@ -552,6 +575,78 @@ const Sidebar: React.FC<SidebarProps> = ({
             <CollapsibleContent isOpen={!collapseState.files}>
               <div className="px-4 pb-4 flex-1 min-h-0">
                 <FileTree files={fileTree} onFileClick={onFileClick} />
+              </div>
+            </CollapsibleContent>
+          </div>
+        );
+
+      case 'skills':
+        return (
+          <div key={panelId} className={`flex flex-col ${!isLast ? 'border-b border-zinc-800/30' : 'flex-1 min-h-0'}`}>
+            <SectionHeader
+              icon={<Sparkles size={13} />}
+              label="Skills"
+              isCollapsed={!!collapseState.skills}
+              onClick={() => toggleSection('skills')}
+              badge={
+                installedSkills.length > 0 ? (
+                  <span className="text-[9px] font-mono text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded-md">
+                    {installedSkills.length}
+                  </span>
+                ) : undefined
+              }
+              isDragging={draggedPanel === panelId}
+              isDragOver={dragOverPanel === panelId}
+              onDragStart={handleDragStart(panelId)}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver(panelId)}
+              onDragLeave={handleDragLeave(panelId)}
+              onDrop={handleDrop(panelId)}
+            />
+            <CollapsibleContent isOpen={!collapseState.skills}>
+              <div className="px-4 pb-4">
+                <SkillsSidebarPanel
+                  installedSkills={installedSkills}
+                  isLoading={isSkillsLoading}
+                  onFetchSkills={onFetchSkills || (() => {})}
+                />
+              </div>
+            </CollapsibleContent>
+          </div>
+        );
+
+      case 'plugins':
+        return (
+          <div key={panelId} className={`flex flex-col ${!isLast ? 'border-b border-zinc-800/30' : 'flex-1 min-h-0'}`}>
+            <SectionHeader
+              icon={<Puzzle size={13} className="text-indigo-400" />}
+              label="Plug-ins"
+              isCollapsed={!!collapseState.plugins}
+              onClick={() => toggleSection('plugins')}
+              badge={
+                plugins.length > 0 ? (
+                  <span className="text-[9px] font-mono text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded-md">
+                    {plugins.filter(p => p.status === 'active').length}/{plugins.length}
+                  </span>
+                ) : undefined
+              }
+              isDragging={draggedPanel === panelId}
+              isDragOver={dragOverPanel === panelId}
+              onDragStart={handleDragStart(panelId)}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver(panelId)}
+              onDragLeave={handleDragLeave(panelId)}
+              onDrop={handleDrop(panelId)}
+            />
+            <CollapsibleContent isOpen={!collapseState.plugins}>
+              <div className="px-4 pb-4">
+                <PluginsSidebarPanel
+                  plugins={plugins}
+                  loading={pluginsLoading}
+                  onEnable={onEnablePlugin || (() => {})}
+                  onDisable={onDisablePlugin || (() => {})}
+                  onPluginClick={onPluginClick}
+                />
               </div>
             </CollapsibleContent>
           </div>

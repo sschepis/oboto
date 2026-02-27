@@ -1,5 +1,5 @@
 # System Manifest (SYSTEM_MAP.md)
-Last Updated: 2026-02-20T08:00:00.000Z
+Last Updated: 2026-02-26T21:30:00.000Z
 
 ## 1. Global Invariants
 | ID | Invariant | Description |
@@ -34,6 +34,10 @@ Last Updated: 2026-02-20T08:00:00.000Z
 - [2026-02-20T07:25:00.000Z] Initial State Created (bootstrapped from REFACTOR_DESIGN.md)
 - [2026-02-20T08:00:00.000Z] Refactored AssistantFacade, removed dead ai-assistant.mjs
 - [2026-02-21T09:50:00.000Z] Added Task Checkpoint System for crash recovery (CheckpointStore, TaskCheckpointManager)
+- [2026-02-26T10:20:00.000Z] Implemented cancellation support for Gemini AI provider and cleared TODOs in src/core/ai-provider.
+- [2026-02-26T17:35:00.000Z] Completed refactor of `ai-provider.mjs` into modular structure (`src/core/ai-provider/`).
+- [2026-02-26T18:00:00.000Z] System Recovery: Verified integrity, fixed broken UI test (`manifestWatcher.test.ts`), and created refactor plan for `web-server.mjs`.
+- [2026-02-26T21:30:00.000Z] Completed refactor of `web-server.mjs` (881 -> 219 lines). Extracted `TerminalService`, `EventBroadcaster`, `ClientConnectionHandler`, and `CloudLoader`.
 
 ## 5. Task Checkpoint System (Crash Recovery)
 The task checkpoint system enables recovery of running tasks if the server crashes.
