@@ -74,9 +74,22 @@ class DaemonManager extends EventEmitter {
         // In packaged app, extraResources puts the backend in resources/backend
         const packagedBackendPath = process.resourcesPath ? path.join(process.resourcesPath, 'backend') : null;
         
+        this.emit('log', `[daemon] resourcesPath: ${process.resourcesPath || '(none)'}`);
+        this.emit('log', `[daemon] packagedBackendPath: ${packagedBackendPath || '(none)'}`);
+        if (packagedBackendPath) {
+            this.emit('log', `[daemon] packaged backend exists: ${fs.existsSync(packagedBackendPath)}`);
+        }
+        
         if (packagedBackendPath && fs.existsSync(packagedBackendPath)) {
             projectRoot = packagedBackendPath;
             this.emit('log', `Using packaged backend at: ${projectRoot}`);
+            // Log what's actually inside the backend directory for debugging
+            try {
+                const backendContents = fs.readdirSync(projectRoot);
+                this.emit('log', `[daemon] backend contents: ${backendContents.join(', ')}`);
+            } catch (e) {
+                this.emit('log', `[daemon] could not list backend dir: ${e.message}`);
+            }
         } else {
             // Development: The tray-app lives inside the project at tray-app/
             projectRoot = path.resolve(__dirname, '..', '..');
@@ -84,6 +97,15 @@ class DaemonManager extends EventEmitter {
         }
 
         const aiMjsPath = path.join(projectRoot, 'ai.mjs');
+
+        // Validate that the backend entry point exists before trying to fork
+        if (!fs.existsSync(aiMjsPath)) {
+            const errorMsg = `Backend entry point not found: ${aiMjsPath}`;
+            this.emit('log', `[ERROR] ${errorMsg}`);
+            this.state = 'error';
+            this.emit('state-changed', this.state);
+            throw new Error(errorMsg);
+        }
 
         const env = {
             ...process.env,

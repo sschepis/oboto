@@ -48,9 +48,14 @@
         "to": "backend",
         "filter": [
           "ai.mjs",
+          "bin/**/*",
           "src/**/*",
+          "plugins/**/*",
+          "!plugins/**/node_modules/**",
+          "skills/**/*",
           "ui/dist/**/*",
           "themes.json",
+          ".env.example",
           "package.json"
         ]
       },
