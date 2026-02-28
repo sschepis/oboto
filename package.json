@@ -1,6 +1,6 @@
 {
   "name": "@sschepis/oboto",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "Oboto: AI-powered everything assistant",
   "author": "sschepis",
@@ -18,7 +18,8 @@
     "dev-tool"
   ],
   "bin": {
-    "oboto": "./ai.mjs"
+    "oboto": "./ai.mjs",
+    "oboto-server": "./bin/oboto-server.mjs"
   },
   "main": "src/lib/index.mjs",
   "module": "src/lib/index.mjs",
@@ -41,6 +42,14 @@
       "import": "./src/lib/adapters/index.mjs",
       "default": "./src/lib/adapters/index.mjs"
     },
+    "./server": {
+      "import": "./src/server/server.mjs",
+      "default": "./src/server/server.mjs"
+    },
+    "./plugins": {
+      "import": "./src/plugins/index.mjs",
+      "default": "./src/plugins/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -58,6 +67,7 @@
   },
   "files": [
     "ai.mjs",
+    "bin/",
     "src/**/*.mjs",
     "src/**/*.d.ts",
     "!src/**/__tests__/**",
@@ -67,7 +77,13 @@
     "!src/gateway/**",
     "!src/service/**",
     "src/lib/README.md",
+    "src/server/scripts/",
+    "plugins/**/*.mjs",
+    "plugins/**/*.json",
+    "plugins/**/*.jsx",
+    "!plugins/**/node_modules/**",
     "themes.json",
+    ".env.example",
     "README.md",
     "LICENSE"
   ],
@@ -85,7 +101,7 @@
     "tray:build:win": "cd tray-app && npx electron-builder --win",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "check:deps": "node --input-type=module -e \"import{readFileSync}from'node:fs';const p=JSON.parse(readFileSync('./package.json','utf8'));if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}else{console.log('Dependencies OK')}\"",
-    "check:exports": "node --input-type=module -e \"import('./src/lib/index.mjs').then(m=>{const exports=['AiMan','Oboto','ConsoleStatusAdapter','NetworkLLMAdapter','MemoryAdapter','AiManEventBus','MiddlewareChain','CancellationError','DesignResult'];const missing=exports.filter(e=>!m[e]);if(missing.length){console.error('Missing exports:',missing);process.exit(1)}console.log('All',exports.length,'exports OK')}).catch(e=>{console.error('Library entry FAILED:',e.message);process.exit(1)})\"",
+    "check:exports": "node --input-type=module -e \"async function run(){const m=await import('./src/lib/index.mjs');const exports=['AiMan','Oboto','ConsoleStatusAdapter','NetworkLLMAdapter','MemoryAdapter','AiManEventBus','MiddlewareChain','CancellationError','DesignResult','TaskManager','TaskCheckpointManager','CheckpointStore','AssistantFacade','config','FlowManager'];const missing=exports.filter(e=>!m[e]);if(missing.length){console.error('Missing lib exports:',missing);process.exit(1)}console.log('All',exports.length,'lib exports OK');const s=await import('./src/server/server.mjs');if(!s.createServer){console.error('Missing server export: createServer');process.exit(1)}console.log('Server export OK');const p=await import('./src/plugins/index.mjs');const pExports=['PluginManager','PluginLoader','createPluginAPI','PluginStorage'];const pMissing=pExports.filter(e=>!p[e]);if(pMissing.length){console.error('Missing plugin exports:',pMissing);process.exit(1)}console.log('All',pExports.length,'plugin exports OK')}run().catch(e=>{console.error('Export check FAILED:',e.message);process.exit(1)})\"",
     "postinstall": "node -e \"try{require('child_process').execSync('npx node-gyp rebuild --directory=node_modules/node-pty',{stdio:'inherit'})}catch{console.log('node-pty rebuild skipped (optional)')}\"",
     "prepublishOnly": "npm run check:deps && npm run check:exports"
   },

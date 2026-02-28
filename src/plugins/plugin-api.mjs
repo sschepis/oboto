@@ -64,8 +64,8 @@ export function createPluginAPI(pluginName, deps, options = {}) {
     };
 
     // Scoped storage & settings
-    const storage = new PluginStorage(pluginName, workingDir);
-    const settings = new PluginSettingsStore(pluginName, workingDir);
+    const storage = new PluginStorage(pluginName);
+    const settings = new PluginSettingsStore(pluginName);
 
     // ── Tools API ────────────────────────────────────────────────────────
 
@@ -569,6 +569,10 @@ export function createPluginAPI(pluginName, deps, options = {}) {
     let _instanceState = null;
 
     return {
+        /** The plugin's unique name / identifier. */
+        name: pluginName,
+        /** @deprecated Use `name` instead. */
+        id: pluginName,
         tools: toolsAPI,
         ws: wsAPI,
         events: eventsAPI,

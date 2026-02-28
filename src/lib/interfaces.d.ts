@@ -373,7 +373,7 @@ export declare class AiMan {
 export { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 export { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
 export { MemoryAdapter } from './adapters/memory-adapter.mjs';
-export { MiniAIAssistant } from '../core/assistant-facade.mjs';
+export { EventicFacade as MiniAIAssistant, EventicFacade as AssistantFacade } from '../core/eventic-facade.mjs';
 export { config } from '../config.mjs';
 export { consoleStyler } from '../ui/console-styler.mjs';
 export { AiManEventBus } from './event-bus.mjs';
@@ -387,9 +387,11 @@ export { ContainerizationWizard } from '../structured-dev/containerization-wizar
 export { ApiDocSmith } from '../structured-dev/api-doc-smith.mjs';
 export { TutorialGenerator } from '../structured-dev/tutorial-generator.mjs';
 export { EnhancementGenerator } from '../structured-dev/enhancement-generator.mjs';
-
-// WorkflowService has been extracted to plugins/workflows/workflow-service.mjs
-// See plugins/workflows/ for the plugin implementation.
+export { CancellationError } from './cancellation-error.mjs';
+export { DesignResult } from './design-result.mjs';
+export { TaskManager } from '../core/task-manager.mjs';
+export { TaskCheckpointManager } from '../core/task-checkpoint-manager.mjs';
+export { CheckpointStore } from '../core/checkpoint-store.mjs';
 
 /**
  * Alias for AiMan, emphasizing the robotic developer persona.

@@ -18,6 +18,7 @@ Thumbs.db
 
 # Local Dev / Workspaces
 node_modules/
+plugins/**/node_modules/
 .oboto/
 .ai-session.history.json
 .ai-session.workspace.json

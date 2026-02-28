@@ -142,7 +142,20 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 *   npm & pnpm
 *   Google Chrome (for browser automation)
 
-### Installation
+### Install via npm (Recommended)
+
+```bash
+npm install -g @sschepis/oboto
+```
+
+After installation, two binaries are available on your PATH:
+
+| Command | Description |
+|---------|-------------|
+| `oboto` | CLI — interactive mode, single-shot prompts, or `--server` flag |
+| `oboto-server` | Start the web server with UI directly |
+
+### From Source
 
 1.  **Clone & Install**
     ```bash
@@ -167,18 +180,35 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 
 ### Running Oboto
 
-**Recommended: Server Mode (Agent + UI)**
+**Server Mode (Agent + Web UI)**
+```bash
+# Via the installed binary:
+oboto-server
+
+# Or via npm scripts:
+npm run start:server
+```
+Access the UI at `http://localhost:3000`.
+
+For development with hot-reloading UI:
 ```bash
 # Terminal 1: Start the backend
-npm run serve
+npm run start:server
 
-# Terminal 2: Start the UI dev server
+# Terminal 2: Start the Vite dev server
 npm run dev:ui
 ```
-Access the UI at `http://localhost:5173`.
+Access the dev UI at `http://localhost:5173`.
 
 **CLI Mode**
 ```bash
+# Interactive mode
+oboto
+
+# Single-shot mode
+oboto "Create a REST API for user management"
+
+# Or via npm
 npm start
 ```
 
@@ -208,34 +238,39 @@ Or trigger the [Windows build workflow](https://github.com/sschepis/oboto/action
 
 ```
 oboto/
-├── src/                          # Backend source
-│   ├── core/                     # Agent loop, AI provider, conversation, consciousness
-│   ├── server/                   # Express + WebSocket server, WS handlers
-│   ├── execution/                # Tool executor and handler modules
-│   ├── structured-dev/           # Manifest, flow manager, bootstrapper, visualizers
-│   ├── reasoning/                # Fact inference, semantic collapse
-│   ├── cloud/                    # Cloud sync, auth, realtime, conversation/file/workspace sync
-│   ├── skills/                   # Skills manager
-│   ├── plugins/                  # Plugin API, loader, manager, settings, storage
-│   ├── surfaces/                 # Dynamic UI surface manager
-│   ├── lib/                      # Embeddable library API (npm package entry point)
-│   └── ui/                       # Console styler, generative UI renderer
-├── ui/                           # React + Vite frontend
+├── ai.mjs                        # CLI entry point (interactive, single-shot, --server)
+├── bin/
+│   └── oboto-server.mjs           # Server binary (installed to PATH via npm)
+├── src/                           # Backend source
+│   ├── core/                      # Agent loop, AI provider, conversation, consciousness
+│   ├── server/                    # Express + WebSocket server, WS handlers
+│   ├── execution/                 # Tool executor and handler modules
+│   ├── structured-dev/            # Manifest, flow manager, bootstrapper, visualizers
+│   ├── reasoning/                 # Fact inference, semantic collapse
+│   ├── cloud/                     # Cloud sync, auth, realtime, conversation/file/workspace sync
+│   ├── skills/                    # Skills manager
+│   ├── plugins/                   # Plugin API, loader, manager, settings, storage
+│   ├── surfaces/                  # Dynamic UI surface manager
+│   ├── lib/                       # Embeddable library API (npm package entry point)
+│   │   ├── index.mjs              # Main export: AiMan, Oboto, adapters, modules
+│   │   └── interfaces.d.ts       # TypeScript type declarations
+│   └── ui/                        # Console styler, generative UI renderer
+├── ui/                            # React + Vite frontend
 │   └── src/
-│       ├── components/           # Chat, layout, features (60+ components)
-│       │   ├── features/         # Settings, plugins, surfaces, wizard, etc.
-│       │   ├── help/             # Help system (tours, tooltips, articles, search)
+│       ├── components/            # Chat, layout, features (60+ components)
+│       │   ├── features/          # Settings, plugins, surfaces, wizard, etc.
+│       │   ├── help/              # Help system (tours, tooltips, articles, search)
 │       │   └── ...
-│       ├── hooks/                # React hooks for state management
-│       ├── services/             # WebSocket service layer
-│       └── surface-kit/          # Reusable UI primitives (charts, data, feedback, overlay)
-├── plugins/                      # 25+ built-in plugins
-├── tray-app/                     # Electron system tray application
-├── chrome-extension/             # Chrome browser controller extension
-├── skills/                       # Modular skill definitions (SKILL.md)
-├── docs/                         # Architecture and guide documentation
-├── .github/workflows/            # CI/CD workflows (Windows build)
-└── themes.json                   # UI theme definitions
+│       ├── hooks/                 # React hooks for state management
+│       ├── services/              # WebSocket service layer
+│       └── surface-kit/           # Reusable UI primitives (charts, data, feedback, overlay)
+├── plugins/                       # 29 built-in plugins (shipped with npm package)
+├── tray-app/                      # Electron system tray application
+├── chrome-extension/              # Chrome browser controller extension
+├── skills/                        # Modular skill definitions (SKILL.md)
+├── docs/                          # Architecture and guide documentation
+├── .github/workflows/             # CI/CD workflows (Windows build)
+└── themes.json                    # UI theme definitions
 ```
 
 ## 🧠 The "Consciousness"
@@ -256,6 +291,8 @@ Oboto can be embedded as a library in your own Node.js applications:
 npm install @sschepis/oboto
 ```
 
+### Basic Usage
+
 ```javascript
 import { AiMan } from '@sschepis/oboto';
 
@@ -274,6 +311,42 @@ await ai.executeStream('Refactor the database layer', (chunk) => {
 
 // Register custom tools
 ai.registerTool(schema, handler);
+```
+
+### Subpath Imports
+
+The package provides several subpath imports for granular access:
+
+```javascript
+// Main library entry — AiMan, Oboto, adapters, structured dev modules
+import { AiMan, Oboto, config } from '@sschepis/oboto';
+
+// Adapters only — for custom LLM/status/memory implementations
+import { ConsoleStatusAdapter, NetworkLLMAdapter, MemoryAdapter } from '@sschepis/oboto/adapters';
+
+// Programmatic server — create an Express server with the AiMan API
+import { createServer } from '@sschepis/oboto/server';
+const app = createServer({ workingDir: process.cwd() });
+app.listen(3000);
+
+// Plugin system — manage plugins programmatically
+import { PluginManager, PluginLoader } from '@sschepis/oboto/plugins';
+```
+
+### Programmatic Server
+
+You can create a standalone API server programmatically:
+
+```javascript
+import { createServer } from '@sschepis/oboto/server';
+
+const app = createServer({ workingDir: '/path/to/workspace' });
+app.listen(3000, () => console.log('Oboto API running on port 3000'));
+
+// POST /api/execute   — Execute a task
+// POST /api/execute/stream — Stream a task (SSE)
+// POST /api/design    — Generate a design document
+// POST /api/implement — Implement a design
 ```
 
 See the full [Library API Reference](src/lib/README.md) for details.

@@ -25,7 +25,7 @@ const DEFAULT_CONFIG = {
     enabled: true,
     intervalMs: 10000,              // Checkpoint every 10 seconds
     maxCheckpointAge: 24 * 60 * 60 * 1000,  // 24 hours
-    recoverOnStartup: true,
+    recoverOnStartup: false,
     notifyOnRecovery: true
 };
 
