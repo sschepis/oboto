@@ -52,6 +52,7 @@
           "src/**/*",
           "plugins/**/*",
           "!plugins/**/node_modules/**",
+          "!plugins/**/.venv/**",
           "skills/**/*",
           "ui/dist/**/*",
           "themes.json",
@@ -61,7 +62,11 @@
       },
       {
         "from": "../.backend-modules",
-        "to": "backend/node_modules"
+        "to": "backend/node_modules",
+        "filter": [
+          "**/*",
+          "!.bin/**"
+        ]
       }
     ]
   },

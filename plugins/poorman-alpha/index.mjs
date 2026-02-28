@@ -1,30 +1,21 @@
 import { computeAsync, computationalTool, getCacheStats, clearCache } from './native.mjs';
-import { callSympy, shutdown as shutdownSympy, getCacheStats as getSympyCacheStats } from './sympy-bridge.mjs';
+import { callSympy, shutdown as shutdownAdvanced, getCacheStats as getAdvancedCacheStats } from './sympy-bridge.mjs';
 import { registerSettingsHandlers } from '../../src/plugins/plugin-settings-handlers.mjs';
 import { consoleStyler } from '../../src/ui/console-styler.mjs';
 
 const DEFAULT_SETTINGS = {
-  pythonPath: 'python3',
-  sympyTimeout: 30000,
+  advancedTimeout: 30000,
   nerdamerTimeout: 10000,
   cacheEnabled: true,
   defaultFormat: 'text',
-  persistentPython: true,
 };
 
 const SETTINGS_SCHEMA = [
   {
-    key: 'pythonPath',
-    label: 'Python Path',
-    type: 'text',
-    description: 'Path to the Python 3 interpreter used for SymPy computations.',
-    default: 'python3',
-  },
-  {
-    key: 'sympyTimeout',
-    label: 'SymPy Timeout (ms)',
+    key: 'advancedTimeout',
+    label: 'Advanced Math Timeout (ms)',
     type: 'number',
-    description: 'Maximum time in milliseconds to wait for a SymPy computation to complete.',
+    description: 'Maximum time in milliseconds to wait for an advanced symbolic computation to complete.',
     default: 30000,
     min: 1000,
     max: 120000,
@@ -56,13 +47,6 @@ const SETTINGS_SCHEMA = [
       { value: 'latex', label: 'LaTeX' },
       { value: 'all', label: 'All (Text + LaTeX)' },
     ],
-  },
-  {
-    key: 'persistentPython',
-    label: 'Persistent Python Process',
-    type: 'boolean',
-    description: 'Keep a persistent Python process running for faster SymPy computations.',
-    default: true,
   },
 ];
 
@@ -125,13 +109,14 @@ export async function activate(api) {
 
   api.tools.register(computeTool);
 
-  const sympyTool = {
-    name: 'sympy_compute',
+  const advancedTool = {
+    name: 'advanced_compute',
     description:
-      'Evaluate advanced symbolic math via SymPy (Python). ' +
-      'Supports integrals, derivatives, differential equations, series expansions, and more. ' +
-      'Options: format ("text", "latex", "all"), steps (true/false for step-by-step), ' +
-      'plot (true/false for graph generation). Requires python3 with sympy installed.',
+      'Evaluate advanced symbolic math using nerdamer\'s calculus engine. ' +
+      'Supports integrals (integrate), derivatives (diff), solving equations (solve), ' +
+      'series expansions, factoring, simplification, and more. ' +
+      'Options: format ("text", "latex", "all"), steps (true/false for step-by-step). ' +
+      'Pure JavaScript — no external dependencies required.',
     useOriginalName: true,
     parameters: {
       type: 'object',
@@ -139,7 +124,7 @@ export async function activate(api) {
         expression: {
           type: 'string',
           description:
-            'A SymPy expression (e.g. "integrate(x**2, x)", "diff(sin(x), x)", "solve(x**2 - 4, x)").'
+            'A symbolic math expression (e.g. "integrate(x^2, x)", "diff(sin(x), x)", "solve(x^2 - 4, x)").'
         },
         format: {
           type: 'string',
@@ -152,7 +137,7 @@ export async function activate(api) {
         },
         plot: {
           type: 'boolean',
-          description: 'If true, generate a plot of the expression as base64 PNG.'
+          description: 'If true, generate a function value table for the expression.'
         }
       },
       required: ['expression']
@@ -163,14 +148,12 @@ export async function activate(api) {
         steps: args.steps || false,
         plot: args.plot || false,
         cache: pluginSettings.cacheEnabled,
-        pythonPath: pluginSettings.pythonPath,
-        timeout: pluginSettings.sympyTimeout,
-        persistent: pluginSettings.persistentPython,
+        timeout: pluginSettings.advancedTimeout,
       });
     }
   };
 
-  api.tools.register(sympyTool);
+  api.tools.register(advancedTool);
 
   const matrixTool = {
     name: 'matrix_compute',
@@ -224,21 +207,21 @@ export async function activate(api) {
     handler: async (args) => {
       if (args.action === 'clear') {
         clearCache();
-        return { message: 'Cache cleared', native: getCacheStats(), sympy: getSympyCacheStats() };
+        return { message: 'Cache cleared', native: getCacheStats(), advanced: getAdvancedCacheStats() };
       }
-      return { native: getCacheStats(), sympy: getSympyCacheStats() };
+      return { native: getCacheStats(), advanced: getAdvancedCacheStats() };
     }
   };
 
   api.tools.register(cacheTool);
 
-  consoleStyler.log('plugin', `Registered tools: compute, sympy_compute, matrix_compute, compute_cache_stats`);
+  consoleStyler.log('plugin', `Registered tools: compute, advanced_compute, matrix_compute, compute_cache_stats`);
   consoleStyler.log('plugin', `Settings: ${JSON.stringify(pluginSettings)}`);
 }
 
 export function deactivate(api) {
   consoleStyler.log('plugin', `Deactivating...`);
-  shutdownSympy();
+  shutdownAdvanced();
   clearCache();
   api.setInstance(null);
   consoleStyler.log('plugin', `Deactivated`);

@@ -1,16 +1,10 @@
 {
   "name": "poorman-alpha",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Computational math plugin: unit conversion, symbolic algebra, matrix operations, SymPy bridge with step-by-step and plot support.",
+  "description": "Computational math plugin: unit conversion, symbolic algebra, matrix operations, calculus — pure JavaScript, no Python required.",
   "type": "module",
   "main": "index.mjs",
-  "scripts": {
-    "setup": "node setup-venv.mjs",
-    "setup:check": "node setup-venv.mjs --check",
-    "setup:clean": "node setup-venv.mjs --clean",
-    "postinstall": "node setup-venv.mjs"
-  },
   "dependencies": {
     "mathjs": "^13.2.0",
     "nerdamer": "^1.1.13"

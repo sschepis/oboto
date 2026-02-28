@@ -1,239 +1,169 @@
 /**
- * sympy-bridge.js — Enhanced subprocess bridge to SymPy.
+ * sympy-bridge.mjs — Pure JS symbolic math engine for poorman-alpha.
  *
- * Integrates:
- *   E-01: Input sanitization (Python-specific)
- *   E-02: Structured error classification
- *   E-04: Persistent Python process (JSON-line IPC)
- *   E-05: Expression result caching
- *   E-07: LaTeX output format
- *   E-08: Step-by-step solution mode
- *   E-10: Graph/plot generation
+ * Replaces the previous Python/SymPy subprocess bridge with nerdamer's
+ * built-in Calculus module for integration, differentiation, limits,
+ * series expansion, and advanced symbolic operations.
+ *
+ * All computation is done in-process — no Python dependency required.
  */
 
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
+import nerdamer from 'nerdamer';
+import 'nerdamer/Algebra.js';
+import 'nerdamer/Calculus.js';
+import 'nerdamer/Solve.js';
+import * as math from 'mathjs';
+
 import { ErrorCode, makeError, makeResult } from './lib/errors.mjs';
-import { sanitizePython } from './lib/sanitizer.mjs';
+import { sanitizeJS } from './lib/sanitizer.mjs';
 import { LRUCache } from './lib/cache.mjs';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { consoleStyler } from '../../src/ui/console-styler.mjs';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
-const SOLVER_SCRIPT = path.join(__dirname, 'solver.py');
-const ONESHOT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 30000;
 
-// ── Venv auto-detection ─────────────────────────────────────────────
-const IS_WIN = process.platform === 'win32';
-const VENV_PYTHON = IS_WIN
-  ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
-  : path.join(__dirname, '.venv', 'bin', 'python3');
+// Cache instance for advanced math results
+const advancedCache = new LRUCache(128);
 
 /**
- * Resolve the Python path to use. Priority:
- *  1. Explicit override (from settings)
- *  2. Plugin-local .venv/bin/python3
- *  3. System 'python3'
+ * Map SymPy-style expression syntax to nerdamer-compatible syntax.
+ * This handles common expressions that users might write in SymPy notation.
  */
-function resolvePythonPath(override) {
-  if (override && override !== 'python3') return override;
-  try {
-    if (fs.existsSync(VENV_PYTHON)) return VENV_PYTHON;
-  } catch (_) {}
-  return 'python3';
+function normalizeExpression(expression) {
+  let expr = expression.trim();
+
+  // Map Python ** to ^
+  expr = expr.replace(/\*\*/g, '^');
+
+  // Map SymPy-style function names that differ
+  // ln() -> log() in nerdamer
+  expr = expr.replace(/\bln\(/g, 'log(');
+
+  // SymPy's oo -> Infinity
+  expr = expr.replace(/\boo\b/g, 'Infinity');
+
+  return expr;
 }
 
-// Cache instance for SymPy results (E-05)
-const sympyCache = new LRUCache(128);
-
-// ── Persistent Process Manager (E-04) ───────────────────────────────
-
-let persistentProcess = null;
-let processReady = false;
-let pendingRequests = new Map();
-let requestIdCounter = 0;
-
 /**
- * Get or spawn the persistent Python process.
+ * Attempt to evaluate using nerdamer's symbolic engine.
  */
-function getPersistentProcess(pythonPath) {
-  if (persistentProcess && !persistentProcess.killed) {
-    return persistentProcess;
+function evaluateNerdamer(expression, format = 'text') {
+  const normalized = normalizeExpression(expression);
+  const result = nerdamer(normalized);
+  const response = { result: result.toString() };
+
+  if (format === 'latex' || format === 'all') {
+    try {
+      response.latex = result.toTeX();
+    } catch (_e) {
+      response.latex = null;
+    }
   }
 
-  const resolvedPython = resolvePythonPath(pythonPath);
+  return response;
+}
+
+/**
+ * Generate step-by-step solution breakdown.
+ */
+function generateSteps(expression) {
+  const steps = [];
+  const exprLower = expression.toLowerCase().trim();
+
   try {
-    persistentProcess = spawn(resolvedPython, [SOLVER_SCRIPT, '--persistent'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1' }
-    });
+    if (exprLower.startsWith('integrate(') || exprLower.startsWith('integrate(')) {
+      steps.push(`Step 1: Identify the integrand from: ${expression}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 2: Apply integration rules`);
+      steps.push(`Step 3: Result: ${result.toString()}`);
+    } else if (exprLower.startsWith('diff(')) {
+      steps.push(`Step 1: Identify function to differentiate from: ${expression}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 2: Apply differentiation rules`);
+      steps.push(`Step 3: Derivative: ${result.toString()}`);
+    } else if (exprLower.startsWith('solve(')) {
+      steps.push(`Step 1: Parse equation from: ${expression}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 2: Apply algebraic solving techniques`);
+      steps.push(`Step 3: Solutions: ${result.toString()}`);
+    } else if (exprLower.startsWith('expand(')) {
+      const inner = expression.slice(7, -1);
+      steps.push(`Step 1: Parse expression: ${inner}`);
+      const original = nerdamer(normalizeExpression(inner));
+      steps.push(`Step 2: Original form: ${original.toString()}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 3: Expanded form: ${result.toString()}`);
+    } else if (exprLower.startsWith('factor(')) {
+      const inner = expression.slice(7, -1);
+      steps.push(`Step 1: Parse expression: ${inner}`);
+      const original = nerdamer(normalizeExpression(inner));
+      steps.push(`Step 2: Original form: ${original.toString()}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 3: Factored form: ${result.toString()}`);
+    } else if (exprLower.startsWith('simplify(')) {
+      const inner = expression.slice(9, -1);
+      steps.push(`Step 1: Parse expression: ${inner}`);
+      const original = nerdamer(normalizeExpression(inner));
+      steps.push(`Step 2: Original form: ${original.toString()}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 3: Simplified form: ${result.toString()}`);
+    } else {
+      steps.push(`Step 1: Evaluate expression: ${expression}`);
+      const result = nerdamer(normalizeExpression(expression));
+      steps.push(`Step 2: Result: ${result.toString()}`);
+    }
+  } catch (e) {
+    steps.push(`Error generating steps: ${e.message}`);
+  }
 
-    let buffer = '';
-    persistentProcess.stdout.on('data', (data) => {
-      buffer += data.toString();
-      // Process complete JSON lines
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const response = JSON.parse(line);
-          if (response.status === 'ready') {
-            processReady = true;
-            continue;
-          }
-          const pending = pendingRequests.get(response.id);
-          if (pending) {
-            pendingRequests.delete(response.id);
-            clearTimeout(pending.timer);
-            pending.resolve(response);
-          }
-        } catch (_e) {
-          // Ignore non-JSON output
+  return steps;
+}
+
+/**
+ * Generate a text-based function table as a plot substitute.
+ * Since we no longer have matplotlib, we provide numeric samples.
+ */
+function generateFunctionTable(expression) {
+  try {
+    const normalized = normalizeExpression(expression);
+    // Try to evaluate at sample points using mathjs
+    const points = [];
+    const xValues = [-10, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 10];
+
+    for (const x of xValues) {
+      try {
+        // Replace 'x' with the numeric value
+        const withValue = normalized.replace(/\bx\b/g, `(${x})`);
+        const y = math.evaluate(withValue);
+        if (typeof y === 'number' && isFinite(y)) {
+          points.push({ x, y: Math.round(y * 10000) / 10000 });
         }
+      } catch (_e) {
+        // Skip points that can't be evaluated
       }
-    });
+    }
 
-    persistentProcess.stderr.on('data', (data) => {
-      const msg = data.toString().trim();
-      if (msg) consoleStyler.log('warning', `stderr: ${msg}`);
-    });
-
-    persistentProcess.on('close', (code) => {
-      consoleStyler.log('plugin', `Python process exited with code ${code}`);
-      processReady = false;
-      persistentProcess = null;
-      // Reject all pending requests
-      for (const [id, pending] of pendingRequests) {
-        clearTimeout(pending.timer);
-        pending.resolve({ error: `Python process exited with code ${code}` });
-        pendingRequests.delete(id);
-      }
-    });
-
-    persistentProcess.on('error', (err) => {
-      processReady = false;
-      persistentProcess = null;
-      for (const [id, pending] of pendingRequests) {
-        clearTimeout(pending.timer);
-        pending.resolve({ error: err.code === 'ENOENT'
-          ? 'python3 not found. Install Python 3 and sympy to use advanced math features.'
-          : err.message });
-        pendingRequests.delete(id);
-      }
-    });
-
-    return persistentProcess;
-  } catch (err) {
-    persistentProcess = null;
+    if (points.length > 0) {
+      return {
+        type: 'function_table',
+        expression: normalized,
+        points,
+        note: 'Plot generation requires a graphical environment. Here is a function table with sample values.'
+      };
+    }
+    return null;
+  } catch (_e) {
     return null;
   }
-}
-
-/**
- * Send a request to the persistent process.
- */
-function sendPersistentRequest(request, timeout = ONESHOT_TIMEOUT_MS) {
-  return new Promise((resolve) => {
-    const proc = getPersistentProcess(request.pythonPath);
-    if (!proc || proc.killed) {
-      resolve({ error: 'Failed to start Python process' });
-      return;
-    }
-
-    const id = ++requestIdCounter;
-    const msg = JSON.stringify({ ...request, id }) + '\n';
-
-    const timer = setTimeout(() => {
-      pendingRequests.delete(id);
-      resolve({ error: `SymPy computation timed out after ${timeout}ms` });
-    }, timeout);
-
-    pendingRequests.set(id, { resolve, timer });
-
-    try {
-      proc.stdin.write(msg);
-    } catch (err) {
-      pendingRequests.delete(id);
-      clearTimeout(timer);
-      resolve({ error: `Failed to write to Python process: ${err.message}` });
-    }
-  });
-}
-
-// ── One-shot process (fallback) ─────────────────────────────────────
-
-/**
- * Execute via one-shot subprocess (used when persistent process unavailable).
- */
-function callSympyOneshot(expression, options = {}) {
-  return new Promise((resolve) => {
-    const { pythonPath, timeout = ONESHOT_TIMEOUT_MS, format = 'text' } = options;
-    const resolvedPython = resolvePythonPath(pythonPath);
-    const args = [SOLVER_SCRIPT, expression];
-    if (format === 'latex') args.push('--latex');
-    if (format === 'all') args.push('--all');
-    if (options.steps) args.push('--steps');
-
-    const python = spawn(resolvedPython, args, {
-      timeout,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    python.stdout.on('data', (data) => { stdout += data.toString(); });
-    python.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    python.on('close', (code) => {
-      if (code === 0 && stdout.trim()) {
-        // Try to parse as JSON (enhanced solver)
-        try {
-          const parsed = JSON.parse(stdout.trim());
-          resolve(makeResult(parsed.result, 'sympy', {
-            latex: parsed.latex || null,
-            steps: parsed.steps || null,
-            plot: parsed.plot || null,
-          }));
-        } catch (_e) {
-          // Plain text output
-          resolve(makeResult(stdout.trim(), 'sympy'));
-        }
-      } else {
-        const errorMsg = stderr.trim() || `Python process exited with code ${code}`;
-        if (errorMsg.includes('not installed')) {
-          resolve(makeError(ErrorCode.DEPENDENCY_MISSING, errorMsg, 'sympy'));
-        } else {
-          resolve(makeError(ErrorCode.COMPUTATION_ERROR, errorMsg, 'sympy'));
-        }
-      }
-    });
-
-    python.on('error', (err) => {
-      if (err.code === 'ENOENT') {
-        resolve(makeError(
-          ErrorCode.DEPENDENCY_MISSING,
-          `${pythonPath} not found. Install Python 3 and sympy to use advanced math features.`,
-          'sympy'
-        ));
-      } else {
-        resolve(makeError(ErrorCode.PROCESS_ERROR, err.message, 'sympy'));
-      }
-    });
-  });
 }
 
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
- * Execute a SymPy expression with all enhancements.
+ * Execute an advanced symbolic math expression using nerdamer.
+ * Drop-in replacement for the previous Python/SymPy bridge.
  *
  * @param {string} expression
- * @param {{ format?: string, steps?: boolean, plot?: boolean, cache?: boolean, pythonPath?: string, timeout?: number, persistent?: boolean }} options
+ * @param {{ format?: string, steps?: boolean, plot?: boolean, cache?: boolean, timeout?: number }} options
  * @returns {Promise<object>}
  */
 async function callSympy(expression, options = {}) {
@@ -242,83 +172,84 @@ async function callSympy(expression, options = {}) {
     steps = false,
     plot = false,
     cache: useCache = true,
-    pythonPath = 'python3',
-    timeout = ONESHOT_TIMEOUT_MS,
-    persistent = true,
+    timeout = DEFAULT_TIMEOUT_MS,
   } = options;
 
-  // E-01: Sanitize
-  const sanitized = sanitizePython(expression);
+  // Sanitize input (reuse JS sanitizer since we're no longer calling Python)
+  const sanitized = sanitizeJS(expression);
   if (!sanitized.safe) return sanitized.error;
 
   const cleanExpr = sanitized.expression;
 
-  // E-05: Check cache (plots are not cached)
-  const cacheKey = `sympy:${cleanExpr}:${format}:${steps}`;
+  // Check cache
+  const cacheKey = `advanced:${cleanExpr}:${format}:${steps}`;
   if (useCache && !plot) {
-    const cached = sympyCache.get(cacheKey);
+    const cached = advancedCache.get(cacheKey);
     if (cached) return { ...cached, cached: true };
   }
 
+  // Execute with timeout
   let result;
-
-  // E-04: Try persistent process first
-  if (persistent) {
-    const response = await sendPersistentRequest({
-      expression: cleanExpr,
-      format,
-      steps,
-      plot,
-      pythonPath,
-    }, timeout);
-
-    if (response.error) {
-      // Fall back to one-shot
-      result = await callSympyOneshot(cleanExpr, { pythonPath, timeout, format, steps });
-    } else {
-      result = makeResult(response.result, 'sympy', {
-        latex: response.latex || null,
-        steps: response.steps || null,
-        plot: response.plot || null,
-      });
+  try {
+    result = await Promise.race([
+      Promise.resolve().then(() => evaluateNerdamer(cleanExpr, format)),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Computation timed out after ${timeout}ms`)), timeout)
+      ),
+    ]);
+  } catch (err) {
+    if (err.message.includes('timed out')) {
+      return makeError(ErrorCode.TIMEOUT, err.message, 'nerdamer-advanced');
     }
-  } else {
-    result = await callSympyOneshot(cleanExpr, { pythonPath, timeout, format, steps });
+    // Try mathjs as fallback
+    try {
+      const mathjsResult = math.evaluate(normalizeExpression(cleanExpr).replace(/\^/g, '**'));
+      result = { result: String(mathjsResult) };
+      if (format === 'latex' || format === 'all') {
+        result.latex = null;
+      }
+    } catch (_e2) {
+      return makeError(ErrorCode.COMPUTATION_ERROR, err.message, 'nerdamer-advanced');
+    }
   }
 
-  // E-05: Cache success results
-  if (useCache && !plot && result.result) {
-    sympyCache.set(cacheKey, result);
+  const response = makeResult(result.result, 'nerdamer-advanced', {
+    latex: result.latex || null,
+  });
+
+  // Step-by-step breakdown
+  if (steps) {
+    response.steps = generateSteps(cleanExpr);
   }
 
-  return result;
+  // Plot substitute (function table)
+  if (plot) {
+    const table = generateFunctionTable(cleanExpr);
+    if (table) {
+      response.plot = table;
+    }
+  }
+
+  // Cache success results
+  if (useCache && !plot && response.result) {
+    advancedCache.set(cacheKey, response);
+  }
+
+  return response;
 }
 
 /**
- * Shutdown the persistent Python process.
+ * Shutdown — no-op since we no longer have a persistent Python process.
  */
 function shutdown() {
-  if (persistentProcess && !persistentProcess.killed) {
-    try {
-      persistentProcess.stdin.write(JSON.stringify({ command: 'exit' }) + '\n');
-      setTimeout(() => {
-        if (persistentProcess && !persistentProcess.killed) {
-          persistentProcess.kill();
-        }
-      }, 1000);
-    } catch (_e) {
-      persistentProcess.kill();
-    }
-  }
-  persistentProcess = null;
-  processReady = false;
+  // No-op: no external process to shut down
 }
 
 /**
- * Get SymPy cache statistics.
+ * Get cache statistics.
  */
 function getCacheStats() {
-  return sympyCache.stats();
+  return advancedCache.stats();
 }
 
 export { callSympy, shutdown, getCacheStats };
