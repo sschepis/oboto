@@ -112,7 +112,17 @@ async function handleChat(data, ctx) {
         
         sendAiMessage(ws, processContentForUI(responseText));
 
-        await assistant.generateNextSteps();
+        // Persist the conversation to disk immediately so the exchange
+        // survives server restarts or crashes.  Fire-and-forget to avoid
+        // blocking the status transition to 'idle'.
+        assistant.saveConversation().catch((e) => {
+            consoleStyler.log('error', `Failed to save conversation: ${e.message}`);
+        });
+
+        // Fire-and-forget: generate context-aware next-step suggestions
+        // using the conversation exchange. Not awaited so it doesn't block
+        // the status transition to 'idle'.
+        assistant.generateNextSteps(userInput, responseText).catch(() => {});
     } catch (err) {
         if (err.name === 'AbortError' || err.message?.includes('cancelled') || err.message?.includes('aborted')) {
             consoleStyler.log('system', 'Task execution cancelled by user');

@@ -1,0 +1,9 @@
+{
+  "name": "@oboto/plugin-math-anim",
+  "version": "1.0.0",
+  "description": "Animated mathematical explanations using a Manim-inspired DSL",
+  "type": "module",
+  "main": "index.mjs",
+  "keywords": ["math", "animation", "manim", "visualization"],
+  "license": "MIT"
+}

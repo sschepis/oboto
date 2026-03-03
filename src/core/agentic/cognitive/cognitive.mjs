@@ -46,7 +46,7 @@ class CognitiveCore {
     });
 
     this.boundary = new BoundaryLayer({
-      objectivityGate: { threshold: config.safetyThreshold || 0.7 }
+      objectivityGate: { threshold: config.objectivityThreshold || 0.6 }
     });
 
     this.temporal = new TemporalLayer();

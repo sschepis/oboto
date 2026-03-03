@@ -49,14 +49,48 @@ export function isCancellationError(err) {
 }
 
 /**
+ * Determine whether an error is retryable.
+ * Prefers structured error properties (status, code) over string matching.
+ * String fallbacks are only checked when structured properties are absent,
+ * covering SDKs that embed status codes in the error message.
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function _isRetryableError(err) {
+    // 1. Structured properties — most reliable
+    if (err.code === 'UND_ERR_HEADERS_TIMEOUT' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNRESET') return true;
+
+    if (err.status === 429 || err.status === 503 || err.status === 504) return true;
+
+    // Some SDKs (e.g. Google Generative AI) expose a nested httpCode or errorDetails
+    const httpCode = err.httpCode ?? err.errorDetails?.httpCode;
+    if (httpCode === 429 || httpCode === 503 || httpCode === 504) return true;
+
+    // 2. Message string fallbacks — only when structured fields are unavailable
+    const msg = err.message || '';
+    if (msg.includes('fetch failed') ||
+        msg.includes('timeout') ||
+        msg.includes('socket hang up') ||
+        msg.includes('RESOURCE_EXHAUSTED') ||
+        msg.includes('UNAVAILABLE') ||
+        msg.includes('high demand')) return true;
+
+    return false;
+}
+
+/**
  * Retry helper for network operations.
  * Includes a hard wall-clock timeout so the caller never hangs indefinitely.
  * @param {Function} fn - Async function to retry
  * @param {number} retries - Max retries (default 3)
  * @param {number} delay - Initial delay in ms (default 2000)
- * @param {number} totalTimeoutMs - Hard wall-clock timeout across all retries (default 90s)
+ * @param {number} totalTimeoutMs - Hard wall-clock timeout across all retries (default 300s).
+ *   300s accommodates 3 retries × 180s per-call timeouts used by
+ *   both the OpenAI and Gemini adapters.
  */
-export async function withRetry(fn, retries = 3, delay = 2000, totalTimeoutMs = 90_000) {
+export async function withRetry(fn, retries = 3, delay = 2000, totalTimeoutMs = 300_000) {
     const deadline = Date.now() + totalTimeoutMs;
 
     for (let i = 0; i < retries; i++) {
@@ -72,15 +106,9 @@ export async function withRetry(fn, retries = 3, delay = 2000, totalTimeoutMs = 
             // Never retry cancellation errors — bail immediately
             if (isCancellationError(err)) throw err;
 
-            // Network-level errors (DNS, connection refused, timeouts)
-            const isRetryable = err.code === 'UND_ERR_HEADERS_TIMEOUT' ||
-                              err.code === 'ETIMEDOUT' ||
-                              err.code === 'ECONNRESET' ||
-                              (err.message && (
-                                  err.message.includes('fetch failed') ||
-                                  err.message.includes('timeout') ||
-                                  err.message.includes('socket hang up')
-                              ));
+            // Network-level errors (DNS, connection refused, timeouts) and
+            // API-level retryable errors (503 UNAVAILABLE, 429 rate limit)
+            const isRetryable = _isRetryableError(err);
 
             if (i === retries - 1 || !isRetryable) throw err;
             

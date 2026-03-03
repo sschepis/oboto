@@ -7,10 +7,18 @@ import { consoleStyler } from '../ui/console-styler.mjs';
  * Manages recurring task schedules.
  */
 export class SchedulerService {
+    /** Maximum consecutive failures before auto-pausing a schedule */
+    static CIRCUIT_BREAKER_THRESHOLD = 5;
+
+    /** Maximum number of recent task IDs tracked per schedule for
+     *  matching completion/failure events. Larger values tolerate
+     *  faster trigger rates relative to task completion times. */
+    static RECENT_TASK_BUFFER_SIZE = 10;
+
     /**
-     * @param {AiManEventBus} eventBus 
-     * @param {TaskManager} taskManager 
-     * @param {string} workingDir 
+     * @param {AiManEventBus} eventBus
+     * @param {TaskManager} taskManager
+     * @param {string} workingDir
      */
     constructor(eventBus, taskManager, workingDir, aiAssistantClass) {
         this.eventBus = eventBus || new AiManEventBus();
@@ -32,6 +40,13 @@ export class SchedulerService {
                 // Ignore if exists
             }
         }
+
+        // Listen for task completions to track consecutive failures per schedule.
+        // Store bound references so they can be removed in destroy().
+        this._onCompletedBound = (data) => this._onTaskCompleted(data);
+        this._onFailedBound = (data) => this._onTaskFailed(data);
+        this.eventBus.on('task:completed', this._onCompletedBound);
+        this.eventBus.on('task:failed', this._onFailedBound);
     }
 
     /**
@@ -44,7 +59,12 @@ export class SchedulerService {
                 const data = JSON.parse(content);
                 
                 for (const schedule of data) {
-                    // Reset transient state if needed, but keep stats
+                    // Reset transient state if needed, but keep stats.
+                    // Ensure ring buffer is bounded after deserialization
+                    // (guards against manual edits or legacy data).
+                    if (schedule.recentTaskIds && schedule.recentTaskIds.length > SchedulerService.RECENT_TASK_BUFFER_SIZE) {
+                        schedule.recentTaskIds = schedule.recentTaskIds.slice(-SchedulerService.RECENT_TASK_BUFFER_SIZE);
+                    }
                     this.schedules.set(schedule.id, schedule);
                     
                     if (schedule.status === 'active') {
@@ -104,9 +124,13 @@ export class SchedulerService {
             runCount: 0,
             maxRuns,
             lastTaskId: null,
+            /** Ring buffer of recent task IDs for matching completion/failure events
+             *  even when a new task overwrites lastTaskId before the prior one reports. */
+            recentTaskIds: [],
             lastResult: null,
             skipIfRunning,
-            tags
+            tags,
+            consecutiveFailures: 0
         };
 
         this.schedules.set(id, schedule);
@@ -175,6 +199,12 @@ export class SchedulerService {
             schedule.nextRunAt = new Date(Date.now() + schedule.intervalMs).toISOString();
             schedule.runCount++;
             schedule.lastTaskId = task.id;
+
+            // Track in ring buffer so completion/failure events still match even
+            // if a subsequent trigger overwrites lastTaskId before this task reports.
+            if (!schedule.recentTaskIds) schedule.recentTaskIds = [];
+            schedule.recentTaskIds.push(task.id);
+            if (schedule.recentTaskIds.length > SchedulerService.RECENT_TASK_BUFFER_SIZE) schedule.recentTaskIds.shift();
             
             await this._persist();
             
@@ -186,7 +216,74 @@ export class SchedulerService {
 
         } catch (error) {
             consoleStyler.log('error', `Failed to trigger schedule ${schedule.name}: ${error.message}`);
+            this._recordFailure(scheduleId, error.message);
         }
+    }
+
+    /**
+     * Record a successful run — resets the consecutive failure counter.
+     */
+    _onTaskCompleted(data) {
+        if (!data?.taskId) return;
+        for (const schedule of this.schedules.values()) {
+            const ids = schedule.recentTaskIds || [];
+            if (schedule.lastTaskId === data.taskId || ids.includes(data.taskId)) {
+                schedule.consecutiveFailures = 0;
+                schedule.lastResult = 'success';
+                // Remove matched ID from ring buffer to avoid stale matches
+                const idx = ids.indexOf(data.taskId);
+                if (idx !== -1) ids.splice(idx, 1);
+                this._persist().catch(() => {}); // errors already logged inside _persist
+                break;
+            }
+        }
+    }
+
+    /**
+     * Record a failed run — increments the consecutive failure counter
+     * and auto-pauses the schedule if the circuit breaker threshold is reached.
+     */
+    _onTaskFailed(data) {
+        if (!data?.taskId) return;
+        for (const [scheduleId, schedule] of this.schedules.entries()) {
+            const ids = schedule.recentTaskIds || [];
+            if (schedule.lastTaskId === data.taskId || ids.includes(data.taskId)) {
+                // Remove matched ID from ring buffer
+                const idx = ids.indexOf(data.taskId);
+                if (idx !== -1) ids.splice(idx, 1);
+                this._recordFailure(scheduleId, data.error || 'Task failed');
+                break;
+            }
+        }
+    }
+
+    /**
+     * Increment failure count and auto-pause if circuit breaker threshold is reached.
+     */
+    _recordFailure(scheduleId, errorMessage) {
+        const schedule = this.schedules.get(scheduleId);
+        if (!schedule) return;
+
+        schedule.consecutiveFailures = (schedule.consecutiveFailures || 0) + 1;
+        schedule.lastResult = `error: ${errorMessage}`;
+
+        if (schedule.consecutiveFailures >= SchedulerService.CIRCUIT_BREAKER_THRESHOLD) {
+            consoleStyler.log('warning',
+                `⚠️ Circuit breaker: Auto-pausing schedule "${schedule.name}" after ${schedule.consecutiveFailures} consecutive failures. ` +
+                `Last error: ${errorMessage}`
+            );
+            // pauseSchedule will persist for us — skip the redundant write below
+            this.pauseSchedule(scheduleId);
+            this.eventBus.emitTyped('schedule:circuit-breaker', {
+                scheduleId,
+                name: schedule.name,
+                consecutiveFailures: schedule.consecutiveFailures,
+                lastError: errorMessage
+            });
+            return;
+        }
+
+        this._persist().catch(() => {}); // errors already logged inside _persist
     }
 
     pauseSchedule(scheduleId) {
@@ -287,5 +384,23 @@ export class SchedulerService {
         await this.restore();
 
         consoleStyler.log('system', `⏰ Scheduler switched to workspace: ${newWorkingDir}`);
+    }
+
+    /**
+     * Tear down this instance: remove event listeners and stop all timers.
+     * Call before discarding a SchedulerService to avoid ghost listeners
+     * on the shared eventBus.
+     */
+    destroy() {
+        if (this._onCompletedBound) {
+            this.eventBus.off('task:completed', this._onCompletedBound);
+        }
+        if (this._onFailedBound) {
+            this.eventBus.off('task:failed', this._onFailedBound);
+        }
+        for (const timer of this.intervals.values()) {
+            clearInterval(timer);
+        }
+        this.intervals.clear();
     }
 }

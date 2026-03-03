@@ -1,6 +1,7 @@
 import { VM } from 'vm2';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { dryRunGuard } from '../dry-run-guard.mjs';
+import { VmSandboxError } from '../../lib/vm-sandbox-error.mjs';
 
 export class CoreHandlers {
     constructor(packageManager, historyManager, memoryAdapter, options = {}) {
@@ -172,7 +173,10 @@ export class CoreHandlers {
                 setTimeout: setTimeout,
                 clearTimeout: clearTimeout,
                 setInterval: setInterval,
-                clearInterval: clearInterval
+                clearInterval: clearInterval,
+                // Stubs for front-end globals that AI-generated code may reference
+                surfaceApi: {},
+                UI: {},
             }
         });
 
@@ -186,14 +190,14 @@ export class CoreHandlers {
             // Always wrap in an async IIFE so bare `return` statements work
             // and async/await is supported naturally.
             const wrappedCode = `(async () => { ${processedCode} })()`;
-            toolResult = await vm.run(wrappedCode);
-            
-            // If result is a promise (from async code), await it
-            if (toolResult && typeof toolResult.then === 'function') {
-                toolResult = await toolResult;
-            }
+
+            // vm.run() may throw synchronously or return a rejecting promise.
+            // Promise.resolve() normalises both cases so the outer try/catch
+            // handles them uniformly via await.  The await also unwraps any
+            // thenable returned by the async IIFE, so no secondary check is needed.
+            toolResult = await Promise.resolve(vm.run(wrappedCode));
         } catch (err) {
-            throw new Error(`Execution error: ${err.message}`);
+            throw new VmSandboxError(`Execution error: ${err.message}`);
         }
 
         let resultText = toolResult === undefined ? "Code executed successfully" : JSON.stringify(toolResult, null, 2);

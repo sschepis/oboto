@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { wsService } from '../../services/wsService';
+import { compileComponent } from './surface/surfaceCompiler';
 
 interface PluginHostProps {
   /** Plugin name */
@@ -16,7 +17,7 @@ interface PluginHostProps {
 /**
  * PluginHost renders a plugin UI component by fetching its JSX source
  * from the server and compiling it at runtime using the surface compiler.
- * 
+ *
  * This provides a sandboxed rendering environment similar to how Surfaces work.
  */
 const PluginHost: React.FC<PluginHostProps> = ({
@@ -26,15 +27,23 @@ const PluginHost: React.FC<PluginHostProps> = ({
   fallback,
 }) => {
   const [source, setSource] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [CompiledComponent, setCompiledComponent] = useState<React.FC<Record<string, unknown>> | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Fetch the component source
+  // Reset state during render when plugin/component changes.
+  // This is a React-recommended pattern for synchronising state with props
+  // *without* an Effect.  It triggers a synchronous re-render before the
+  // browser paints, which avoids the stale-UI flash that useEffect would cause.
+  // See: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevKey, setPrevKey] = useState(`${pluginName}/${componentFile}`);
+  const currentKey = `${pluginName}/${componentFile}`;
+  if (currentKey !== prevKey) {
+    setPrevKey(currentKey);
+    setSource(null);
+    setFetchError(null);
+  }
+
+  // Subscribe to WS for component source and request it
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
     const unsub = wsService.on('plugin:component-source', (payload: unknown) => {
       const data = payload as {
         pluginName: string;
@@ -45,8 +54,7 @@ const PluginHost: React.FC<PluginHostProps> = ({
 
       if (data.pluginName === pluginName && data.componentFile === componentFile) {
         if (data.error) {
-          setError(data.error);
-          setLoading(false);
+          setFetchError(data.error);
         } else if (data.source) {
           setSource(data.source);
         }
@@ -60,27 +68,26 @@ const PluginHost: React.FC<PluginHostProps> = ({
     };
   }, [pluginName, componentFile]);
 
-  // Compile the source once received
-  const compileSource = useCallback(async (jsx: string) => {
+  // Derive compiled component from source (synchronous transform, not an effect)
+  const { CompiledComponent, compileError } = useMemo(() => {
+    if (!source) return { CompiledComponent: null, compileError: null };
     try {
-      // Try to use the surface compiler if available
-      const { compileComponent } = await import('./surface/surfaceCompiler');
-      const Component = compileComponent(jsx, `${pluginName}/${componentFile}`);
-      // Wrap in arrow to avoid React treating it as a state updater function
-      setCompiledComponent(() => Component as React.FC<Record<string, unknown>>);
-      setLoading(false);
+      const Component = compileComponent(source, `${pluginName}/${componentFile}`);
+      return {
+        CompiledComponent: Component as React.FC<Record<string, unknown>>,
+        compileError: null,
+      };
     } catch (err) {
-      // Fallback: render the source as a simple info display
-      setError(`Failed to compile component: ${(err as Error).message}`);
-      setLoading(false);
+      return {
+        CompiledComponent: null,
+        compileError: `Failed to compile component: ${(err as Error).message}`,
+      };
     }
-  }, [pluginName, componentFile]);
+  }, [source, pluginName, componentFile]);
 
-  useEffect(() => {
-    if (source) {
-      compileSource(source);
-    }
-  }, [source, compileSource]);
+  // Derive loading and error from state (no explicit loading state needed)
+  const error = fetchError || compileError;
+  const loading = !source && !fetchError;
 
   if (loading) {
     return fallback || (

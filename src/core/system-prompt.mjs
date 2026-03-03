@@ -96,6 +96,34 @@ Do NOT reinvent solutions from scratch when a skill already covers the domain.`;
            "stacked": boolean, // for bar/area
            "gradient": boolean // for area
          }
+    3. Math Animations: To display an animated mathematical explanation, output a code block with language \`mathanim\`.
+       - Use for: function graphs, geometric proofs, vector operations, calculus concepts, transformations
+       - The content must be valid JSON following this schema:
+         {
+           "title": "Animation Title",
+           "width": 600, "height": 400,
+           "background": "#0a0a1a",
+           "scenes": [{
+             "id": "scene1", "duration": 6,
+             "objects": [
+               // Object types: axes, graph, parametric, vector, dot, line, rect, circle, polygon, latex, text, brace, area, numberLine
+               // All objects need a unique "id". Objects using coordinate systems reference axes via "axesRef"
+               { "id": "ax", "type": "axes", "xRange": [-3,3,1], "yRange": [-1,9,1], "color": "#555", "showGrid": true },
+               { "id": "f", "type": "graph", "axesRef": "ax", "fn": "x^2", "color": "#4ecdc4" },
+               { "id": "eq", "type": "latex", "expression": "y = x^2", "position": [480,50], "fontSize": 22, "color": "#4ecdc4" }
+             ],
+             "animations": [
+               // Animation types: fadeIn, fadeOut, create, write, traceGraph, growArrow, moveTo, scale, rotate, indicate, circumscribe, shiftIn, colorChange, traceDot, showCreation, uncreate
+               // Each animation has: type, target (object id), startTime, duration, easing (linear/easeIn/easeOut/easeInOut/etc.)
+               { "type": "create", "target": "ax", "startTime": 0, "duration": 1.5, "easing": "easeInOut" },
+               { "type": "traceGraph", "target": "f", "startTime": 1.5, "duration": 2, "easing": "easeInOut" },
+               { "type": "write", "target": "eq", "startTime": 2, "duration": 1 }
+             ]
+           }]
+         }
+       - Math expressions in "fn" use: x^2, sin(x), cos(x), sqrt(x), log(x), exp(x), pi, e
+       - Keep scenes focused: one concept per scene, 3-8 seconds each
+       - Stagger animations with startTime so they play sequentially
 
     **Response Formatting:**
     Format ALL responses in Markdown. Use code blocks with language identifiers.

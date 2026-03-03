@@ -417,6 +417,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               <button
                 key={a.id || i}
                 onClick={() => handleSendAction(a.label)}
+                title={a.desc || undefined}
                 className="
                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                   bg-zinc-800/30 border border-zinc-800/40

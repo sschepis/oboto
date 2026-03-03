@@ -341,9 +341,11 @@ export async function callGeminiSDK(ctx, requestBody, signal) {
         generateConfig.systemInstruction = systemInstruction;
     }
 
-    // Race each attempt against a 60s per-call timeout to prevent indefinite hangs
+    // Race each attempt against a per-call timeout to prevent indefinite hangs
     // when the network stalls without producing an error.
-    const PER_CALL_TIMEOUT = 60_000;
+    // 180s matches the OpenAI adapter and accommodates complex prompts and
+    // high-demand periods where Gemini may take 60-90s to respond.
+    const PER_CALL_TIMEOUT = 180_000;
     
     const geminiResponse = await withRetry(() => {
         let timeoutId;

@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import HtmlSandbox from '../features/HtmlSandbox';
 import { ChartBlock } from './ChartBlock';
+import { MathAnimBlock } from './MathAnimBlock';
 import { Copy, Check } from 'lucide-react';
 import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 
@@ -91,6 +92,11 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({ content }) => 
           // Chart blocks
           if (lang === 'json:chart' || lang === 'chart') {
              return <ChartBlock code={codeString} />;
+          }
+
+          // Math animation blocks
+          if (lang === 'mathanim') {
+             return <MathAnimBlock code={codeString} />;
           }
 
           return (

@@ -66,9 +66,12 @@ class ChromeWsBridge {
      * Attach a WebSocket connection (called when the Chrome extension connects).
      * @param {WebSocket} ws
      */
-    attach(ws) {
+    attach(ws, claimedSockets) {
         this.ws = ws;
         this.connected = true;
+        // Signal that a plugin has claimed this WebSocket so the
+        // server-level fallback bridge in web-server.mjs can skip it.
+        if (claimedSockets) claimedSockets.add(ws);
 
         ws.on('message', (raw) => {
             try {
@@ -178,9 +181,22 @@ export async function activate(api) {
         api.events.emit(`chrome:${event}`, data);
     };
 
-    // Register a WS handler so the Chrome extension can connect through the
-    // plugin's WebSocket namespace.  When the server receives a message of
-    // type "plugin:chrome-ext:connect", we attach the WS to the bridge.
+    // Listen for the Chrome extension WebSocket connection from the server.
+    // The server emits 'chrome:ws-connected' with the raw WebSocket and a
+    // WeakSet for claiming it.  We attach it to the plugin's bridge so all
+    // chrome_* tools can communicate through it.
+    api.events.onSystem('chrome:ws-connected', (ws, claimedSockets) => {
+        bridge.attach(ws, claimedSockets);
+    });
+
+    // If the Chrome extension already connected before this plugin activated,
+    // pick up the existing WebSocket from the server-level bridge.
+    const serverBridge = api.services?.assistant?.chromeWsBridge;
+    if (serverBridge?.connected && serverBridge.ws) {
+        bridge.attach(serverBridge.ws);
+    }
+
+    // Also support direct connection through the plugin's WS namespace.
     api.ws.register('connect', (data, ctx) => {
         if (ctx && ctx.ws) {
             bridge.attach(ctx.ws);

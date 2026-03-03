@@ -46,6 +46,7 @@ const TOOL_TIMEOUTS = {
     spawn_background_task: 10_000, // Fast return
     check_task_status: 5_000,
     execute_implementation_plan: 600_000,
+    generate_math_animation: 180_000, // LLM-generated animation DSL can take a while
     plugin_default: 60_000, // Default timeout for plugin-registered tools
     mouse_move: 5_000,
     mouse_click: 5_000,

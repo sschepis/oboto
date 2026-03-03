@@ -13,6 +13,7 @@ import { OpenClawManager } from './integration/openclaw/manager.mjs';
 import { SecretsManager } from './server/secrets-manager.mjs';
 import { WorkspaceContentServer } from './server/workspace-content-server.mjs';
 import { runMigrations } from './lib/migrate-config-dirs.mjs';
+import { VmSandboxError } from './lib/vm-sandbox-error.mjs';
 
 let _globalEventBus = null;
 
@@ -244,6 +245,13 @@ process.on('unhandledRejection', (reason, promise) => {
 
     // Transient/tool errors — keep running
     if (reason?.code === 'ENOENT' || reason?.code === 'ECONNRESET' || msg.includes('scandir') || msg.includes('socket hang up')) {
+        return;
+    }
+
+    // VM2 sandbox errors (e.g. ReferenceError from AI-generated code) are not
+    // system-fatal.  We use the structured VmSandboxError class thrown by
+    // core-handlers.mjs instead of fragile string matching.
+    if (reason instanceof VmSandboxError) {
         return;
     }
     

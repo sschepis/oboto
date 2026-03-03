@@ -141,10 +141,23 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
 
     // ── Chrome Extension WebSocket handler ──────────────────────────────
     const chromeWsBridge = new ChromeWsBridge(eventBus);
+    /** Sockets claimed by a plugin bridge — tracked via WeakSet to avoid
+     *  monkey-patching the WebSocket instance with ad-hoc properties. */
+    const claimedChromeSockets = new WeakSet();
     chromeWss.on('connection', (ws) => {
         consoleStyler.log('system', 'Chrome extension connected');
-        chromeWsBridge.attach(ws);
-        if (eventBus) eventBus.emit('chrome:connected');
+        // Let plugins (e.g. chrome-ext) claim the WebSocket first via the
+        // event.  EventEmitter.emit() is synchronous, so after this call
+        // returns we can check whether a plugin already attached its bridge.
+        if (eventBus) {
+            eventBus.emit('chrome:ws-connected', ws, claimedChromeSockets);
+            eventBus.emit('chrome:connected'); // backward compat
+        }
+        // Only attach the server-level fallback bridge when no plugin
+        // claimed the connection — avoids duplicate message handlers.
+        if (!claimedChromeSockets.has(ws)) {
+            chromeWsBridge.attach(ws);
+        }
     });
 
     // Attach to assistant (used by chrome-ext plugin if loaded)

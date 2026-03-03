@@ -15,6 +15,12 @@ export const DEFAULT_COGNITIVE_CONFIG = {
     coherenceThreshold: 0.7,
     entropyThreshold: 1.8,
     safetyThreshold: 0.7,
+    // ObjectivityGate threshold (τR).  With 5 binary decoders the only
+    // achievable R values are {0, 0.2, 0.4, 0.6, 0.8, 1.0}.  A threshold
+    // of 0.6 requires ≥3/5 decoders to agree, which is appropriate for the
+    // simple heuristic decoders (completeness, relevance, etc.) that can
+    // reject valid LLM outputs ending in code blocks or markdown.
+    objectivityThreshold: 0.6,
     initTicks: 10
   },
   agent: {
@@ -33,7 +39,7 @@ CRITICAL RULES:
 4. When a file operation fails, explain the error clearly — never refuse or say "I can't assist with that". Report what happened and why.
 5. NEVER make up code examples or file contents. Only cite what you have actually read.
 6. When comparing files, highlight specific differences and similarities with line references or function names.`,
-    objectivityThreshold: 0.7
+    objectivityThreshold: 0.6
   }
 };
 

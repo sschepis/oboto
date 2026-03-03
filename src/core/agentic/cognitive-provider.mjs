@@ -16,6 +16,7 @@
 import { AgenticProvider } from './base-provider.mjs';
 import { CognitiveAgent } from './cognitive/agent.mjs';
 import { consoleStyler } from '../../ui/console-styler.mjs';
+import { emitStatus } from '../status-reporter.mjs';
 
 export class CognitiveProvider extends AgenticProvider {
     get id() { return 'cognitive'; }
@@ -66,6 +67,8 @@ export class CognitiveProvider extends AgenticProvider {
             aiProvider.model = options.model;
         }
 
+        emitStatus('Starting cognitive processing');
+
         try {
             const result = await this._agent.turn(input, { signal: options.signal });
 
@@ -78,6 +81,7 @@ export class CognitiveProvider extends AgenticProvider {
 
             // Sync the final response into ai-man's history manager
             // so it persists across sessions
+            emitStatus('Saving conversation history');
             if (this._deps.historyManager) {
                 this._deps.historyManager.addMessage('user', input);
                 this._deps.historyManager.addMessage('assistant', result.response);
@@ -90,6 +94,10 @@ export class CognitiveProvider extends AgenticProvider {
 
             return { response: result.response, streamed };
         } finally {
+            // Ensure the tracker is stopped even if an error occurs
+            if (this._agent?.stopTracking) {
+                this._agent.stopTracking();
+            }
             aiProvider.model = originalModel;
         }
     }

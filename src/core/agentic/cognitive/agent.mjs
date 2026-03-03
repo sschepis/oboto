@@ -24,6 +24,8 @@
 
 import { CognitiveCore } from './cognitive.mjs';
 import { resolveCognitiveConfig } from './config.mjs';
+import { ActivityTracker } from '../../activity-tracker.mjs';
+import { emitStatus, emitToolStatus } from '../../status-reporter.mjs';
 
 /**
  * @typedef {Object} CognitiveAgentDeps
@@ -49,6 +51,9 @@ class CognitiveAgent {
 
     // Initialize cognitive core
     this.cognitive = new CognitiveCore(this.config.cognitive);
+
+    // Activity tracker for periodic status heartbeat
+    this._tracker = new ActivityTracker({ intervalMs: 3000 });
 
     // Conversation history (internal to this agent)
     this.history = [];
@@ -77,11 +82,14 @@ class CognitiveAgent {
     this.turnCount++;
 
     // ── Steps 1-4: Process input through cognitive core ────────────────
+    this._tracker.setActivity('Processing input…');
     const inputAnalysis = this.cognitive.processInput(input);
 
     // ── Step 5: Safety check ──────────────────────────────────────────
+    emitStatus('Checking safety constraints');
     const violations = this.cognitive.checkSafety();
     if (violations.some(v => v.constraint?.response === 'block')) {
+      this._tracker.stop();
       return {
         response: 'I need to pause — my cognitive state indicates unsafe conditions. Please try rephrasing.',
         metadata: { blocked: true, violations }
@@ -89,11 +97,13 @@ class CognitiveAgent {
     }
 
     // ── Step 6: Recall relevant memories ──────────────────────────────
+    emitStatus('Recalling relevant memories');
     const memories = this.cognitive.recall(input, 3);
 
     // Build system prompt with cognitive state.
     // Prefer the facade's dynamic system prompt (which includes skills,
     // plugin summaries, persona, surfaces, etc.) over our static default.
+    emitStatus('Building context');
     const basePrompt = (this.aiProvider?.systemPrompt) || this.systemPrompt;
     const stateContext = this.cognitive.getStateContext();
     let systemMessage = basePrompt + '\n\n' + stateContext;
@@ -162,6 +172,7 @@ class CognitiveAgent {
 
     try {
       // Initial LLM call via ai-man's EventicAIProvider
+      this._tracker.setActivity('Thinking…');
       response = await this._callLLM(messages, toolDefs, options);
 
       // Tool call loop
@@ -202,6 +213,9 @@ class CognitiveAgent {
         messages.push(assistantMsg);
 
         // Execute each tool and push results
+        const roundToolNames = response.toolCalls.map(tc => tc.function.name);
+        emitStatus(`Executing tools: ${roundToolNames.join(', ')}`);
+
         for (const toolCall of response.toolCalls) {
           const result = await this._executeTool(
             toolCall.function.name,
@@ -218,6 +232,7 @@ class CognitiveAgent {
         }
 
         // Call LLM again with tool results
+        this._tracker.setActivity(`Thinking… (round ${toolRounds + 1})`);
         response = await this._callLLM(messages, toolDefs, options);
       }
 
@@ -225,6 +240,7 @@ class CognitiveAgent {
       // (common with Gemini thinking models that return only thought parts),
       // make one more LLM call WITHOUT tools to force a text-only summary.
       if (!response.content && toolRounds > 0) {
+        this._tracker.setActivity('Synthesizing final response…');
         messages.push({
           role: 'system',
           content: 'The tool loop has completed. Synthesize all tool results above into a final, complete response for the user. Do NOT call any more tools.'
@@ -241,6 +257,7 @@ class CognitiveAgent {
     const responseText = response.content || '';
 
     // ── Step 9: Validate through ObjectivityGate ──────────────────────
+    emitStatus('Validating response quality');
     const validation = this.cognitive.validateOutput(responseText, { input });
 
     let finalResponse = responseText;
@@ -255,12 +272,17 @@ class CognitiveAgent {
     this.history.push({ role: 'assistant', content: finalResponse });
 
     // ── Step 10: Remember interaction ─────────────────────────────────
+    emitStatus('Storing interaction in memory');
     this.cognitive.remember(input, finalResponse);
 
     // ── Step 11: Evolve physics ───────────────────────────────────────
+    emitStatus('Evolving cognitive state');
     for (let i = 0; i < 3; i++) {
       this.cognitive.tick();
     }
+
+    emitStatus('Response ready');
+    this._tracker.stop();
 
     return {
       response: finalResponse,
@@ -330,6 +352,9 @@ class CognitiveAgent {
    * is never mutated — the full messages array is passed directly and
    * no save/restore dance is needed.
    *
+   * The ActivityTracker heartbeat is active during the LLM call so the
+   * operator sees periodic "Thinking… (Ns)" updates.
+   *
    * @param {Array} messages
    * @param {Array} tools
    * @param {Object} options
@@ -369,6 +394,9 @@ class CognitiveAgent {
    * `executeTool()` pipeline (which dispatches to core, plugin, MCP,
    * and custom tools with proper security, timeout, and logging).
    *
+   * Emits status for cognitive-specific tools (ToolExecutor already
+   * emits status for delegated tools via emitToolStatus).
+   *
    * @param {string} name
    * @param {object|string} args
    * @returns {Promise<object>}
@@ -381,13 +409,18 @@ class CognitiveAgent {
       try { parsedArgs = JSON.parse(args); } catch (_e) { parsedArgs = {}; }
     }
 
-    // Handle cognitive-specific tools
+    // Handle cognitive-specific tools (with status emission)
     if (name === 'cognitive_state') {
+      emitStatus('Inspecting cognitive state');
+      this._tracker.setActivity('Inspecting cognitive state');
       return { success: true, state: this.cognitive.getDiagnostics() };
     }
 
     if (name === 'recall_memory') {
-      const memories = this.cognitive.recall(parsedArgs.query || '', parsedArgs.limit || 5);
+      const query = parsedArgs.query || '';
+      emitStatus(`Searching memory: "${query.substring(0, 40)}"`);
+      this._tracker.setActivity(`Searching memory: "${query.substring(0, 40)}"`);
+      const memories = this.cognitive.recall(query, parsedArgs.limit || 5);
       return {
         success: true,
         memories: memories.map(m => ({
@@ -402,7 +435,10 @@ class CognitiveAgent {
     // Delegate to ai-man's ToolExecutor via the full executeTool() pipeline.
     // This ensures plugin tools (browse_open, etc.), MCP tools, custom tools,
     // security checks, timeouts, and status reporting all work correctly.
+    // Note: ToolExecutor.executeTool() already calls emitToolStatus() internally.
     if (this.toolExecutor) {
+      // Set tracker activity so heartbeat shows tool execution during long tools
+      this._tracker.setActivity(`Executing: ${name}`);
       try {
         const toolCall = {
           id: `cognitive_${Date.now()}_${name}`,
@@ -456,6 +492,9 @@ class CognitiveAgent {
 
   /**
    * Pre-route: detect file/directory/cognitive queries and auto-fetch data.
+   * Emits status for each auto-fetched resource so the operator knows
+   * what data is being gathered before the LLM call.
+   *
    * @param {string} input
    * @returns {Promise<Array>}
    * @private
@@ -478,6 +517,7 @@ class CognitiveAgent {
       if (match && CognitiveAgent._isLikelyFilePath(match[1]) && !fetchedPaths.has(match[1])) {
         const filePath = match[1];
         fetchedPaths.add(filePath);
+        emitStatus(`Reading ${filePath}`);
         const result = await this._executeTool('read_file', { path: filePath });
         if (result.success !== false) {
           results.push({ tool: 'read_file', path: filePath, content: (result.content || result.result || '').substring(0, 4000) });
@@ -495,6 +535,7 @@ class CognitiveAgent {
       if (/^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\//.test(candidate)) continue;
       if (CognitiveAgent._isLikelyFilePath(candidate) && !fetchedPaths.has(candidate)) {
         fetchedPaths.add(candidate);
+        emitStatus(`Reading ${candidate}`);
         const result = await this._executeTool('read_file', { path: candidate });
         if (result.success !== false) {
           results.push({ tool: 'read_file', path: candidate, content: (result.content || result.result || '').substring(0, 4000) });
@@ -509,6 +550,7 @@ class CognitiveAgent {
         /(?:your|my)\s+(?:coherence|entropy|oscillator)/i.test(lower) ||
         /introspect/i.test(lower) ||
         /(?:check|assess|diagnos)\w*\s+(?:your|my|own)\s+(?:cognitive|mental|health)/i.test(lower)) {
+      emitStatus('Checking cognitive state');
       const result = await this._executeTool('cognitive_state', {});
       if (result.success) {
         results.push({ tool: 'cognitive_state', state: result.state });
@@ -516,6 +558,15 @@ class CognitiveAgent {
     }
 
     return results;
+  }
+
+  /**
+   * Stop the activity heartbeat tracker.  Called by CognitiveProvider's
+   * finally block to ensure cleanup even when turn() throws before
+   * reaching its own stop() call.
+   */
+  stopTracking() {
+    this._tracker.stop();
   }
 
   /**
@@ -535,6 +586,7 @@ class CognitiveAgent {
    * Reset all agent state.
    */
   reset() {
+    this._tracker.stop();
     this.history = [];
     this.turnCount = 0;
     this.totalTokens = 0;

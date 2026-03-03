@@ -1,6 +1,7 @@
 // Desktop Automation Tools using @nut-tree-fork/nut-js
 // Provides keyboard and mouse control, screen analysis, and window management
 
+import path from 'path';
 import { mouse, keyboard, screen, Point, Button, Key, imageResource, straightTo, centerOf, sleep } from '@nut-tree-fork/nut-js';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
@@ -110,9 +111,21 @@ export class DesktopAutomationTools {
         consoleStyler.log('working', `Capturing screen to ${filename}`);
         
         try {
-            const img = await screen.grab();
-            await screen.save(filename); // nut.js handles format based on extension
-            return `Screenshot saved to ${filename} (${img.width}x${img.height})`;
+            const parsed = path.parse(filename);
+            const ext = (parsed.ext || '.png').toLowerCase();
+            // Normalize .jpeg → .jpg, then validate against nut-js supported types
+            const normalizedExt = ext === '.jpeg' ? '.jpg' : ext;
+            const validExts = ['.png', '.jpg'];
+            if (!validExts.includes(normalizedExt)) {
+                return `Error: unsupported screenshot format '${ext}'. Supported: .png, .jpg`;
+            }
+            // screen.capture() grabs and saves in one call using FileType enum values
+            const outputPath = await screen.capture(
+                parsed.name,
+                normalizedExt,               // FileType: '.png' or '.jpg'
+                parsed.dir || '.',
+            );
+            return `Screenshot saved to ${outputPath}`;
         } catch (error) {
             consoleStyler.log('error', `Screen capture failed: ${error.message}`);
             return `Error capturing screen: ${error.message}`;
