@@ -184,6 +184,12 @@ importers:
         specifier: '>=1.0.0'
         version: link:../..
 
+  plugins/file-editor:
+    dependencies:
+      '@sschepis/oboto':
+        specifier: '>=1.0.0'
+        version: link:../..
+
   plugins/firecrawl:
     dependencies:
       '@sschepis/oboto':

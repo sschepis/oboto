@@ -103,6 +103,8 @@ const InputArea: React.FC<InputAreaProps> = ({
   const [selectedInlineIndex, setSelectedInlineIndex] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = externalInputRef || internalInputRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -347,16 +349,68 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   };
 
+  // ── Drag-and-drop handlers ───────────────────────────────────
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFiles(files);
+    }
+  }, [processFiles]);
+
   return (
-    <footer className={`
-      border-t bg-[#0a0a0a]/95 sticky bottom-0 z-30 w-full
-      transition-all duration-300
-      ${isFocused
-        ? 'border-indigo-500/20 shadow-[0_-4px_24px_rgba(99,102,241,0.06)]'
-        : 'border-zinc-800/40'}
-    `}
-    style={{ backdropFilter: 'blur(12px)' }}
+    <footer
+      className={`
+        border-t bg-[#0a0a0a]/95 sticky bottom-0 z-30 w-full
+        transition-all duration-300 relative
+        ${isDragOver
+          ? 'border-indigo-500/50 shadow-[0_-4px_24px_rgba(99,102,241,0.15)]'
+          : isFocused
+            ? 'border-indigo-500/20 shadow-[0_-4px_24px_rgba(99,102,241,0.06)]'
+            : 'border-zinc-800/40'}
+      `}
+      style={{ backdropFilter: 'blur(12px)' }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-indigo-500/10 border-2 border-dashed border-indigo-500/40 rounded-lg pointer-events-none animate-fade-in">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/20 text-indigo-300 text-sm font-medium">
+            <Paperclip size={16} />
+            Drop files to attach
+          </div>
+        </div>
+      )}
       {/* Hidden file inputs */}
       <input
         ref={fileInputRef}

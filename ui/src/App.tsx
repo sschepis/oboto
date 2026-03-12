@@ -173,7 +173,7 @@ function App() {
   });
 
   // Wrap handleSend to intercept help commands from palette
-  const handleSend = useCallback((text: string) => {
+  const handleSend = useCallback((text: string, attachments?: { name: string; path: string }[]) => {
     if (text === 'Help & Documentation') {
       help.openPanel();
       return;
@@ -186,7 +186,7 @@ function App() {
       help.toggleWhatIsThis();
       return;
     }
-    baseSend(text);
+    baseSend(text, attachments);
   }, [baseSend, help, tour]);
 
   // Setup Wizard logic

@@ -363,7 +363,7 @@ export const useChat = () => {
     };
   }, []);
 
-  const send = (text: string, activeSurfaceId?: string) => {
+  const send = (text: string, activeSurfaceId?: string, attachments?: { name: string; path: string }[]) => {
     // If working, queue the message
     if (isWorking) {
       setMessageQueue(prev => [...prev, text]);
@@ -383,7 +383,7 @@ export const useChat = () => {
 
     if (isConnected) {
       setIsWorking(true); // Optimistically set working state
-      wsService.send(text, activeSurfaceId, selectedModel || undefined);
+      wsService.send(text, activeSurfaceId, selectedModel || undefined, attachments);
     } else {
       setIsWorking(true);
       setTimeout(() => {

@@ -107,6 +107,22 @@ async function handleChat(data, ctx) {
         }
     }
 
+    // Inject file attachment context so the agent knows about uploaded files.
+    // Sanitize name/path to prevent prompt injection via crafted WebSocket payloads.
+    const attachments = Array.isArray(data.attachments) ? data.attachments : [];
+    const safeAttachments = attachments
+        .filter(a => typeof a.name === 'string' && typeof a.path === 'string')
+        .map(a => ({
+            name: a.name.replace(/[\[\]\n\r]/g, '').substring(0, 255),
+            path: a.path.substring(0, 1024),
+        }));
+    if (safeAttachments.length > 0) {
+        const attachContext = safeAttachments.map(a =>
+            `[The user attached a file: "${a.name}" saved at path "${a.path}". You can read it with the read_file tool.]`
+        ).join('\n');
+        surfaceContextInput = `${surfaceContextInput}\n\n${attachContext}`;
+    }
+
     try {
         const responseText = await assistant.run(surfaceContextInput, { signal: activeRef.controller.signal, model: modelOverride, ws });
         

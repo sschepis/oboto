@@ -93,9 +93,15 @@ class WSService {
     };
   }
 
-  send(text: string, activeSurfaceId?: string, model?: string) {
+  send(text: string, activeSurfaceId?: string, model?: string, attachments?: { name: string; path: string }[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat', payload: text, surfaceId: activeSurfaceId || undefined, model: model || undefined }));
+      this.ws.send(JSON.stringify({
+        type: 'chat',
+        payload: text,
+        surfaceId: activeSurfaceId || undefined,
+        model: model || undefined,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      }));
     } else {
       console.warn('WS not open');
     }

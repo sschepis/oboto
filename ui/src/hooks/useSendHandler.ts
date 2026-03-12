@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { wsService } from '../services/wsService';
 
 interface SendHandlerDependencies {
-  send: (text: string, contextId?: string) => void;
+  send: (text: string, contextId?: string, attachments?: { name: string; path: string }[]) => void;
   setShowTaskManager: (v: boolean) => void;
   setShowTerminal: (v: boolean) => void;
   setLogPanelOpen: (v: boolean | ((p: boolean) => boolean)) => void;
@@ -39,7 +39,7 @@ export function useSendHandler({
   focusedSurfaceId
 }: SendHandlerDependencies) {
   
-  const handleSend = useCallback((text: string) => {
+  const handleSend = useCallback((text: string, attachments?: { name: string; path: string }[]) => {
     if (!text.trim()) return;
     
     // UI Commands
@@ -149,7 +149,7 @@ export function useSendHandler({
       }
     }
     
-    send(text, focusedSurfaceId);
+    send(text, focusedSurfaceId, attachments);
   }, [
     send, 
     setShowTaskManager, 

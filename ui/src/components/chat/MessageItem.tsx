@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Terminal, Copy, Trash2, RefreshCw, Pencil, Check, X, Loader2, ListChecks, CheckCircle2, XCircle, CircleDashed, SkipForward, Loader, Coins } from 'lucide-react';
+import { Bot, Terminal, Copy, Trash2, RefreshCw, Pencil, Check, X, Loader2, ListChecks, CheckCircle2, XCircle, CircleDashed, SkipForward, Loader, Coins, Paperclip, FileText, Image as ImageIcon, FileCode, FileSpreadsheet, File } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolCall from '../features/ToolCall';
 import NeuralVisualization from '../features/NeuralVisualization';
@@ -62,6 +62,54 @@ const ActionBtn: React.FC<{
     {icon}
   </button>
 );
+
+/** Get a file-type icon for an attachment based on its extension */
+function getAttachmentIcon(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf') return <FileText size={14} className="text-red-400" />;
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext)) return <ImageIcon size={14} className="text-emerald-400" />;
+  if (['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'py', 'rb', 'java', 'c', 'cpp', 'h', 'rs', 'go', 'sh', 'html', 'css', 'json', 'yaml', 'yml', 'toml', 'xml'].includes(ext)) return <FileCode size={14} className="text-blue-400" />;
+  if (['csv', 'xls', 'xlsx', 'tsv'].includes(ext)) return <FileSpreadsheet size={14} className="text-green-400" />;
+  return <File size={14} className="text-zinc-400" />;
+}
+
+/** Parse user message content and render [attached: filename] tags as styled chips */
+function renderUserContentWithAttachments(content: string) {
+  const attachRegex = /\[attached:\s*(.+?)\]/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = attachRegex.exec(content)) !== null) {
+    // Text before the match
+    if (match.index > lastIndex) {
+      parts.push(<span key={`t-${lastIndex}`}>{content.slice(lastIndex, match.index)}</span>);
+    }
+    const filename = match[1].trim();
+    parts.push(
+      <span
+        key={`a-${match.index}`}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[12px] font-medium text-white/90 mx-0.5 my-0.5 align-middle"
+        title={`Attached file: ${filename}`}
+      >
+        <Paperclip size={11} className="text-white/60" />
+        {getAttachmentIcon(filename)}
+        {filename}
+      </span>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text after last match
+  if (lastIndex < content.length) {
+    parts.push(<span key={`t-${lastIndex}`}>{content.slice(lastIndex)}</span>);
+  }
+
+  // No attachments found — return plain text
+  if (parts.length === 0) return <span className="whitespace-pre-wrap">{content}</span>;
+
+  return <span className="whitespace-pre-wrap">{parts}</span>;
+}
 
 const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel = 'You', agentLabel = 'Nexus' }) => {
   const isUser = message.role === 'user';
@@ -172,7 +220,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel =
               : 'bg-[#111111] text-zinc-200 rounded-tl-sm border-zinc-800/40 shadow-lg shadow-black/20 hover:border-zinc-700/50'}
           `}>
             {isUser ? (
-              <span className="whitespace-pre-wrap">{message.content}</span>
+              renderUserContentWithAttachments(message.content || '')
             ) : (
               <div className="space-y-4">
                 {/* Render tool calls FIRST (above text content) */}

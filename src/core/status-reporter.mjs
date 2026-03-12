@@ -94,26 +94,7 @@ const TOOL_STATUS_MAP = {
  * @param {Object} args — parsed tool arguments
  */
 export function emitToolStatus(toolName, args) {
-    const generator = TOOL_STATUS_MAP[toolName];
-    let description;
-
-    if (generator) {
-        try {
-            description = generator(args || {});
-        } catch {
-            description = `Running ${_humanize(toolName)}`;
-        }
-    } else if (toolName.startsWith('mcp_')) {
-        // Dynamic MCP tool — extract server and tool name
-        const parts = toolName.replace(/^mcp_/, '').split('_');
-        const serverName = parts[0];
-        const mcpToolName = parts.slice(1).join('_');
-        description = `Using MCP tool: ${mcpToolName} (${serverName})`;
-    } else {
-        description = `Running ${_humanize(toolName)}`;
-    }
-
-    consoleStyler.log('status', description);
+    consoleStyler.log('status', _resolveToolDescription(toolName, args));
 }
 
 /**
@@ -124,7 +105,76 @@ export function emitStatus(message) {
     consoleStyler.log('status', message);
 }
 
+/**
+ * Create a short summary of user input for inclusion in status messages.
+ * Truncates to ~60 chars, removes newlines, wraps in quotes.
+ *
+ * NOTE: This embeds raw user text into status lines that are broadcast to
+ * all connected WebSocket clients.  In the current single-user architecture
+ * this is acceptable, but if multi-user or shared logging is added in the
+ * future, consider sanitizing or omitting user input from status messages.
+ *
+ * @param {string} input
+ * @returns {string} — e.g. '"read through our conversation and…"'
+ */
+export function summarizeInput(input) {
+    if (!input) return '';
+    const str = typeof input === 'string' ? input : JSON.stringify(input);
+    const clean = str.replace(/[\r\n]+/g, ' ').trim();
+    if (clean.length <= 60) return `"${clean}"`;
+    return `"${clean.substring(0, 57)}…"`;
+}
+
+/**
+ * Produce a descriptive narration for a tool call including key arguments.
+ * More verbose than emitToolStatus — designed for the activity log narration.
+ * @param {string} toolName
+ * @param {Object} args
+ * @returns {string}
+ */
+export function describeToolCall(toolName, args) {
+    const base = _resolveToolDescription(toolName, args);
+
+    // Append key argument details for common tools when not already in base.
+    // Coerce to string defensively — tool schemas may supply non-string values.
+    const details = [];
+    if (args) {
+        const queryStr = typeof args.query === 'string' ? args.query : '';
+        if (queryStr && !base.includes(queryStr.substring(0, 10))) {
+            details.push(`query: "${_truncate(queryStr, 40)}"`);
+        }
+        if (args.limit != null) details.push(`limit: ${args.limit}`);
+        if (args.path && !base.includes(args.path)) details.push(`path: ${_short(args.path)}`);
+        const cmdStr = typeof args.command === 'string' ? args.command : '';
+        if (cmdStr && !base.includes(cmdStr.substring(0, 10))) {
+            details.push(`cmd: "${_truncate(cmdStr, 40)}"`);
+        }
+    }
+
+    return details.length > 0 ? `${base} (${details.join(', ')})` : base;
+}
+
 // ── Helpers ────────────────────────────────────────────
+
+/**
+ * Resolve a tool name + args to a human-readable description string.
+ * Shared by emitToolStatus() and describeToolCall() to avoid duplicated
+ * fallback logic for TOOL_STATUS_MAP lookups, MCP prefix handling, etc.
+ * @param {string} toolName
+ * @param {Object} args
+ * @returns {string}
+ */
+function _resolveToolDescription(toolName, args) {
+    const generator = TOOL_STATUS_MAP[toolName];
+    if (generator) {
+        try { return generator(args || {}); } catch { /* fall through */ }
+    }
+    if (toolName.startsWith('mcp_')) {
+        const parts = toolName.replace(/^mcp_/, '').split('_');
+        return `Using MCP tool: ${parts.slice(1).join('_')} (${parts[0]})`;
+    }
+    return `Running ${_humanize(toolName)}`;
+}
 
 /** Shorten a file path to its last 2 segments. */
 function _short(p) {

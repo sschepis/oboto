@@ -152,19 +152,106 @@ function handleUnitConversion(math, args) {
 }
 
 function handleSolveEquation(math, args) {
-    const { equation, variable } = args;
+    const { equation, variable = 'x' } = args;
 
     try {
-        // mathjs doesn't have a built-in algebraic solver like sympy.
-        // Parse the equation to validate it, then return guidance.
-        math.parse(equation);
+        // Normalize implicit multiplication (e.g., "2x" → "2*x", "3xy" → "3*x*y")
+        const normalized = equation.replace(/(\d)([a-zA-Z])/g, '$1*$2');
 
-        return "Note: Symbolic equation solving is limited in this local environment. " +
-            "Please use 'evaluate_math' for derivatives, integrals, or simplification. " +
-            'Example: evaluate_math(expression: \'derivative("x^2", "x")\')';
+        // Split on '=' (or '==') to get LHS and RHS
+        const parts = normalized.split(/={1,2}/);
+        if (parts.length !== 2) {
+            return `Error: Expected an equation with exactly one '=' sign, got: "${equation}"`;
+        }
+
+        const [lhs, rhs] = parts.map(p => p.trim());
+        if (!lhs || !rhs) {
+            return `Error: Both sides of the equation must be non-empty.`;
+        }
+
+        // Form the expression f(var) = lhs - rhs = 0
+        const expr = `(${lhs}) - (${rhs})`;
+
+        const node = math.parse(expr);
+        const compiled = node.compile();
+
+        let simplifiedStr;
+        try {
+            simplifiedStr = math.simplify(node).toString();
+        } catch (_) {
+            simplifiedStr = expr;
+        }
+
+        // Evaluate f at a few points to classify the equation
+        const evalAt = (val) => Number(compiled.evaluate({ [variable]: val }));
+
+        const y0 = evalAt(0);
+        const y1 = evalAt(1);
+        const yNeg1 = evalAt(-1);
+        const y2 = evalAt(2);
+
+        // --- Linear: f(x) = a*x + b ---
+        const a_lin = y1 - y0;          // slope
+        const b_lin = y0;               // intercept
+        const expectedY2_lin = 2 * a_lin + b_lin;
+
+        if (Math.abs(y2 - expectedY2_lin) < 1e-10) {
+            if (Math.abs(a_lin) < 1e-15) {
+                return Math.abs(b_lin) < 1e-15
+                    ? `The equation ${equation} is true for all values of ${variable}.`
+                    : `The equation ${equation} has no solution.`;
+            }
+            const solution = -b_lin / a_lin;
+            return `${variable} = ${fmtNum(solution)}\n\nSimplified form: ${simplifiedStr} = 0`;
+        }
+
+        // --- Quadratic: f(x) = a*x² + b*x + c ---
+        // From f(0)=c, f(1)=a+b+c, f(-1)=a-b+c
+        const c_q = y0;
+        const a_q = (y1 + yNeg1) / 2 - c_q;
+        const b_q = (y1 - yNeg1) / 2;
+        const expectedY2_q = a_q * 4 + b_q * 2 + c_q;
+
+        if (Math.abs(y2 - expectedY2_q) < 1e-10 && Math.abs(a_q) > 1e-15) {
+            const disc = b_q * b_q - 4 * a_q * c_q;
+            if (disc < -1e-15) {
+                const re = -b_q / (2 * a_q);
+                const im = Math.sqrt(-disc) / (2 * a_q);
+                return `${variable} = ${fmtNum(re)} + ${fmtNum(Math.abs(im))}i  or  ${variable} = ${fmtNum(re)} - ${fmtNum(Math.abs(im))}i\n\nSimplified form: ${simplifiedStr} = 0`;
+            }
+            if (Math.abs(disc) < 1e-15) {
+                return `${variable} = ${fmtNum(-b_q / (2 * a_q))} (double root)\n\nSimplified form: ${simplifiedStr} = 0`;
+            }
+            const s1 = (-b_q + Math.sqrt(disc)) / (2 * a_q);
+            const s2 = (-b_q - Math.sqrt(disc)) / (2 * a_q);
+            return `${variable} = ${fmtNum(s1)}  or  ${variable} = ${fmtNum(s2)}\n\nSimplified form: ${simplifiedStr} = 0`;
+        }
+
+        // --- Higher-order: Newton's method ---
+        const deriv = math.derivative(expr, variable).compile();
+        let x = 0;
+        for (let i = 0; i < 100; i++) {
+            const fx = evalAt(x);
+            if (Math.abs(fx) < 1e-12) break;
+            const dfx = Number(deriv.evaluate({ [variable]: x }));
+            if (Math.abs(dfx) < 1e-15) { x += 0.1; continue; }
+            x = x - fx / dfx;
+        }
+
+        if (Math.abs(evalAt(x)) < 1e-8) {
+            return `${variable} ≈ ${fmtNum(x)} (numerical solution)\n\nSimplified form: ${simplifiedStr} = 0`;
+        }
+
+        return `Could not find an exact solution. Simplified form: ${simplifiedStr} = 0`;
     } catch (error) {
         return `Error solving equation: ${error.message}`;
     }
+}
+
+/** Format a number: integers stay as-is, floats trimmed of trailing zeros. */
+function fmtNum(n) {
+    if (Number.isInteger(n)) return String(n);
+    return n.toFixed(10).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 // ── Plugin lifecycle ─────────────────────────────────────────────────────

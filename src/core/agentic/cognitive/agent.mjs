@@ -30,7 +30,7 @@ import { z } from 'zod';
 import { CognitiveCore } from './cognitive.mjs';
 import { resolveCognitiveConfig } from './config.mjs';
 import { ActivityTracker } from '../../activity-tracker.mjs';
-import { emitStatus } from '../../status-reporter.mjs';
+import { emitStatus, summarizeInput, describeToolCall } from '../../status-reporter.mjs';
 import { isRetryableError, isCancellationError } from '../../ai-provider/utils.mjs';
 
 /**
@@ -204,13 +204,13 @@ class CognitiveAgent {
       this.turnCount++;
 
       // ── Steps 1-4: Process input through cognitive core ──────────
-      this._tracker.setActivity('Processing input…');
+      this._tracker.setActivity(`Analyzing your request: ${summarizeInput(input)}`);
       this.cognitive.processInput(input);
 
       // ── Step 5: Safety check ─────────────────────────────────────
-      emitStatus('Checking safety constraints');
       violations = this.cognitive.checkSafety();
       if (violations.some(v => v.constraint?.response === 'block')) {
+        emitStatus('⚠️ Safety check blocked — unsafe cognitive state detected');
         this._tracker.stop();
         return {
           response: 'I need to pause — my cognitive state indicates unsafe conditions. Please try rephrasing.',
@@ -229,7 +229,7 @@ class CognitiveAgent {
       this._cachedSelectedTraits = await this._selectRelevantTraits(input);
 
       // ── Build system prompt with cognitive context ────────────────
-      emitStatus('Building context');
+      emitStatus('Building context — selecting relevant plugins and memories');
       const systemPrompt = this._buildSystemPrompt(input, options, preRouted, violations);
 
       // ── Convert tools to lmscript format ─────────────────────────
@@ -261,21 +261,22 @@ class CognitiveAgent {
         || this.config.agent?.maxToolRounds
         || 10;
 
-      emitStatus('Thinking…');
-      this._tracker.setActivity('Thinking…');
+      emitStatus('Sending request to AI model — waiting for response…');
+      this._tracker.setActivity('Sending request to AI model — waiting for response…', { phase: 'llm-call' });
 
       const result = await this._runtime.executeAgent(agentFn, input, {
         maxIterations: lmscriptMaxIter,
         signal: options.signal,
         onToolCall: (toolCall) => {
-          emitStatus(`Executing tool: ${toolCall.name}`);
-          this._tracker.setActivity(`Executing: ${toolCall.name}`);
+          const desc = describeToolCall(toolCall.name, toolCall.args || toolCall.input);
+          emitStatus(`AI called tool: ${desc}`);
+          this._tracker.setActivity(`Executing: ${desc}`, { phase: 'tool-exec' });
           // Mirror tool calls at the CognitiveAgent level so we can
           // synthesize a response if lmscript exhausts its iteration budget.
           collectedToolCalls.push(toolCall);
         },
         onIteration: (iteration) => {
-          this._tracker.setActivity(`Thinking… (iteration ${iteration})`);
+          this._tracker.setActivity(`AI processing tool results — iteration ${iteration}`, { phase: 'llm-call' });
         },
       });
 
@@ -335,11 +336,12 @@ class CognitiveAgent {
             maxIterations: effectiveMaxIter,
             signal: options.signal,
             onToolCall: (toolCall) => {
-              emitStatus(`Executing tool: ${toolCall.name}`);
-              this._tracker.setActivity(`Executing: ${toolCall.name}`);
+              const desc = describeToolCall(toolCall.name, toolCall.args || toolCall.input);
+              emitStatus(`AI called tool: ${desc}`);
+              this._tracker.setActivity(`Executing: ${desc}`, { phase: 'tool-exec' });
             },
             onIteration: (iteration) => {
-              this._tracker.setActivity(`Thinking… (continuation ${continuations}, iteration ${iteration})`);
+              this._tracker.setActivity(`AI processing results — continuation ${continuations}, iteration ${iteration}`, { phase: 'llm-call' });
             },
           }
         );
@@ -385,7 +387,6 @@ class CognitiveAgent {
       this.cognitive.remember(input, finalResponse);
 
       // ── Step 11: Evolve physics ──────────────────────────────────
-      emitStatus('Evolving cognitive state');
       for (let i = 0; i < 3; i++) {
         this.cognitive.tick();
       }
@@ -420,8 +421,8 @@ class CognitiveAgent {
         console.warn(
           `[CognitiveAgent] lmscript exhausted ${lmscriptMaxIter} iterations with ${collectedToolCalls.length} tool calls — synthesizing response`
         );
-        this._tracker.setActivity('Synthesizing from tool results…');
-        emitStatus('Synthesizing from tool results…');
+        this._tracker.setActivity(`AI iteration limit reached — synthesizing response from ${collectedToolCalls.length} tool results`);
+        emitStatus(`AI iteration limit reached — synthesizing response from ${collectedToolCalls.length} tool results`);
 
         // Build tool results in the format _buildFallbackResponse expects
         const toolResults = collectedToolCalls.map(tc => ({
@@ -534,7 +535,7 @@ class CognitiveAgent {
 
     // ── Steps 1-4: Process input through cognitive core ────────────────
     // Skip if turn() already called processInput before falling back.
-    this._tracker.setActivity('Processing input…');
+    this._tracker.setActivity(`Analyzing your request: ${summarizeInput(input)}`);
     const inputAnalysis = flags.skipProcessInput
       ? this.cognitive.getDiagnostics()
       : this.cognitive.processInput(input);
@@ -554,7 +555,7 @@ class CognitiveAgent {
     }
 
     // ── Step 6: Recall relevant memories ──────────────────────────────
-    emitStatus('Recalling relevant memories');
+    emitStatus('Searching memory for relevant context');
     const memories = this.cognitive.recall(input, 3);
 
     // Select relevant plugin traits via LLM routing (unless already cached
@@ -566,7 +567,7 @@ class CognitiveAgent {
     // Build system prompt with cognitive state.
     // Prefer the facade's dynamic system prompt (which includes skills,
     // plugin summaries, persona, surfaces, etc.) over our static default.
-    emitStatus('Building context');
+    emitStatus(`Building context with ${memories.length} memories and ${toolDefs.length} available tools`);
     const basePrompt = (this.aiProvider?.systemPrompt) || this.systemPrompt;
     const stateContext = this.cognitive.getStateContext();
     let systemMessage = basePrompt + '\n\n' + stateContext;
@@ -641,7 +642,7 @@ class CognitiveAgent {
 
     try {
       // Initial LLM call via ai-man's EventicAIProvider
-      this._tracker.setActivity('Thinking…');
+      this._tracker.setActivity('Sending request to AI model — waiting for response…', { phase: 'llm-call' });
       response = await this._callLLM(messages, toolDefs, options);
       let llmCallCount = 1; // count the initial call
       const maxTotalLLMCalls = this.config.agent.maxTotalLLMCalls || 20;
@@ -767,7 +768,6 @@ class CognitiveAgent {
     this.cognitive.remember(input, finalResponse);
 
     // ── Step 11: Evolve physics ───────────────────────────────────────
-    emitStatus('Evolving cognitive state');
     for (let i = 0; i < 3; i++) {
       this.cognitive.tick();
     }
@@ -1061,7 +1061,7 @@ class CognitiveAgent {
 
       // Execute each tool and push results
       const roundToolNames = response.toolCalls.map(tc => tc.function.name);
-      emitStatus(`Executing tools: ${roundToolNames.join(', ')}`);
+      emitStatus(`AI requested ${roundToolNames.length} tool(s): ${roundToolNames.join(', ')}`);
 
       for (const toolCall of response.toolCalls) {
         const result = await this._executeTool(
@@ -1079,7 +1079,7 @@ class CognitiveAgent {
       }
 
       // Call LLM again with tool results
-      this._tracker.setActivity(`Thinking… (round ${toolRounds + 1})`);
+      this._tracker.setActivity(`Sending tool results to AI — round ${toolRounds + 1}`, { phase: 'llm-call' });
       response = await this._callLLM(messages, toolDefs, options);
       llmCallCount++;
     }
@@ -1500,7 +1500,7 @@ class CognitiveAgent {
     // Note: ToolExecutor.executeTool() already calls emitToolStatus() internally.
     if (this.toolExecutor) {
       // Set tracker activity so heartbeat shows tool execution during long tools
-      this._tracker.setActivity(`Executing: ${name}`);
+      this._tracker.setActivity(`Executing tool: ${describeToolCall(name, parsedArgs)}`, { phase: 'tool-exec' });
       try {
         const toolCall = {
           id: `cognitive_${Date.now()}_${name}`,

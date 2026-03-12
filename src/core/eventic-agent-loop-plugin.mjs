@@ -1,4 +1,4 @@
-import { emitStatus } from './status-reporter.mjs';
+import { emitStatus, summarizeInput, describeToolCall } from './status-reporter.mjs';
 import { isCancellationError } from './ai-provider.mjs';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
@@ -237,7 +237,12 @@ export const EventicAgentLoopPlugin = {
                 await ctx.stateManager.checkpoint(ctx, engine, { phase: 'ACTOR_CRITIC_LOOP', guidance });
             }
 
-            emitStatus(ctx.turnNumber === 1 ? 'Analyzing request…' : `Working (turn ${ctx.turnNumber})…`);
+            emitStatus(
+                ctx.turnNumber === 1
+                    ? `Analyzing request: ${summarizeInput(input)}`
+                    : `Continuing work — turn ${ctx.turnNumber}/${ctx.maxTurns}` +
+                      (ctx.toolCallCount > 0 ? `, ${ctx.toolCallCount} tools called so far` : '')
+            );
             log(`Turn ${ctx.turnNumber}/${ctx.maxTurns}`);
 
             let tools = [];
@@ -343,12 +348,14 @@ export const EventicAgentLoopPlugin = {
 
             // ── Branch: tool calls → execute tools ──
             if (response && response.toolCalls && response.toolCalls.length > 0) {
+                emitStatus(`AI requested ${response.toolCalls.length} tool call(s) — executing…`);
                 return await dispatch('EXECUTE_TOOLS', { toolCalls: response.toolCalls, input, signal, stream, onChunk });
             }
 
             // ── Branch: text response → inline quality check (formerly EVALUATE_TEXT_RESPONSE) ──
             const content = typeof response === 'string' ? response : response?.content;
             if (content) {
+                emitStatus('AI provided a text response — checking quality…');
                 const { action, guidance: retryGuidance } = evaluateTextResponse(content, input, ctx.retryCount);
 
                 if (action === 'retry') {
@@ -386,31 +393,42 @@ export const EventicAgentLoopPlugin = {
             
             const toolNames = toolCalls.map(tc => tc.function.name);
             const toolNamesStr = toolNames.join(', ');
-            emitStatus(`Executing: ${toolNamesStr}`);
+            emitStatus(`Executing ${toolCalls.length} tool(s): ${toolNamesStr}`);
             log(`Executing ${toolCalls.length} tool(s): ${toolNamesStr}`);
             
             const results = [];
             
-            for (const toolCall of toolCalls) {
+            for (let i = 0; i < toolCalls.length; i++) {
+                const toolCall = toolCalls[i];
                 // Check cancellation before starting each tool
                 if (signal && signal.aborted) {
                     log('Execution aborted by user signal');
-                    break; 
+                    break;
                 }
 
                 const functionName = toolCall.function.name;
                 const toolFunction = engine.tools.get(functionName);
                 
+                // Emit per-tool start status with description
+                let args = toolCall.function.arguments;
+                if (typeof args === 'string') {
+                    try { args = JSON.parse(args); } catch (e) {}
+                }
+                const toolDesc = describeToolCall(functionName, args || {});
+                if (toolCalls.length > 1) {
+                    emitStatus(`Running tool ${i + 1}/${toolCalls.length}: ${toolDesc}`);
+                } else {
+                    emitStatus(`Running tool: ${toolDesc}`);
+                }
+                
                 let toolResultText = '';
+                let toolFailed = false;
                 if (toolFunction) {
                     try {
-                        let args = toolCall.function.arguments;
-                        if (typeof args === 'string') {
-                            try { args = JSON.parse(args); } catch (e) {}
-                        }
                         // Pass signal to tool function
                         toolResultText = await toolFunction(args, { signal });
                     } catch (e) {
+                        toolFailed = true;
                         if (isCancellationError(e) || (signal && signal.aborted)) {
                             toolResultText = 'Error: Tool execution cancelled by user.';
                         } else {
@@ -419,7 +437,12 @@ export const EventicAgentLoopPlugin = {
                     }
                 } else {
                     toolResultText = `Error: Unknown tool: ${functionName}`;
+                    toolFailed = true;
                 }
+                
+                // Emit per-tool completion status using the flag set in the
+                // catch/unknown-tool branches rather than brittle text matching.
+                emitStatus(`Tool ${functionName} ${toolFailed ? 'failed' : 'completed'}`);
                 
                 results.push({
                     role: 'tool',
@@ -463,7 +486,7 @@ export const EventicAgentLoopPlugin = {
                  ctx.consciousness.trackToolCalls(toolCalls, results);
             }
 
-            emitStatus(`Completed ${toolCalls.length} tool(s), continuing…`);
+            emitStatus(`All ${toolCalls.length} tool(s) completed — sending results back to AI`);
             
             if (ctx.stateManager) {
                 await ctx.stateManager.syncHistory(engine);

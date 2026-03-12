@@ -26,21 +26,28 @@ export class ActivityTracker {
     constructor(opts = {}) {
         this.intervalMs = opts.intervalMs || 3000;
         this._activity = null;
+        this._phase = null;
         this._startedAt = null;
         this._timer = null;
         this._stopped = false;
     }
 
     /**
-     * Set the current activity description.
+     * Set the current activity description with an optional phase context.
      * Emits immediately, then re-emits with elapsed time on each heartbeat tick.
-     * @param {string} description — e.g. "Thinking…", "Reading src/main.mjs"
+     * The phase determines the heartbeat message style so the user knows whether
+     * the agent is waiting for the LLM, executing a tool, or doing internal work.
+     *
+     * @param {string} description — e.g. "Sending request to AI model", "Reading src/main.mjs"
+     * @param {Object} [opts]
+     * @param {string} [opts.phase] — 'llm-call' (uses dedicated heartbeat text) | 'tool-exec' | null
      */
-    setActivity(description) {
+    setActivity(description, opts = {}) {
         // Reset the stopped flag so the tracker can be reused across
         // multiple CognitiveAgent.turn() calls without re-instantiation.
         this._stopped = false;
         this._activity = description;
+        this._phase = opts.phase || null;
         this._startedAt = Date.now();
 
         // Emit immediately
@@ -61,6 +68,7 @@ export class ActivityTracker {
         this._stopped = true;
         this._clearTimer();
         this._activity = null;
+        this._phase = null;
         this._startedAt = null;
     }
 
@@ -74,11 +82,20 @@ export class ActivityTracker {
 
     // ── Internal ───────────────────────────────────────────────
 
-    /** Emit the current activity with elapsed time suffix. */
+    /**
+     * Emit the current activity with elapsed time suffix.
+     * Uses phase-aware messaging so the user understands what kind
+     * of wait is happening (LLM call vs tool execution vs processing).
+     */
     _tick() {
         if (this._stopped || !this._activity) return;
         const elapsed = Math.round((Date.now() - this._startedAt) / 1000);
-        emitStatus(`${this._activity} (${elapsed}s)`);
+
+        if (this._phase === 'llm-call') {
+            emitStatus(`Waiting for AI response… (${elapsed}s)`);
+        } else {
+            emitStatus(`${this._activity} (${elapsed}s)`);
+        }
     }
 
     _clearTimer() {
