@@ -28,19 +28,44 @@ export class MessageConverter {
         if (!Array.isArray(historyMessages)) return [];
 
         return historyMessages.map(msg => {
-            const out = {
+            const content = typeof msg.content === 'string'
+                ? msg.content
+                : JSON.stringify(msg.content ?? '');
+
+            // Convert tool-role messages to text-based user messages.
+            // The react-loop uses `user` role with a `[Tool Result: ...]`
+            // prefix for its own tool results.  Prior-session history may
+            // contain OpenAI-style `tool` role messages with `tool_call_id`
+            // references — sending these to Anthropic without matching
+            // `tool_use` blocks in the preceding assistant message causes
+            // 400 errors ("unexpected tool_use_id found in tool_result").
+            if (msg.role === 'tool') {
+                const toolLabel = msg.name ? `[Tool Result: ${msg.name}]` : '[Tool Result]';
+                return {
+                    role: 'user',
+                    content: `${toolLabel}\n${content}`,
+                };
+            }
+
+            // Flatten assistant messages with tool_calls to text.
+            // Without this, the assistant message would declare tool_use
+            // blocks but the matching tool_result (now converted above)
+            // would be in `user` role — another API pairing violation.
+            if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+                const callSummaries = msg.tool_calls.map(tc => {
+                    const fn = tc.function || tc;
+                    return `[Called: ${fn.name || 'unknown'}(${fn.arguments || '{}'})]`;
+                }).join('\n');
+                return {
+                    role: 'assistant',
+                    content: ((content || '') + '\n' + callSummaries).trim(),
+                };
+            }
+
+            return {
                 role: msg.role || 'user',
-                content: typeof msg.content === 'string'
-                    ? msg.content
-                    : JSON.stringify(msg.content ?? ''),
+                content,
             };
-
-            // Preserve tool-related fields if present
-            if (msg.tool_calls) out.tool_calls = msg.tool_calls;
-            if (msg.tool_call_id) out.tool_call_id = msg.tool_call_id;
-            if (msg.name) out.name = msg.name;
-
-            return out;
         });
     }
 
