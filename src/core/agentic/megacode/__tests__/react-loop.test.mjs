@@ -31,6 +31,7 @@ jest.unstable_mockModule('../../../activity-tracker.mjs', () => ({
 
 // Import after mocks are set up
 const { ReactLoop } = await import('../react-loop.mjs');
+const { parseAction } = await import('../react-loop-helpers.mjs');
 
 // ─── Test helpers ──────────────────────────────────────────────────────
 
@@ -393,7 +394,7 @@ describe('ReactLoop', () => {
             const result = await loop.execute('Hello', deps);
 
             // The response should contain the error message since all retries failed
-            expect(result.response).toContain('LLM Error');
+            expect(result.response).toContain('LLM call failed');
             expect(mockEmitCommentary).toHaveBeenCalledWith(
                 expect.stringContaining('LLM call failed')
             );
@@ -625,10 +626,9 @@ describe('ReactLoop', () => {
         });
     });
 
-    describe('_parseAction()', () => {
+    describe('parseAction()', () => {
         test('parses clean JSON respond action', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('{"action":"respond","response":"hello"}');
+            const result = parseAction('{"action":"respond","response":"hello"}');
             expect(result).toEqual({
                 type: 'respond',
                 response: 'hello',
@@ -637,8 +637,7 @@ describe('ReactLoop', () => {
         });
 
         test('parses clean JSON tool_call action', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('{"action":"tool_call","tool":"read_file","args":{"path":"x.txt"}}');
+            const result = parseAction('{"action":"tool_call","tool":"read_file","args":{"path":"x.txt"}}');
             expect(result).toEqual({
                 type: 'tool_call',
                 tool: 'read_file',
@@ -648,35 +647,30 @@ describe('ReactLoop', () => {
         });
 
         test('parses JSON in code block', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('```json\n{"action":"respond","response":"hello"}\n```');
+            const result = parseAction('```json\n{"action":"respond","response":"hello"}\n```');
             expect(result.type).toBe('respond');
             expect(result.response).toBe('hello');
         });
 
         test('extracts embedded JSON from mixed text', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('Some thinking text... {"action":"tool_call","tool":"search","args":{"query":"test"}}');
+            const result = parseAction('Some thinking text... {"action":"tool_call","tool":"search","args":{"query":"test"}}');
             expect(result.type).toBe('tool_call');
             expect(result.tool).toBe('search');
         });
 
         test('treats non-JSON text as respond', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('This is just plain text without any JSON');
+            const result = parseAction('This is just plain text without any JSON');
             expect(result.type).toBe('respond');
             expect(result.response).toContain('plain text');
         });
 
         test('handles null/empty input', () => {
-            const loop = makeLoop();
-            expect(loop._parseAction(null)).toEqual({ type: 'respond', response: '' });
-            expect(loop._parseAction('')).toEqual({ type: 'respond', response: '' });
+            expect(parseAction(null)).toEqual({ type: 'respond', response: '' });
+            expect(parseAction('')).toEqual({ type: 'respond', response: '' });
         });
 
         test('preserves thought/reasoning field', () => {
-            const loop = makeLoop();
-            const result = loop._parseAction('{"action":"tool_call","tool":"read_file","args":{},"thought":"Need to check this file"}');
+            const result = parseAction('{"action":"tool_call","tool":"read_file","args":{},"thought":"Need to check this file"}');
             expect(result.thought).toBe('Need to check this file');
         });
     });
