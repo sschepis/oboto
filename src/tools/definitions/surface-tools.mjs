@@ -29,7 +29,7 @@ export const SURFACE_TOOLS = [
         type: "function",
         function: {
             name: "update_surface_component",
-            description: "Add or update a React component on a surface. Write the full JSX source for the component. The component will be compiled and rendered live in the browser.\n\nGLOBALS: React, useState, useEffect, useRef, useCallback, useMemo, UI.\n\nCRITICAL: You MUST use the `UI` global for components (e.g. `UI.Button`, `UI.Card`, `UI.Input`, `UI.Table`). Do not use raw HTML elements if a UI component exists.\n\nAvailable UI.*: Card, Button, Input, Select, Table, Badge, Tabs, Dialog, Alert, Progress, Charts (Line/Bar/Pie), Icons (Lucide). Use Tailwind CSS for layout.",
+            description: "Add or update a React component on a surface. The source is statically validated before writing — invalid JSX will be REJECTED with error details.\n\nAFTER calling this tool, you MUST call read_surface to verify the component rendered without CLIENT-SIDE ERRORS.\n\nGLOBALS (no imports needed): React, useState, useEffect, useRef, useCallback, useMemo, UI.*, surfaceApi, useSurfaceLifecycle.\n\nCRITICAL RULES:\n- Must include 'export default function ComponentName(...)'\n- NO import statements (everything is a global)\n- NO require() calls\n- Use UI.* components, NOT raw HTML equivalents\n- DO NOT use: UI.AlertTitle, UI.AlertDescription, UI.Stack, UI.Icons.Atom, UI.Icons.Orbit, UI.Icons.Cpu (these don't exist and cause React Error #130)\n- Ensure all braces {} parentheses () and brackets [] are balanced\n\nAvailable UI.*: Card, Button, Input, Select, Table, Badge, Tabs, Dialog, Alert (no AlertTitle/AlertDescription), Progress, Charts (Line/Bar/Pie/Area/Sparkline), Icons (Lucide: Check, X, Plus, Search, Settings, Activity, Terminal, etc.). Use Tailwind CSS for layout.",
             parameters: {
                 type: "object",
                 properties: {
@@ -223,6 +223,23 @@ Example custom layout:
                     surface_id: {
                         type: "string",
                         description: "The surface ID to list revisions for"
+                    }
+                },
+                required: ["surface_id"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "read_surface",
+            description: "Read the full details of a surface including its metadata, layout, component list, all component JSX source code, and any CLIENT-SIDE ERRORS. Use this AFTER every update_surface_component call to verify the component rendered successfully. If the output contains '🚨 CLIENT-SIDE ERRORS', those components MUST be fixed.",
+            parameters: {
+                type: "object",
+                properties: {
+                    surface_id: {
+                        type: "string",
+                        description: "The surface ID to read"
                     }
                 },
                 required: ["surface_id"]

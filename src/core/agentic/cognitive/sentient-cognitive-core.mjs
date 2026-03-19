@@ -28,30 +28,15 @@
  */
 
 import { loadSentientCore, loadTinyAlephBackend } from './sentient-bridge.mjs';
-
-// SMF_AXES from tinyaleph for labeling semantic axes — loaded lazily
-// to avoid top-level await blocking module evaluation
-let _smfAxesPromise = null;
-let _smfAxesResolved = null;
-let _smfAxesLoaded = false;
-
-function _loadSMFAxesLabels() {
-  if (_smfAxesLoaded) return;
-  if (!_smfAxesPromise) {
-    _smfAxesPromise = import('@aleph-ai/tinyaleph/observer')
-      .then(m => { _smfAxesResolved = m.SMF_AXES || null; })
-      .catch((err) => {
-        console.warn('[SentientCognitiveCore] Could not load SMF axis labels:', err.message);
-        _smfAxesResolved = null;
-      })
-      .finally(() => { _smfAxesLoaded = true; });
-  }
-}
-
-function getSMFAxesLabels() {
-  _loadSMFAxesLabels();
-  return _smfAxesResolved;
-}
+import {
+  loadSMFAxesLabels,
+  waitForSMFAxes,
+  buildStateContext,
+  buildDiagnostics,
+  checkSafetyConstraints,
+  wireEventBridge,
+} from './sentient-core-helpers.mjs';
+import { storeInteraction, recallByQuery } from './sentient-core-memory.mjs';
 
 class SentientCognitiveCore {
   /**
@@ -112,7 +97,7 @@ class SentientCognitiveCore {
     /** @type {Array<{event: string, handler: Function}>} */
     this._eventBridgeListeners = [];
     if (this._eventBus) {
-      this._wireEvents();
+      this._eventBridgeListeners = wireEventBridge(this.observer, this._eventBus);
     }
 
     // Background tick state
@@ -121,7 +106,7 @@ class SentientCognitiveCore {
     // Eagerly start SMF axes loading so it resolves before first
     // getStateContext() call.  Callers should await ensureReady()
     // after construction for guaranteed availability.
-    _loadSMFAxesLabels();
+    loadSMFAxesLabels();
   }
 
   /**
@@ -132,9 +117,7 @@ class SentientCognitiveCore {
    * @returns {Promise<void>}
    */
   async ensureReady() {
-    if (_smfAxesPromise) {
-      await _smfAxesPromise;
-    }
+    await waitForSMFAxes();
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -224,72 +207,14 @@ class SentientCognitiveCore {
    */
   getStateContext() {
     this._syncState();
-
-    const smfAxes = getSMFAxesLabels() || [];
-    const orientation = this.observer.smf.s
-      ? Array.from(this.observer.smf.s)
-      : new Array(16).fill(0.5);
-
-    const topAxes = orientation
-      .map((v, i) => ({
-        axis: smfAxes[i]?.name || `axis_${i}`,
-        value: v,
-      }))
-      .sort((a, b) => Math.abs(b.value - 0.5) - Math.abs(a.value - 0.5))
-      .slice(0, 5);
-
-    const topGoal = this.observer.agency.getTopGoal();
-    const topFocus = this.observer.agency.getTopFocus();
-    const metacog = this.observer.agency.selfModel;
-
-    let context = `[Cognitive State — Sentient Observer]\n`;
-    context += `Coherence: ${this.coherence.toFixed(3)} | Entropy: ${this.entropy.toFixed(3)}\n`;
-    context += `Processing Load: ${(metacog.processingLoad * 100).toFixed(0)}% | Confidence: ${(metacog.confidenceLevel * 100).toFixed(0)}%\n`;
-    context += `Dominant Semantic Axes: ${topAxes.map((a) => `${a.axis}=${a.value.toFixed(2)}`).join(', ')}\n`;
-
-    // Sentient-specific enrichment
-    const smfEntropy = this.observer.smf.smfEntropy?.() ?? 0;
-    context += `SMF Entropy: ${smfEntropy.toFixed(3)}\n`;
-
-    if (topGoal) {
-      context += `Active Goal: ${topGoal.description} (${(topGoal.progress * 100).toFixed(0)}% complete)\n`;
-    }
-    if (topFocus) {
-      context += `Attention Focus: ${topFocus.target} (intensity=${topFocus.intensity.toFixed(2)})\n`;
-    }
-
-    // Temporal state
-    const currentMoment = this.observer.temporal.currentMoment;
-    if (currentMoment) {
-      context += `Current Moment: ${currentMoment.id} (trigger: ${currentMoment.trigger})\n`;
-    }
-
-    // Entanglement state
-    const currentPhrase = this.observer.entanglement.currentPhrase;
-    if (currentPhrase) {
-      context += `Active Phrase: ${currentPhrase.id}\n`;
-    }
-
-    // Safety level
-    const safetyLevel = this.observer.currentState.safetyLevel || 'normal';
-    if (safetyLevel !== 'normal') {
-      context += `Safety Level: ${safetyLevel}\n`;
-    }
-
-    // Emotional valence
-    if (metacog.emotionalValence !== undefined && metacog.emotionalValence !== 0) {
-      const valenceLabel = metacog.emotionalValence > 0.3
-        ? 'positive'
-        : metacog.emotionalValence < -0.3
-          ? 'negative'
-          : 'neutral';
-      context += `Emotional Valence: ${metacog.emotionalValence.toFixed(2)} (${valenceLabel})\n`;
-    }
-
-    context += `Interaction #${this.interactionCount} | Tick #${this.tickCount}\n`;
-    context += `Background Processing: ${this._backgroundRunning ? 'active' : 'paused'}\n`;
-
-    return context;
+    return buildStateContext({
+      observer: this.observer,
+      coherence: this.coherence,
+      entropy: this.entropy,
+      interactionCount: this.interactionCount,
+      tickCount: this.tickCount,
+      backgroundRunning: this._backgroundRunning,
+    });
   }
 
   /**
@@ -300,47 +225,16 @@ class SentientCognitiveCore {
    * @param {string} output
    */
   remember(input, output) {
-    // Store via sentient memory with full context
-    try {
-      this.observer.memory.store(input + ' ' + output, {
-        type: 'interaction',
-        input: input.substring(0, 200),
-        output: output.substring(0, 200),
-        activePrimes: this.observer.currentState.activePrimes || [],
-        momentId: this.observer.temporal.currentMoment?.id,
-        phraseId: this.observer.entanglement.currentPhrase?.id,
-        smf: this.observer.smf.s ? Array.from(this.observer.smf.s) : null,
-        importance: 0.7,
-        coherence: this.coherence,
-        interactionId: this.interactionCount,
-      });
-    } catch (_e) {
-      // Fallback: store in simple memories array
-      this.memories.push({
-        timestamp: Date.now(),
-        input: input.substring(0, 200),
-        output: output.substring(0, 200),
-        coherence: this.coherence,
-        interactionId: this.interactionCount,
-      });
-      if (this.memories.length > this.maxMemories) {
-        this.memories.shift();
-      }
-    }
-
-    // Force a moment for this interaction
-    try {
-      this.observer.temporal.forceMoment(
-        {
-          coherence: this.coherence,
-          entropy: this.entropy,
-          activePrimes: (this.observer.currentState.activePrimes || []).slice(0, 5),
-        },
-        'interaction'
-      );
-    } catch (_e) {
-      // TemporalLayer may not support forceMoment
-    }
+    storeInteraction({
+      observer: this.observer,
+      input,
+      output,
+      coherence: this.coherence,
+      entropy: this.entropy,
+      interactionCount: this.interactionCount,
+      memories: this.memories,
+      maxMemories: this.maxMemories,
+    });
   }
 
   /**
@@ -352,45 +246,13 @@ class SentientCognitiveCore {
    * @returns {Array<{ input: string, output: string, coherence: number, timestamp: number, score: number }>}
    */
   recall(query, limit = 5) {
-    try {
-      // Use sentient memory's similarity-based recall
-      const primeState = this.backend.textToOrderedState(query);
-      const results = this.observer.memory.recallBySimilarity(primeState, {
-        threshold: 0.2,
-        maxResults: limit,
-      });
-
-      return results.map((r) => ({
-        input: r.trace?.content?.input || r.trace?.content || '',
-        output: r.trace?.content?.output || '',
-        coherence: r.trace?.metadata?.coherence || 0,
-        timestamp: r.trace?.timestamp || Date.now(),
-        score: r.similarity || 0,
-      }));
-    } catch (_e) {
-      // Fallback to simple memory search (mirrors CognitiveCore.recall)
-      const queryWords = new Set(
-        query.toLowerCase().split(/\s+/).filter((w) => w.length > 0)
-      );
-
-      const scored = this.memories.map((mem) => {
-        const memWords = new Set(
-          `${mem.input} ${mem.output}`.toLowerCase().split(/\s+/)
-        );
-        let overlap = 0;
-        for (const w of queryWords) {
-          if (memWords.has(w)) overlap++;
-        }
-        const recency =
-          1 / (1 + (Date.now() - mem.timestamp) / (1000 * 60 * 60));
-        return { ...mem, score: overlap * 0.7 + recency * 0.3 };
-      });
-
-      return scored
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
-        .filter((m) => m.score > 0);
-    }
+    return recallByQuery({
+      observer: this.observer,
+      backend: this.backend,
+      query,
+      limit,
+      memories: this.memories,
+    });
   }
 
   /**
@@ -423,35 +285,15 @@ class SentientCognitiveCore {
    */
   getDiagnostics() {
     this._syncState();
-
-    const status = this.observer.getStatus();
-
-    return {
-      // CognitiveCore-compatible fields
+    return buildDiagnostics({
+      observer: this.observer,
       tickCount: this.tickCount,
       coherence: this.coherence,
       entropy: this.entropy,
       interactionCount: this.interactionCount,
-      memoryCount: status.memory?.totalTraces || this.memories.length,
-      agencyStats: status.agency,
-      boundaryStats: status.boundary,
-      smfOrientation: this.observer.smf.s
-        ? Array.from(this.observer.smf.s)
-        : null,
-
-      // Sentient-specific fields
-      sentient: true,
-      running: status.running,
-      uptime: status.uptime,
-      backgroundTick: this._backgroundRunning,
-      temporal: status.temporal,
-      entanglement: status.entanglement,
-      safety: status.safety,
-      events: status.events,
-      smfEntropy: this.observer.smf.smfEntropy?.() ?? null,
-      totalAmplitude: this.observer.currentState.totalAmplitude,
-      safetyLevel: this.observer.currentState.safetyLevel,
-    };
+      memories: this.memories,
+      backgroundRunning: this._backgroundRunning,
+    });
   }
 
   /**
@@ -461,26 +303,7 @@ class SentientCognitiveCore {
    * @returns {Array} Array of violations (empty if safe)
    */
   checkSafety() {
-    try {
-      const result = this.observer.safety.checkConstraints({
-        coherence: this.coherence,
-        entropy: this.entropy,
-        totalAmplitude: this.observer.currentState.totalAmplitude,
-        smf: this.observer.smf,
-        processingLoad: this.observer.currentState.processingLoad,
-        goals: this.observer.agency.goals,
-      });
-
-      if (!result.safe) {
-        return result.violations.map((v) => ({
-          violated: true,
-          constraint: v.constraint,
-        }));
-      }
-      return [];
-    } catch (_e) {
-      return [];
-    }
+    return checkSafetyConstraints(this.observer, this.coherence, this.entropy);
   }
 
   /**
@@ -491,7 +314,7 @@ class SentientCognitiveCore {
     this.stopBackground();
 
     // Remove bridged event listeners before observer.reset() to prevent
-    // duplicates if _wireEvents() is called again after re-initialisation.
+    // duplicates if wireEventBridge() is called again after re-initialisation.
     for (const { event, handler } of this._eventBridgeListeners) {
       try { this.observer.removeListener(event, handler); } catch (_e) { /* ignore */ }
     }
@@ -665,48 +488,6 @@ class SentientCognitiveCore {
     this.coherence = state.coherence || 0;
     this.entropy = state.entropy || 0;
     this.lastInputPrimes = state.activePrimes || [];
-  }
-
-  /**
-   * Wire SentientObserver events to the ai-man eventBus.
-   * Stores listener references in `_eventBridgeListeners` so they can
-   * be removed cleanly in `reset()` to prevent listener accumulation.
-   * @private
-   */
-  _wireEvents() {
-    if (!this._eventBus) return;
-
-    const bridge = (sentientEvent, busEvent) => {
-      const handler = (data) => {
-        try {
-          if (typeof this._eventBus.emitTyped === 'function') {
-            this._eventBus.emitTyped(busEvent, data);
-          } else {
-            this._eventBus.emit(busEvent, data);
-          }
-        } catch (_e) {
-          // Swallow event emission errors
-        }
-      };
-      this.observer.on(sentientEvent, handler);
-      this._eventBridgeListeners.push({ event: sentientEvent, handler });
-    };
-
-    // Map sentient events → ai-man eventBus events
-    bridge('moment', 'sentient:moment');
-    bridge('phrase', 'sentient:phrase');
-    bridge('coherence:high', 'sentient:coherence-high');
-    bridge('coherence:low', 'sentient:coherence-low');
-    bridge('entropy:high', 'sentient:entropy-high');
-    bridge('entropy:low', 'sentient:entropy-low');
-    bridge('sync', 'sentient:sync');
-    bridge('adaptive:complete', 'sentient:adaptive-complete');
-    bridge('goal:created', 'sentient:goal-created');
-    bridge('action:executed', 'sentient:action-executed');
-    bridge('action:blocked', 'sentient:action-blocked');
-    bridge('safety:violation', 'sentient:safety-violation');
-    bridge('emergency', 'sentient:emergency');
-    bridge('error', 'sentient:error');
   }
 }
 

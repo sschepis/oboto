@@ -329,7 +329,7 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
           {contextMenu.type === 'file' && (
             <button
               onClick={() => handleAction('open')}
-              className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-white flex items-center gap-2.5 transition-colors duration-100"
+              className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
             >
               <ExternalLink size={12} className="text-zinc-500" />
               Open
@@ -337,14 +337,14 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
           )}
           <button
             onClick={() => handleAction('copy-path')}
-            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-white flex items-center gap-2.5 transition-colors duration-100"
+            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
           >
             <Copy size={12} className="text-zinc-500" />
             Copy Path
           </button>
           <button
             onClick={() => handleAction('duplicate')}
-            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-white flex items-center gap-2.5 transition-colors duration-100"
+            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
           >
             <Files size={12} className="text-zinc-500" />
             Duplicate

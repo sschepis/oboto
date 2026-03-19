@@ -14,7 +14,7 @@ export default function WelcomeStep({ onNext, onSkip }: WelcomeStepProps) {
         </svg>
       </div>
 
-      <h1 className="text-3xl font-bold text-white mb-4">
+      <h1 className="text-3xl font-bold text-zinc-100 mb-4">
         Welcome to Oboto
       </h1>
       

@@ -57,11 +57,51 @@ async function handleAgentLoopAnswer(data, ctx) {
     }
 }
 
+async function handleAgentChimeIn(data, ctx) {
+    const { ws, assistant } = ctx;
+    const { message: guidanceMessage, source } = data.payload || data;
+    if (!guidanceMessage || typeof guidanceMessage !== 'string') {
+        wsSend(ws, 'chime-in-ack', {
+            success: false,
+            error: 'Message is required and must be a string'
+        });
+        return;
+    }
+    if (!assistant || typeof assistant.queueChimeIn !== 'function') {
+        wsSend(ws, 'chime-in-ack', {
+            success: false,
+            error: 'Agent facade not available'
+        });
+        return;
+    }
+    const success = assistant.queueChimeIn(guidanceMessage, source || 'websocket');
+    const queue = assistant.getGuidanceQueue();
+    wsSend(ws, 'chime-in-ack', {
+        success,
+        queueLength: queue.length,
+        busy: assistant.isBusy()
+    });
+}
+
+async function handleGetGuidanceQueue(data, ctx) {
+    const { ws, assistant } = ctx;
+    if (!assistant || typeof assistant.getGuidanceQueue !== 'function') {
+        wsSend(ws, 'guidance-queue', { queue: [], error: 'Facade not available' });
+        return;
+    }
+    wsSend(ws, 'guidance-queue', {
+        queue: assistant.getGuidanceQueue(),
+        busy: assistant.isBusy()
+    });
+}
+
 export const handlers = {
     'agent-loop-play': handleAgentLoopPlay,
     'agent-loop-pause': handleAgentLoopPause,
     'agent-loop-stop': handleAgentLoopStop,
     'agent-loop-set-interval': handleAgentLoopSetInterval,
     'get-agent-loop-state': handleGetAgentLoopState,
-    'agent-loop-answer': handleAgentLoopAnswer
+    'agent-loop-answer': handleAgentLoopAnswer,
+    'agent-chime-in': handleAgentChimeIn,
+    'get-guidance-queue': handleGetGuidanceQueue
 };

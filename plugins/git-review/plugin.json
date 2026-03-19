@@ -1,0 +1,13 @@
+{
+  "name": "git-review",
+  "version": "1.0.0",
+  "description": "AI-powered git code review — review uncommitted changes, branch diffs, specific commits, and generate commit messages",
+  "author": "Oboto",
+  "main": "index.mjs",
+  "capabilities": {
+    "tools": true,
+    "wsHandlers": true,
+    "events": true
+  },
+  "trait": "Use review_uncommitted to review unstaged/staged git changes before committing. Use review_branch to compare the current branch against main/master/develop. Use review_commit to review a specific commit by hash. Use git_diff to get a raw unified diff. Use generate_commit_message to create conventional commit messages for staged changes. These tools help with code quality, catching bugs, and maintaining clean git history."
+}

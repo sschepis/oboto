@@ -49,7 +49,7 @@ const FALLBACK_MODELS = {
     'claude-sonnet-4-6': {
         provider: 'anthropic',
         contextWindow: 200000,
-        maxOutputTokens: 64000,
+        maxOutputTokens: 128000,
         supportsToolCalling: true,
         supportsStreaming: true,
         supportsReasoningEffort: false,
@@ -59,7 +59,7 @@ const FALLBACK_MODELS = {
     'claude-opus-4-6': {
         provider: 'anthropic',
         contextWindow: 200000,
-        maxOutputTokens: 32000,
+        maxOutputTokens: 128000,
         supportsToolCalling: true,
         supportsStreaming: true,
         supportsReasoningEffort: false,
@@ -77,7 +77,7 @@ const ANTHROPIC_KNOWN_MODELS = {
     'claude-sonnet-4-6': {
         provider: 'anthropic',
         contextWindow: 200000,
-        maxOutputTokens: 64000,
+        maxOutputTokens: 128000,
         supportsToolCalling: true,
         supportsStreaming: true,
         supportsReasoningEffort: false,
@@ -89,7 +89,7 @@ const ANTHROPIC_KNOWN_MODELS = {
     'claude-opus-4-6': {
         provider: 'anthropic',
         contextWindow: 200000,
-        maxOutputTokens: 32000,
+        maxOutputTokens: 128000,
         supportsToolCalling: true,
         supportsStreaming: true,
         supportsReasoningEffort: false,

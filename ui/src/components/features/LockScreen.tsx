@@ -30,7 +30,7 @@ const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
              <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full animate-pulse"></div>
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-black uppercase tracking-[0.3em] text-white leading-none">Substrate Locked</h2>
+            <h2 className="text-xl font-black uppercase tracking-[0.3em] text-zinc-100 leading-none">Substrate Locked</h2>
             <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest leading-relaxed">Singularity Protocol v7.8<br/>Verification Required</p>
           </div>
           <form onSubmit={handleUnlock} className="space-y-4">

@@ -17,7 +17,7 @@ export default function CloudStep({ config, onChange, onNext, onBack }: CloudSte
         <div className="inline-flex p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 mb-4">
           <Cloud size={28} className="text-indigo-400" />
         </div>
-        <h2 className="text-xl font-bold text-white mb-2">Oboto Cloud</h2>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">Oboto Cloud</h2>
         <p className="text-sm text-zinc-400 max-w-md mx-auto">
           Connect to Oboto Cloud for workspace sync, team collaboration, cloud AI agents, and metered AI access without your own API keys.
         </p>
@@ -108,7 +108,7 @@ export default function CloudStep({ config, onChange, onNext, onBack }: CloudSte
       <div className="flex justify-between pt-4">
         <button
           onClick={onBack}
-          className="px-4 py-2 text-xs text-zinc-400 hover:text-white transition-colors"
+          className="px-4 py-2 text-xs text-zinc-400 hover:text-zinc-100 transition-colors"
         >
           ← Back
         </button>

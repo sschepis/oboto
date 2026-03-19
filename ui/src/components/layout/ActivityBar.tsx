@@ -116,7 +116,7 @@ export default function ActivityBar({ items, activeItemId, onItemClick }: Activi
               relative flex items-center justify-center w-[40px] h-[40px] rounded-md
               transition-all duration-150 group
               ${isActive
-                ? 'text-white bg-zinc-700/50'
+                ? 'text-zinc-100 bg-zinc-700/50'
                 : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
               }
             `}

@@ -268,7 +268,7 @@ const FeatureCard: React.FC<{ feature: StructuredDevFeature; index: number; onCl
             <span className="text-[9px] font-mono text-zinc-600 group-hover/card:text-indigo-400 transition-colors">{feature.id}</span>
             <span className={`text-[8px] font-bold ${priorityColor}`}>●</span>
           </div>
-          <p className={`text-[11px] font-semibold leading-tight ${isComplete ? 'text-emerald-300/60 line-through' : 'text-zinc-300 group-hover/card:text-white transition-colors'}`}>
+          <p className={`text-[11px] font-semibold leading-tight ${isComplete ? 'text-emerald-300/60 line-through' : 'text-zinc-300 group-hover/card:text-zinc-100 transition-colors'}`}>
             {feature.name}
           </p>
           <span className={`inline-block text-[8px] font-bold px-1.5 py-0.5 rounded border ${phaseColor}`}>

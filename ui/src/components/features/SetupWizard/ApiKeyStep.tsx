@@ -54,7 +54,7 @@ export default function ApiKeyStep({ config, onChange, onNext, onBack, validateA
   return (
     <div className="flex flex-col h-full animate-fade-in-up">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-white mb-2">Configure Authentication</h2>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">Configure Authentication</h2>
         <p className="text-zinc-400 text-sm">
           Your API key is encrypted with AES-256-GCM and stored locally in <code>.secrets.enc</code>. 
           It never leaves your machine except to talk to the AI provider.

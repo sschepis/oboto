@@ -20,7 +20,7 @@ export default function ReviewStep({ config, onFinish, onBack }: ReviewStepProps
   return (
     <div className="flex flex-col animate-fade-in-up">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-white mb-2">Review & Finish</h2>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">Review & Finish</h2>
         <p className="text-zinc-400 text-sm">
           You're all set! Review your configuration below.
         </p>

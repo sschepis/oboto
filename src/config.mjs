@@ -42,7 +42,7 @@ export const config = {
     provider: _detectedProvider, // Auto-detected from model name. Options: 'lmstudio', 'openai', 'gemini', 'anthropic'
     endpoint: process.env.AI_ENDPOINT || 'http://localhost:1234/v1/chat/completions',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
-    maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096', 10),
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS || '16384', 10),
     contextWindowSize: parseInt(process.env.AI_CONTEXT_WINDOW || '128000', 10),
     maxTurns: parseInt(process.env.AI_MAX_TURNS || '100', 10),
     // Per-provider configuration

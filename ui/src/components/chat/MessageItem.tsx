@@ -104,6 +104,12 @@ function extractToolCalls(content: string): { toolCalls: ParsedToolCall[]; clean
     cleanContent = content.replace(toolCallRegex, '').trim();
   }
 
+  // Strip <tool_result>...</tool_result> blocks that the AI model sometimes echoes
+  // back in its text response.  These contain raw tool output (e.g. full JSX source
+  // code) and should never be rendered as visible message text — the structured
+  // ToolCall component already displays tool results.
+  cleanContent = cleanContent.replace(/<tool_result>\s*[\s\S]*?\s*<\/tool_result>/g, '').trim();
+
   return { toolCalls, cleanContent };
 }
 
@@ -123,10 +129,10 @@ function renderUserContentWithAttachments(content: string) {
     parts.push(
       <span
         key={`a-${match.index}`}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[12px] font-medium text-white/90 mx-0.5 my-0.5 align-middle"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[12px] font-medium text-zinc-100/90 mx-0.5 my-0.5 align-middle"
         title={`Attached file: ${filename}`}
       >
-        <Paperclip size={11} className="text-white/60" />
+        <Paperclip size={11} className="text-zinc-100/60" />
         {getAttachmentIcon(filename)}
         {filename}
       </span>
@@ -246,13 +252,17 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel =
 
         {/* Text messages — rendered as Markdown */}
         {message.type === 'text' && !editing && !isAutoFixRequest && (
-          <div className={`
-            p-5 rounded-2xl leading-relaxed text-[14px] border
-            transition-all duration-300
-            ${isUser
-              ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm border-indigo-500/30 shadow-lg shadow-indigo-500/10'
-              : 'bg-[#111111] text-zinc-200 rounded-tl-sm border-zinc-800/40 shadow-lg shadow-black/20 hover:border-zinc-700/50'}
-          `}>
+          <div
+            className={`
+              p-5 rounded-2xl leading-relaxed text-[14px] border
+              transition-all duration-300
+              ${isUser
+                ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm border-indigo-500/30 shadow-lg shadow-indigo-500/10'
+                  + (actions?.onEditAndRerun ? ' cursor-pointer hover:from-indigo-500 hover:to-indigo-600' : '')
+                : 'bg-[#111111] text-zinc-200 rounded-tl-sm border-zinc-800/40 shadow-lg shadow-black/20 hover:border-zinc-700/50'}
+            `}
+            {...(isUser && actions?.onEditAndRerun ? { onClick: startEdit, title: 'Click to edit' } : {})}
+          >
             {isUser ? (
               renderUserContentWithAttachments(message.content || '')
             ) : (

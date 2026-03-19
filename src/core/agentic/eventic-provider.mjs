@@ -39,28 +39,27 @@ export class EventicProvider extends AgenticProvider {
      *
      * @param {string} input
      * @param {Object} options
-     * @returns {Promise<string>}
+     * @returns {Promise<{response: string, tokenUsage: Object|null}>}
      */
     async run(input, options = {}) {
-        const { engine, aiProvider } = this._deps;
+        return this._deduplicatedRun(input, options, async () => {
+            const { engine } = this._deps;
 
-        const originalModel = aiProvider.model;
-        if (options.model) {
-            aiProvider.model = options.model;
-        }
-
-        try {
             const result = await engine.dispatch('AGENT_START', {
                 input,
                 signal: options.signal,
                 stream: options.stream,
-                onChunk: options.onChunk
+                onChunk: options.onChunk,
+                // Pass model via payload so the plugin can use per-request
+                // model override via options threading (no shared state mutation)
+                model: options.model || undefined,
             });
             const response = result?.response || '';
-            return response.trim() ? response : 'No response generated.';
-        } finally {
-            aiProvider.model = originalModel;
-        }
+            return {
+                response: response.trim() ? response : 'No response generated.',
+                tokenUsage: result?.tokenUsage || null,
+            };
+        });
     }
 
     async dispose() {

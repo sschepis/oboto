@@ -505,7 +505,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onContextMenu={(e) => handleSurfaceContextMenu(e, surface)}
                     className="
                       flex items-center gap-2 px-2.5 py-2 text-[11px] text-zinc-300
-                      hover:text-white hover:bg-indigo-500/5 rounded-lg
+                      hover:text-zinc-100 hover:bg-indigo-500/5 rounded-lg
                       transition-all duration-200 group text-left
                       border border-transparent hover:border-indigo-500/10
                     "
@@ -539,7 +539,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             onContextMenu={(e) => handleSurfaceContextMenu(e, surface)}
                             className="
                               flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-zinc-400
-                              hover:text-white hover:bg-zinc-800/40 rounded-lg
+                              hover:text-zinc-100 hover:bg-zinc-800/40 rounded-lg
                               transition-all duration-200 group text-left
                             "
                           >

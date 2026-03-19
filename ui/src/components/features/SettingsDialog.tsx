@@ -35,6 +35,8 @@ export interface AgentSettings {
   secretsStatus?: Record<string, { isConfigured: boolean; source: string }>;
   /** List of provider keys that are currently enabled (e.g. ['openai', 'gemini']) */
   enabledProviders?: string[];
+  /** Whether the user is allowed to switch agentic providers (workspace setting) */
+  allowAgentProviderSelection?: boolean;
 }
 
 interface SettingsDialogProps {
@@ -217,7 +219,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   onClick={() => setAISubTab('config')}
                   className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
                     aiSubTab === 'config'
-                      ? 'bg-zinc-800 text-white shadow-sm'
+                      ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                       : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
@@ -227,22 +229,24 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   onClick={() => setAISubTab('routing')}
                   className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
                     aiSubTab === 'routing'
-                      ? 'bg-zinc-800 text-white shadow-sm'
+                      ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                       : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
                   Model Routing
                 </button>
-                <button
-                  onClick={() => setAISubTab('agentic')}
-                  className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
-                    aiSubTab === 'agentic'
-                      ? 'bg-zinc-800 text-white shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  Agent Mode
-                </button>
+                {settings.allowAgentProviderSelection && (
+                  <button
+                    onClick={() => setAISubTab('agentic')}
+                    className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${
+                      aiSubTab === 'agentic'
+                        ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    Agent Mode
+                  </button>
+                )}
               </div>
 
               {aiSubTab === 'config' ? (
@@ -264,13 +268,13 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   onChange={handleRoutingChange}
                   providers={settings.ai?.providers as Record<AIProviderType, ProviderConfig> | undefined}
                 />
-              ) : (
+              ) : settings.allowAgentProviderSelection ? (
                 <AgenticProviderSettings
                   providers={agenticProviders || []}
                   activeId={activeAgenticProvider || null}
                   onSwitch={(id) => onSwitchAgenticProvider?.(id)}
                 />
-              )}
+              ) : null}
             </div>
           </div>
         );
@@ -387,8 +391,8 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                                     onClick={() => setSaveScope(scope)}
                                     className={`
                                       px-3 py-1 text-[10px] font-medium rounded-md transition-all duration-200
-                                      ${saveScope === scope 
-                                        ? 'bg-zinc-800 text-white shadow-sm' 
+                                      ${saveScope === scope
+                                        ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                                         : 'text-zinc-500 hover:text-zinc-300'}
                                     `}
                                 >
@@ -495,8 +499,8 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                 className={`
                   w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium
                   transition-all duration-200 relative
-                  ${activeTab === tab.id 
-                    ? 'bg-zinc-800/60 text-white shadow-sm' 
+                  ${activeTab === tab.id
+                    ? 'bg-zinc-800/60 text-zinc-100 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30'}
                 `}
               >
@@ -536,7 +540,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({
                     onClick={onClose} 
                     className="
                       px-4 py-2 rounded-lg text-xs font-bold text-zinc-400
-                      hover:text-white hover:bg-zinc-800/50
+                      hover:text-zinc-100 hover:bg-zinc-800/50
                       transition-all duration-200 active:scale-95
                     "
                 >

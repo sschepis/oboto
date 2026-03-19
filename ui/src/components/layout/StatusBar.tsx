@@ -43,6 +43,8 @@ interface StatusBarProps {
   agenticProviders?: AgenticProviderInfo[];
   activeAgenticProvider?: string | null;
   onSwitchAgenticProvider?: (providerId: string) => void;
+  /** Whether the user is allowed to switch agentic providers (workspace setting) */
+  allowAgentProviderSelection?: boolean;
 }
 
 /** VS Code-style status bar pinned to the bottom of the window. */
@@ -67,6 +69,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
   agenticProviders = [],
   activeAgenticProvider = null,
   onSwitchAgenticProvider,
+  allowAgentProviderSelection = false,
 }) => {
   const gitBranch = projectStatus?.gitBranch;
   const projectType = projectStatus?.projectType;
@@ -267,7 +270,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
         <CloudSyncIndicator />
 
         {/* Agentic provider switcher */}
-        {onSwitchAgenticProvider && agenticProviders.length > 0 && (
+        {allowAgentProviderSelection && onSwitchAgenticProvider && agenticProviders.length > 0 && (
           <div className="relative">
             <button
               ref={providerButtonRef}

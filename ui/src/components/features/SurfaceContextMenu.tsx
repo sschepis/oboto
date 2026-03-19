@@ -143,7 +143,7 @@ const SurfaceContextMenu: React.FC<SurfaceContextMenuProps> = ({
 
           <button
             onClick={() => setIsRenaming(true)}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors text-left"
           >
             <Pencil size={13} className="text-zinc-500" />
             <span>Rename</span>
@@ -151,7 +151,7 @@ const SurfaceContextMenu: React.FC<SurfaceContextMenuProps> = ({
 
           <button
             onClick={handleDuplicate}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors text-left"
           >
             <Copy size={13} className="text-zinc-500" />
             <span>Duplicate</span>
@@ -164,7 +164,7 @@ const SurfaceContextMenu: React.FC<SurfaceContextMenuProps> = ({
             className={`flex items-center gap-2.5 w-full px-3 py-2 text-[11px] transition-colors text-left ${
               confirmDelete
                 ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20'
-                : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
             }`}
           >
             <Trash2 size={13} className={confirmDelete ? 'text-red-400' : 'text-zinc-500'} />

@@ -10,6 +10,17 @@ import { z } from 'zod';
  */
 export class ToolBridge {
     /**
+     * Cache for JSON Schema → Zod conversions.  Keyed by a deterministic
+     * JSON.stringify of the input schema so identical schemas reuse the
+     * same Zod type across calls and across tools.
+     * @type {Map<string, import('zod').ZodType>}
+     */
+    static _zodCache = new Map();
+
+    /** Maximum number of entries in the Zod schema cache before FIFO eviction. */
+    static _zodCacheMaxSize = 500;
+
+    /**
      * @param {object} toolExecutor — ai-man ToolExecutor instance
      * @param {object} context — execution context passed to toolExecutor.executeTool()
      *                           (e.g. { workingDir, ws, ... })
@@ -20,18 +31,25 @@ export class ToolBridge {
     }
 
     /**
-     * Convert all tools from the ToolExecutor into lmscript ToolDefinition[] format.
+     * Convert tools from the ToolExecutor into lmscript ToolDefinition[] format.
      *
-     * Each ToolDefinition has:
-     *   - name: string
-     *   - description: string
-     *   - parameters: z.ZodType (converted from JSON Schema)
-     *   - execute: async (args) => any
-     *
+     * @param {Object} [options]
+     * @param {Set<string>|Array<string>} [options.filter] — if provided, only convert
+     *        tools whose names are in this set/array. Reduces conversion overhead
+     *        when only a subset of tools is needed.
      * @returns {Array<{name: string, description: string, parameters: z.ZodType, execute: (args: any) => Promise<any>}>}
      */
-    toLmscriptTools() {
-        const openaiTools = this._toolExecutor.getAllToolDefinitions();
+    toLmscriptTools(options = {}) {
+        let openaiTools = this._toolExecutor.getAllToolDefinitions();
+
+        // Filter to requested tool names if provided (#51)
+        if (options.filter) {
+            const filterSet = options.filter instanceof Set
+                ? options.filter
+                : new Set(options.filter);
+            openaiTools = openaiTools.filter(t => filterSet.has(t.function?.name));
+        }
+
         return openaiTools.map((tool) => {
             const fnDef = tool.function;
             const toolName = fnDef.name;
@@ -90,50 +108,71 @@ export class ToolBridge {
             return z.object({}).passthrough();
         }
 
+        // Check cache for previously converted schemas (#50)
+        const cacheKey = JSON.stringify(jsonSchema);
+        const cached = ToolBridge._zodCache.get(cacheKey);
+        if (cached) return cached;
+
         const schemaType = jsonSchema.type;
+        let result;
 
         // Handle union types: type: ['string', 'null']
         if (Array.isArray(schemaType)) {
             const members = schemaType.map((t) =>
                 ToolBridge.jsonSchemaToZod({ ...jsonSchema, type: t })
             );
-            if (members.length === 0) return z.any();
-            if (members.length === 1) return members[0];
-            return z.union(/** @type {[z.ZodType, z.ZodType, ...z.ZodType[]]} */ (members));
+            if (members.length === 0) result = z.any();
+            else if (members.length === 1) result = members[0];
+            else result = z.union(/** @type {[z.ZodType, z.ZodType, ...z.ZodType[]]} */ (members));
+        } else {
+            switch (schemaType) {
+                case 'object':
+                    result = ToolBridge._convertObjectSchema(jsonSchema);
+                    break;
+
+                case 'string':
+                    result = ToolBridge._convertStringSchema(jsonSchema);
+                    break;
+
+                case 'number':
+                case 'integer': {
+                    let schema = z.number();
+                    if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
+                    result = schema;
+                    break;
+                }
+
+                case 'boolean': {
+                    let schema = z.boolean();
+                    if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
+                    result = schema;
+                    break;
+                }
+
+                case 'array':
+                    result = ToolBridge._convertArraySchema(jsonSchema);
+                    break;
+
+                case 'null': {
+                    let schema = z.null();
+                    if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
+                    result = schema;
+                    break;
+                }
+
+                default:
+                    result = z.any();
+                    break;
+            }
         }
 
-        switch (schemaType) {
-            case 'object':
-                return ToolBridge._convertObjectSchema(jsonSchema);
-
-            case 'string':
-                return ToolBridge._convertStringSchema(jsonSchema);
-
-            case 'number':
-            case 'integer': {
-                let schema = z.number();
-                if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
-                return schema;
-            }
-
-            case 'boolean': {
-                let schema = z.boolean();
-                if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
-                return schema;
-            }
-
-            case 'array':
-                return ToolBridge._convertArraySchema(jsonSchema);
-
-            case 'null': {
-                let schema = z.null();
-                if (jsonSchema.description) schema = schema.describe(jsonSchema.description);
-                return schema;
-            }
-
-            default:
-                return z.any();
+        // Store in cache for reuse (#50) with FIFO eviction
+        if (ToolBridge._zodCache.size >= ToolBridge._zodCacheMaxSize) {
+            const firstKey = ToolBridge._zodCache.keys().next().value;
+            ToolBridge._zodCache.delete(firstKey);
         }
+        ToolBridge._zodCache.set(cacheKey, result);
+        return result;
     }
 
     /**

@@ -146,14 +146,13 @@ export class ConsoleStyler {
         const styledBanner = theme.primary(banner);
         
         const infoBox = boxen(
-            `${this.icons.system}  Working Directory: ${chalk.cyan(workingDir)}\n` +
+            `${this.icons.system}  Working Directory: ${chalk.hex('#0277bd')(workingDir)}\n` +
             `${this.icons.ai} Theme: ${chalk.magenta(this.currentTheme)}`,
             {
                 padding: 0,
                 margin: 1,
                 borderStyle: 'none',
-                borderColor: 'cyan',
-                backgroundColor: 'black'
+                borderColor: 'cyan'
             }
         );
         console.clear();
@@ -166,7 +165,7 @@ export class ConsoleStyler {
     formatMessage(type, content, options = {}) {
         const theme = this.getTheme();
         const icon = this.icons[type] || this.icons.info;
-        const timestamp = options.timestamp ? chalk.gray(`[${new Date().toLocaleTimeString()}] `) : '';
+        const timestamp = options.timestamp ? chalk.hex('#616161')(`[${new Date().toLocaleTimeString()}] `) : '';
         
         let colorFunc;
         let label = '';
@@ -298,14 +297,14 @@ export class ConsoleStyler {
     getBoxColor(type) {
         const colorMap = {
             error: 'red',
-            warning: 'yellow',
+            warning: '#e65100',
             success: 'green',
             info: 'blue',
-            system: 'gray',
-            tools: 'cyan',
+            system: '#616161',
+            tools: '#0277bd',
             todo: 'magenta',
             workspace: 'blue',
-            quality: 'yellow',
+            quality: '#e65100',
             cloud: '#0077b6',
             plugin: '#6c5ce7',
             agentic: '#e17055',
@@ -313,7 +312,7 @@ export class ConsoleStyler {
             security: '#fdcb6e',
             migration: '#636e72'
         };
-        return colorMap[type] || 'cyan';
+        return colorMap[type] || '#0277bd';
     }
 
     // Enhanced progress display with spinners
@@ -322,7 +321,7 @@ export class ConsoleStyler {
         const spinner = ora({
             text: theme.progress(text),
             spinner: type,
-            color: 'cyan'
+            color: 'blue'
         });
         return spinner;
     }
@@ -381,7 +380,7 @@ export class ConsoleStyler {
         output += '\n\n';
 
         items.forEach((item, index) => {
-            const number = chalk.gray(`${index + 1}.`);
+            const number = chalk.hex('#616161')(`${index + 1}.`);
             let statusIcon;
             let statusColor;
 
@@ -400,7 +399,7 @@ export class ConsoleStyler {
             }
 
             const statusText = statusColor(`${statusIcon} ${item.step}`);
-            const result = item.result ? chalk.gray(` - ${item.result}`) : '';
+            const result = item.result ? chalk.hex('#616161')(` - ${item.result}`) : '';
             
             output += `${number} ${statusText}${result}\n`;
         });
@@ -414,13 +413,12 @@ export class ConsoleStyler {
         const errorBox = boxen(
             `${this.icons.error} ${theme.error('ERROR')}\n\n` +
             `${chalk.red(error.message)}\n` +
-            (error.code ? `\nCode: ${chalk.yellow(error.code)}` : '') +
+            (error.code ? `\nCode: ${chalk.hex('#e65100')(error.code)}` : '') +
             (context.suggestions ? `\n\n${this.icons.info} Suggestions:\n${context.suggestions.map(s => `  • ${s}`).join('\n')}` : ''),
             {
                 padding: 1,
                 borderStyle: 'double',
-                borderColor: 'red',
-                backgroundColor: 'black'
+                borderColor: 'red'
             }
         );
 
@@ -522,7 +520,7 @@ export class ConsoleStyler {
             
             // Links (show URL)
             .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) =>
-                `${theme.info(text)} ${chalk.gray(`(${url})`)}`
+                `${theme.info(text)} ${chalk.hex('#616161')(`(${url})`)}`
             )
             
             // Checkboxes
@@ -536,7 +534,7 @@ export class ConsoleStyler {
                 const code = lines.slice(1, -1).join('\n');
                 
                 return boxen(
-                    chalk.gray(code),
+                    chalk.hex('#616161')(code),
                     {
                         padding: 1,
                         borderStyle: 'round',

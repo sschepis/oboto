@@ -20,7 +20,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({ request,
             <AlertTriangle className="w-5 h-5 text-red-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">Security Confirmation</h3>
+            <h3 className="text-lg font-semibold text-zinc-100">Security Confirmation</h3>
             <p className="text-xs text-red-300">External Access Request</p>
           </div>
         </div>
@@ -62,7 +62,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({ request,
         <div className="px-6 py-4 bg-gray-950/50 flex justify-end gap-3">
           <button
             onClick={onDeny}
-            className="px-4 py-2 rounded text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+            className="px-4 py-2 rounded text-sm font-medium text-gray-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
           >
             <X className="w-4 h-4" />
             Deny

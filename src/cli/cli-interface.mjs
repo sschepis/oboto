@@ -67,6 +67,17 @@ export class CLIInterface {
                         prompt();
                         return;
                     }
+
+                    // If agent is busy, treat input as guidance injection
+                    if (assistant && typeof assistant.isBusy === 'function' && assistant.isBusy()) {
+                        const trimmed = userInput.trim();
+                        if (trimmed && typeof assistant.queueChimeIn === 'function') {
+                            assistant.queueChimeIn(trimmed, 'cli-inline');
+                            consoleStyler.log('info', '↳ Guidance queued (will be injected at next iteration)');
+                        }
+                        prompt();
+                        return;
+                    }
                     
                     try {
                         // Using streaming if available

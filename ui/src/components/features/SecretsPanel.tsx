@@ -187,7 +187,7 @@ function AddCustomSecret({ onSet }: { onSet: (name: string, value: string, categ
     <div className="px-4 py-4 rounded-xl border border-indigo-500/15 bg-indigo-500/5 space-y-3 animate-fade-in">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">New Custom Secret</span>
-        <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white transition-colors duration-150 active:scale-90">
+        <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-100 transition-colors duration-150 active:scale-90">
           <X size={14} />
         </button>
       </div>
@@ -224,7 +224,7 @@ function AddCustomSecret({ onSet }: { onSet: (name: string, value: string, categ
       <div className="flex justify-end gap-2">
         <button
           onClick={() => setOpen(false)}
-          className="px-3 py-2 rounded-lg text-xs font-bold text-zinc-400 hover:text-white transition-colors duration-150"
+          className="px-3 py-2 rounded-lg text-xs font-bold text-zinc-400 hover:text-zinc-100 transition-colors duration-150"
         >
           Cancel
         </button>
@@ -300,7 +300,7 @@ const SecretsPanel: React.FC<SecretsPanelProps> = ({ isOpen, onClose }) => {
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800/60 transition-all duration-150 active:scale-90"
+              className="p-2 rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800/60 transition-all duration-150 active:scale-90"
             >
               <X size={16} />
             </button>

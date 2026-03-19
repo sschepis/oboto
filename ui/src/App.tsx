@@ -690,6 +690,7 @@ function App() {
           agenticProviders={agenticProviders}
           activeAgenticProvider={activeAgenticProvider}
           onSwitchAgenticProvider={switchAgenticProvider}
+          allowAgentProviderSelection={settings?.allowAgentProviderSelection}
         />
       </div>}
 

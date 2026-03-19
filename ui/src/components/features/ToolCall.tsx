@@ -3,6 +3,7 @@ import { Wrench, ChevronRight, ChevronDown } from 'lucide-react';
 import BrowserPreview from './BrowserPreview';
 import TerminalToolCall from './TerminalToolCall';
 import EmbeddedObject from './EmbeddedObject';
+import MarkdownRenderer from '../chat/MarkdownRenderer';
 
 interface ToolCallProps {
   toolName?: string;
@@ -75,6 +76,18 @@ function getSummary(toolName: string | undefined, data: unknown, isResult: boole
   } catch {
     return truncate(String(data), 60);
   }
+}
+
+/**
+ * Known visualization code-fence languages that should be rendered as rich
+ * widgets via MarkdownRenderer instead of plain text.
+ */
+const VIZ_FENCE_LANGUAGES = ['canvasviz', 'tradingchart', 'mathanim', 'chart', 'json:chart'];
+
+/** Check if a tool result string contains a visualization code fence */
+function containsVizCodeFence(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  return VIZ_FENCE_LANGUAGES.some(lang => text.includes('```' + lang));
 }
 
 const VALID_EMBED_TYPES = ['youtube', 'video', 'audio', 'iframe', 'map', 'tweet', 'codepen', 'spotify', 'figma', 'gist', 'loom', 'generic'] as const;
@@ -225,26 +238,35 @@ const ToolCall: React.FC<ToolCallProps> = ({ toolName, args, result }) => {
           ) : (
               result !== undefined && result !== null && (
               <div className="w-full">
-                {/* Output summary bar */}
-                <div
-                  className={`flex items-center gap-2 px-4 py-2.5 w-full ${resultIsLong ? 'cursor-pointer hover:bg-emerald-500/5' : ''} transition-colors`}
-                  onClick={() => resultIsLong && setResultExpanded(e => !e)}
-                >
-                  {resultIsLong && (
-                    <span className="text-zinc-500 shrink-0 transition-transform duration-200">
-                      {resultExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    </span>
-                  )}
-                  <span className="text-[11px] font-medium text-emerald-400 truncate">
-                    {resultPreview}
-                  </span>
-                </div>
-                
-                {/* Expanded output view */}
-                {resultExpanded && (
-                  <pre className="mx-4 mb-4 text-[11px] font-mono leading-relaxed p-3 rounded-lg border whitespace-pre-wrap break-words transition-all duration-300 animate-fade-in overflow-auto max-h-80 bg-emerald-500/5 text-emerald-400 border-emerald-500/15">
-                    {resultPretty}
-                  </pre>
+                {/* Visualization code fences → render inline via MarkdownRenderer */}
+                {containsVizCodeFence(resultInline) ? (
+                  <div className="p-4">
+                    <MarkdownRenderer content={resultInline} />
+                  </div>
+                ) : (
+                  <>
+                    {/* Output summary bar */}
+                    <div
+                      className={`flex items-center gap-2 px-4 py-2.5 w-full ${resultIsLong ? 'cursor-pointer hover:bg-emerald-500/5' : ''} transition-colors`}
+                      onClick={() => resultIsLong && setResultExpanded(e => !e)}
+                    >
+                      {resultIsLong && (
+                        <span className="text-zinc-500 shrink-0 transition-transform duration-200">
+                          {resultExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </span>
+                      )}
+                      <span className="text-[11px] font-medium text-emerald-400 truncate">
+                        {resultPreview}
+                      </span>
+                    </div>
+                    
+                    {/* Expanded output view */}
+                    {resultExpanded && (
+                      <pre className="mx-4 mb-4 text-[11px] font-mono leading-relaxed p-3 rounded-lg border whitespace-pre-wrap break-words transition-all duration-300 animate-fade-in overflow-auto max-h-80 bg-emerald-500/5 text-emerald-400 border-emerald-500/15">
+                        {resultPretty}
+                      </pre>
+                    )}
+                  </>
                 )}
               </div>
               )

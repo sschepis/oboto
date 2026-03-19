@@ -9,6 +9,7 @@ import HtmlSandbox from '../features/HtmlSandbox';
 import { ChartBlock } from './ChartBlock';
 import { MathAnimBlock } from './MathAnimBlock';
 import { TradingChartBlock } from './TradingChartBlock';
+import { CanvasVizBlock } from './CanvasVizBlock';
 import { Copy, Check } from 'lucide-react';
 import { resolveBackendUrl } from '../../utils/resolveBackendUrl';
 
@@ -103,6 +104,11 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({ content }) => 
           // Trading chart blocks
           if (lang === 'tradingchart') {
              return <TradingChartBlock code={codeString} />;
+          }
+
+          // Canvas visualization blocks
+          if (lang === 'canvasviz') {
+             return <CanvasVizBlock code={codeString} />;
           }
 
           return (

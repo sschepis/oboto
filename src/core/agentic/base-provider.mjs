@@ -8,6 +8,8 @@
  * @module src/core/agentic/base-provider
  */
 
+import { RequestDeduplicator } from './request-deduplicator.mjs';
+
 export class AgenticProvider {
     /**
      * Unique machine-readable identifier for this provider.
@@ -31,6 +33,11 @@ export class AgenticProvider {
      */
     get description() {
         return '';
+    }
+
+    constructor() {
+        /** @type {RequestDeduplicator} */
+        this._deduplicator = new RequestDeduplicator();
     }
 
     /**
@@ -61,12 +68,37 @@ export class AgenticProvider {
      * @param {boolean}     [options.stream]
      * @param {Function}    [options.onChunk]
      * @param {string}      [options.model]
-     * @returns {Promise<string|{response: string, streamed: boolean}>}
-     *   May return a plain string OR an object with a `streamed` flag.
-     *   When `streamed` is true the caller must NOT re-emit the response.
+     * @returns {Promise<{response: string, streamed?: boolean, tokenUsage?: Object, metadata?: Object}>}
+     *   Returns an object with at minimum `response`. Optional fields:
+     *   `streamed` (true → caller must NOT re-emit), `tokenUsage` (token counts),
+     *   `metadata` (provider-specific diagnostics).
      */
     async run(input, options = {}) {
         throw new Error('AgenticProvider.run() must be overridden');
+    }
+
+    /**
+     * Wrap a run function with request deduplication.
+     *
+     * Streaming requests (those with `onChunk` or `onToken` callbacks) are
+     * excluded — each streaming caller needs its own stream.  Non-streaming
+     * identical concurrent requests share a single Promise.
+     *
+     * @param {string} input - User input
+     * @param {Object} options - Request options (model, signal, onChunk, etc.)
+     * @param {Function} runFn - Async function that performs the actual run
+     * @returns {Promise<any>}
+     * @protected
+     */
+    async _deduplicatedRun(input, options, runFn) {
+        // Streaming requests must NOT be deduplicated — each caller has its
+        // own onChunk/onToken callback and potentially its own WebSocket.
+        if (options.stream || options.onChunk || options.onToken) {
+            return runFn();
+        }
+
+        const key = this._deduplicator.makeKey(input, options.model);
+        return this._deduplicator.dedupe(key, runFn);
     }
 
     /**
@@ -81,10 +113,21 @@ export class AgenticProvider {
     }
 
     /**
+     * Check if this provider is healthy and ready to handle requests.
+     * Subclasses can override for provider-specific checks.
+     * @returns {Promise<{healthy: boolean, reason?: string}>}
+     */
+    async healthCheck() {
+        if (!this._deps) return { healthy: false, reason: 'Not initialized' };
+        return { healthy: true };
+    }
+
+    /**
      * Cleanup when switching away from this provider.
      * Override to release resources, remove event listeners, etc.
      */
     async dispose() {
+        this._deduplicator?.dispose();
         this._deps = null;
     }
 }

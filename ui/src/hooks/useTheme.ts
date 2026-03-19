@@ -20,6 +20,44 @@ const AI_THEME_STYLE_ID = 'ai-theme-vars';
 const AI_THEME_OVERRIDES_ID = 'ai-theme-overrides';
 
 /**
+ * Parse a hex color string to RGB components [0-255].
+ * Supports #RGB, #RRGGBB formats.
+ */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const h = hex.replace('#', '');
+  if (h.length === 3) {
+    return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
+  }
+  if (h.length === 6) {
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  return null;
+}
+
+/**
+ * Compute relative luminance of an sRGB color per WCAG 2.x.
+ * Returns a value between 0 (black) and 1 (white).
+ */
+function relativeLuminance(r: number, g: number, b: number): number {
+  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map(c =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  );
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Determine if a theme is "light" based on its surface color.
+ * Themes with high-luminance surface colors (> 0.4) are considered light.
+ */
+function isLightTheme(tokens: TokenMap): boolean {
+  const surface = tokens['color-surface'];
+  if (!surface) return false;
+  const rgb = hexToRgb(surface);
+  if (!rgb) return false;
+  return relativeLuminance(...rgb) > 0.4;
+}
+
+/**
  * CSS overrides that remap both Tailwind v4 palette CSS variables AND
  * hardcoded arbitrary color classes to dynamic theme tokens.
  *
@@ -266,6 +304,11 @@ export function useTheme() {
       root.style.backgroundColor = tokens['color-surface'];
       document.body.style.backgroundColor = tokens['color-surface'];
     }
+
+    // Dynamically set color-scheme based on theme luminance so browser
+    // form elements (scrollbars, native inputs, etc.) render correctly
+    const light = isLightTheme(tokens);
+    root.style.colorScheme = light ? 'light' : 'dark';
     if (tokens['color-text']) {
       root.style.color = tokens['color-text'];
     }
@@ -322,6 +365,7 @@ export function useTheme() {
     root.style.backgroundColor = '';
     root.style.color = '';
     root.style.fontFamily = '';
+    root.style.colorScheme = '';
     document.body.style.backgroundColor = '';
   }, []);
 

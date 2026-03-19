@@ -8,6 +8,7 @@ import type { SurfaceComponent } from '../../../hooks/useSurface';
 import { wsService } from '../../../services/wsService';
 import { compileComponent } from './surfaceCompiler';
 import { SurfaceErrorBoundary } from './SurfaceErrorBoundary';
+import { createSurfaceConsole } from './surfaceConsole';
 
 const MAX_COMP_FIX_ATTEMPTS = 3;
 const FIX_TIMEOUT_MS = 30_000; // Fallback timeout if server never responds
@@ -18,15 +19,27 @@ export const ComponentWrapper: React.FC<{
   surfaceId: string;
   useSurfaceLifecycle?: () => unknown;
 }> = ({ component, source, surfaceId, useSurfaceLifecycle }) => {
+  // Create a per-component console proxy that captures logs and sends them
+  // to the server for inclusion in read_surface agent context.
+  const surfaceConsole = useMemo(
+    () => createSurfaceConsole(surfaceId, component.name),
+    [surfaceId, component.name]
+  );
+
+  // Flush any buffered logs when component unmounts
+  useEffect(() => {
+    return () => { surfaceConsole._flush(); };
+  }, [surfaceConsole]);
+
   const { Component, error } = useMemo(() => {
     if (!source) return { Component: null, error: null };
     try {
-      const Comp = compileComponent(source, component.name, useSurfaceLifecycle);
+      const Comp = compileComponent(source, component.name, useSurfaceLifecycle, surfaceConsole);
       return { Component: Comp, error: null };
     } catch (err: unknown) {
       return { Component: null, error: (err as Error).message };
     }
-  }, [source, component.name, useSurfaceLifecycle]);
+  }, [source, component.name, useSurfaceLifecycle, surfaceConsole]);
 
   // Key fix state on source so it resets automatically when new code arrives.
   const [fixState, setFixState] = useState<{ source: string; attempts: number; fixing: boolean }>({

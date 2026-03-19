@@ -1,3 +1,5 @@
+import { SurfaceManager } from '../../surfaces/surface-manager.mjs';
+
 export class SurfaceHandlers {
     constructor(surfaceManager, eventBus) {
         this.surfaceManager = surfaceManager;
@@ -22,24 +24,62 @@ export class SurfaceHandlers {
     async updateSurfaceComponent(args) {
         try {
             const { surface_id, component_name, jsx_source, props, order } = args;
+
+            // ── Phase 1b: Static validation gate ──────────────────────────
+            const validation = SurfaceManager.validateJsxSource(jsx_source);
+            if (!validation.valid) {
+                const errorList = validation.errors.map((e, i) => `  ${i + 1}. ${e}`).join('\n');
+                let msg = `[error] update_surface_component: JSX validation FAILED for '${component_name}'. ` +
+                    `The component was NOT written to disk.\n\nErrors:\n${errorList}\n\n` +
+                    `Fix these errors and call update_surface_component again with corrected jsx_source.`;
+                if (validation.warnings.length > 0) {
+                    msg += `\n\nWarnings:\n${validation.warnings.map((w, i) => `  ${i + 1}. ${w}`).join('\n')}`;
+                }
+                return msg;
+            }
+
+            // Check if the component already existed (update vs create)
+            const existingSurface = await this.surfaceManager.getSurface(surface_id);
+            const wasExisting = existingSurface?.components?.some(c => c.name === component_name);
+
             const surface = await this.surfaceManager.updateComponent(surface_id, component_name, jsx_source, props, order);
             
+            // Clear any previous client errors for this component since we just wrote new code
+            if (this.surfaceManager.clearComponentError) {
+                await this.surfaceManager.clearComponentError(surface_id, component_name);
+            }
+
             // Get the updated component to return details
             const component = surface.components.find(c => c.name === component_name);
             
             if (this.eventBus) {
                 // Include layout so auto-placement changes are reflected on the client
-                this.eventBus.emit('surface:updated', { 
-                    surfaceId: surface_id, 
+                this.eventBus.emit('surface:updated', {
+                    surfaceId: surface_id,
                     component,
                     source: jsx_source,
                     layout: surface.layout
                 });
             }
 
-            return `Component '${component_name}' updated on surface '${surface.name}'.`;
+            // Return detailed context with verification instruction
+            const action = wasExisting ? 'Updated' : 'Created';
+            const sourceLen = jsx_source ? jsx_source.length : 0;
+            const compCount = surface.components.length;
+            let msg = `${action} component '${component_name}' on surface '${surface.name}' ` +
+                `(${compCount} total components, ${sourceLen} chars of JSX). ` +
+                `Component source written to disk and sent to client for rendering.`;
+            
+            if (validation.warnings.length > 0) {
+                msg += `\n\nWarnings:\n${validation.warnings.map((w, i) => `  ${i + 1}. ${w}`).join('\n')}`;
+            }
+
+            msg += `\n\n⚠️ IMPORTANT: The component has NOT been verified to render correctly yet. ` +
+                `You MUST call read_surface or capture_surface to verify it rendered without errors before reporting success to the user.`;
+
+            return msg;
         } catch (error) {
-            return `[error] update_surface_component: ${error.message}. Use: list_surfaces to verify surface_id.`;
+            return `[error] update_surface_component: ${error.message}. Use: list_surfaces to verify surface_id, or read_surface to check existing components.`;
         }
     }
 
@@ -318,6 +358,86 @@ export class SurfaceHandlers {
                 networkLogs: [],
                 error: error.message
             });
+        }
+    }
+
+    async readSurface(args) {
+        try {
+            const { surface_id } = args;
+            if (!surface_id || typeof surface_id !== 'string' || !surface_id.trim()) {
+                return '[error] read_surface: surface_id is required. Use: list_surfaces to see available surfaces.';
+            }
+            const surface = await this.surfaceManager.getSurface(surface_id);
+
+            if (!surface) {
+                return `[error] read_surface: surface '${surface_id}' not found. Use: list_surfaces to see available surfaces.`;
+            }
+
+            // Build output with metadata
+            const lines = [
+                `Surface: ${surface.name}`,
+                `ID: ${surface.id}`,
+                `Description: ${surface.description || '(none)'}`,
+                `Layout: ${typeof surface.layout === 'object' ? JSON.stringify(surface.layout) : (surface.layout || 'vertical')}`,
+                `Created: ${surface.createdAt}`,
+                `Updated: ${surface.updatedAt}`,
+                `Pinned: ${surface.pinned ? 'Yes' : 'No'}`,
+                `Theme: ${surface.theme || 'dark'}`,
+                `Components: ${surface.components.length}`,
+            ];
+
+            // ── Phase 3a: Surface-level client errors ─────────────────────
+            const clientErrors = surface._clientErrors;
+            if (clientErrors && Object.keys(clientErrors).length > 0) {
+                lines.push('');
+                lines.push('🚨 CLIENT-SIDE ERRORS (components that FAILED to render):');
+                for (const [compName, err] of Object.entries(clientErrors)) {
+                    lines.push(`  ❌ ${compName}: ${err.message} (at ${err.timestamp})`);
+                }
+                lines.push('');
+                lines.push('⚠️ You MUST fix these errors before the surface will work correctly.');
+                lines.push('Common causes: non-existent UI.* components, unbalanced JSX, import statements, missing export default function.');
+            }
+
+            // ── Client-side console logs (in-memory ring buffer) ─────────
+            const consoleLogs = this.surfaceManager.getConsoleLogs(surface_id, 30);
+            if (consoleLogs && consoleLogs.length > 0) {
+                lines.push('');
+                lines.push(`📋 CLIENT CONSOLE LOGS (last ${consoleLogs.length}):`);
+                for (const log of consoleLogs) {
+                    const time = new Date(log.timestamp).toISOString().slice(11, 23);
+                    const prefix = log.level === 'error' ? '❌' :
+                                   log.level === 'warn'  ? '⚠️' :
+                                   log.level === 'info'  ? 'ℹ️' : '  ';
+                    const argsStr = Array.isArray(log.args) ? log.args.join(' ') : String(log.args);
+                    lines.push(`  ${prefix} [${time}] [${log.component}] ${argsStr}`);
+                }
+            }
+
+            // Include each component's source code
+            for (const comp of surface.components) {
+                const source = await this.surfaceManager.getComponentSource(surface_id, comp.name);
+                lines.push('');
+                // Mark components with client errors
+                const hasError = clientErrors?.[comp.name];
+                const errorMarker = hasError ? ' ❌ RENDER ERROR' : '';
+                lines.push(`--- Component: ${comp.name} (order: ${comp.order})${errorMarker} ---`);
+                if (hasError) {
+                    lines.push(`CLIENT ERROR: ${hasError.message}`);
+                }
+                if (comp.props && Object.keys(comp.props).length > 0) {
+                    lines.push(`Props: ${JSON.stringify(comp.props)}`);
+                }
+                if (source) {
+                    lines.push(source);
+                } else {
+                    lines.push('(source not found)');
+                }
+            }
+
+            return lines.join('\n');
+        } catch (error) {
+            return `[error] read_surface: ${error.message}`;
         }
     }
 

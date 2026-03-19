@@ -17,7 +17,12 @@ interface MessageListProps {
 
 /** Minimal inline thinking indicator — detailed activity is in the AgentActivityPanel above the input */
 const ThinkingIndicator: React.FC<{ activityLog?: ActivityLogEntry[] }> = ({ activityLog = [] }) => {
-  const latestMessage = activityLog.length > 0 ? activityLog[activityLog.length - 1].message : 'Working...';
+  // Prefer descriptive status/agentic messages over raw info-level handler logs
+  // (e.g. "[ACTOR_CRITIC_LOOP] Turn 5/30") which are noisy and non-descriptive.
+  const statusLogs = activityLog.filter(l => l.level === 'status' || l.level === 'agentic');
+  const latestMessage = statusLogs.length > 0
+    ? statusLogs[statusLogs.length - 1].message
+    : (activityLog.length > 0 ? activityLog[activityLog.length - 1].message : 'Working...');
 
   return (
     <div className="max-w-7xl mx-auto w-full animate-fade-in-up">

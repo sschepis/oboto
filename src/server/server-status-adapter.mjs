@@ -7,8 +7,10 @@ export class ServerStatusAdapter extends ConsoleStatusAdapter {
     }
 
     log(level, message, metadata = {}) {
-        super.log(level, message, metadata); // Keep console output
-        this.eventBus.emitTyped('server:log', { level, message, metadata });
+        // super.log() calls consoleStyler.log() which forwards to the
+        // eventBus via the listener set in main.mjs — no need to emit
+        // server:log a second time here (that caused double-emission).
+        super.log(level, message, metadata);
     }
 
     onProgress(progress, status) {

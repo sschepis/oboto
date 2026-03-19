@@ -192,7 +192,7 @@ const PluginSettingsTab: React.FC<PluginSettingsTabProps> = ({
               w-full text-left px-3 py-2.5 rounded-lg text-[12px] font-medium
               transition-all duration-200 relative
               ${effectiveSelected === plugin.name
-                ? 'bg-zinc-800/60 text-white shadow-sm'
+                ? 'bg-zinc-800/60 text-zinc-100 shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30'}
             `}
           >

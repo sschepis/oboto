@@ -273,6 +273,61 @@ export function createAgentCommands(toolExecutor) {
                 return await invokeHandler(toolExecutor, 'list_custom_tools', {});
             },
         },
+
+        chimein: {
+            help: 'Inject guidance or commentary into the running agent task.',
+            usage: 'chimein <message>',
+            async execute(args, stdin) {
+                const message = args.join(' ').trim();
+                if (!message) {
+                    return {
+                        output: 'chimein: usage: chimein <your guidance message>\n' +
+                            '  Example: chimein Please also add unit tests for the new function',
+                        exitCode: 1,
+                    };
+                }
+                const facade = toolExecutor.assistant;
+                if (!facade || typeof facade.queueChimeIn !== 'function') {
+                    return { output: '[error] chimein: agent facade not available', exitCode: 1 };
+                }
+                const success = facade.queueChimeIn(message, 'cli');
+                if (success) {
+                    const busy = facade.isBusy();
+                    const queue = facade.getGuidanceQueue();
+                    const statusNote = busy
+                        ? 'Will be injected at the next agent loop iteration.'
+                        : 'Agent is not currently running — guidance will be applied when the next task starts.';
+                    return {
+                        output: `✓ Guidance queued. ${statusNote}\nQueue size: ${queue.length}`,
+                        exitCode: 0,
+                    };
+                }
+                return { output: '[error] chimein: failed to queue guidance. Message may be empty or invalid.', exitCode: 1 };
+            },
+        },
+
+        guidancequeue: {
+            help: 'View the current guidance injection queue.',
+            usage: 'guidancequeue',
+            async execute(args, stdin) {
+                const facade = toolExecutor.assistant;
+                if (!facade || typeof facade.getGuidanceQueue !== 'function') {
+                    return { output: '[error] guidancequeue: agent facade not available', exitCode: 1 };
+                }
+                const queue = facade.getGuidanceQueue();
+                if (queue.length === 0) {
+                    return { output: 'Guidance queue is empty.', exitCode: 0 };
+                }
+                const lines = queue.map((entry, i) => {
+                    const time = new Date(entry.timestamp).toLocaleTimeString();
+                    return `  ${i + 1}. [${time}] (${entry.source}) ${entry.message}`;
+                });
+                return {
+                    output: `Guidance queue (${queue.length} pending):\n${lines.join('\n')}`,
+                    exitCode: 0,
+                };
+            },
+        },
     };
 }
 

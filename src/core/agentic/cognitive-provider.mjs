@@ -27,8 +27,12 @@ import { emitStatus } from '../status-reporter.mjs';
 import { classifyInput, generatePlan, executePlan, synthesizeResponse } from './cognitive/task-planner.mjs';
 import { wsSend, wsSendUpdate } from '../../lib/ws-utils.mjs';
 
-// lmscript runtime components are loaded dynamically in initialize()
-// to avoid crashing the process if @sschepis/lmscript is not installed.
+// lmscript runtime — required dependency
+import { LScriptRuntime, MiddlewareManager, Logger } from '@sschepis/lmscript';
+import { AiManLLMProvider } from './cognitive/lmscript-provider.mjs';
+import { ToolBridge } from './cognitive/tool-bridge.mjs';
+import { createCognitiveMiddleware } from './cognitive/cognitive-middleware.mjs';
+import { createEventBusTransport } from './cognitive/eventbus-transport.mjs';
 
 export class CognitiveProvider extends AgenticProvider {
     get id() { return 'cognitive'; }
@@ -38,6 +42,17 @@ export class CognitiveProvider extends AgenticProvider {
     }
 
     async initialize(deps) {
+        // Guard: lmscript is a required dependency (static import).
+        // If the package is missing, the import at the top of this module
+        // throws ERR_MODULE_NOT_FOUND; this guard catches the subtler case
+        // where the package is installed but exports are broken/undefined.
+        if (!LScriptRuntime || !MiddlewareManager || !Logger) {
+            throw new Error(
+                'CognitiveProvider requires @sschepis/lmscript but its exports are unavailable. '
+                + 'Install it with: npm install @sschepis/lmscript'
+            );
+        }
+
         await super.initialize(deps);
 
         // ── Load workspace-level sentient config override ────────────────
@@ -96,85 +111,74 @@ export class CognitiveProvider extends AgenticProvider {
             }
         }
 
-        // --- lmscript runtime setup (dynamic import to avoid crash if package missing) ---
-        try {
-            const { LScriptRuntime, MiddlewareManager, Logger } = await import('@sschepis/lmscript');
-            const { AiManLLMProvider } = await import('./cognitive/lmscript-provider.mjs');
-            const { ToolBridge } = await import('./cognitive/tool-bridge.mjs');
-            const { createCognitiveMiddleware } = await import('./cognitive/cognitive-middleware.mjs');
-            const { createEventBusTransport } = await import('./cognitive/eventbus-transport.mjs');
+        // --- lmscript runtime setup (required) ---
+        const lmConfig = this._agent.config.lmscript || {};
 
-            const lmConfig = this._agent.config.lmscript || {};
+        // 1. Create LLM provider adapter
+        const llmProvider = new AiManLLMProvider({
+            model: this._agent.config.agent?.model,
+            providerSettings: deps.providerSettings || {},
+            circuitBreakerConfig: lmConfig.circuitBreaker
+        });
 
-            // 1. Create LLM provider adapter
-            const llmProvider = new AiManLLMProvider({
-                model: this._agent.config.agent?.model,
-                providerSettings: deps.providerSettings || {},
-                circuitBreakerConfig: lmConfig.circuitBreaker
-            });
+        // 2. Create tool bridge
+        const toolBridge = new ToolBridge(deps.toolExecutor, {
+            workingDir: deps.workingDir,
+            ws: deps.ws,
+            facade: deps.facade
+        });
 
-            // 2. Create tool bridge
-            const toolBridge = new ToolBridge(deps.toolExecutor, {
-                workingDir: deps.workingDir,
-                ws: deps.ws,
-                facade: deps.facade
-            });
+        // 3. Create cognitive middleware (wraps tinyaleph CognitiveCore)
+        // Disable guard/recall/memory/evolution features by default because
+        // CognitiveAgent.turn() already handles these phases directly.
+        // Enabling them here would cause double-processing of the cognitive
+        // state (processInput, checkSafety, recall, remember, tick).
+        const cognitiveMiddleware = createCognitiveMiddleware(
+            this._agent.cognitive,  // CognitiveCore instance
+            {
+                enableGuard: false,
+                enableRecall: false,
+                enableMemory: false,
+                enableEvolution: false,
+                ...(lmConfig.middleware || {})
+            }
+        );
 
-            // 3. Create cognitive middleware (wraps tinyaleph CognitiveCore)
-            // Disable guard/recall/memory/evolution features by default because
-            // CognitiveAgent.turn() already handles these phases directly.
-            // Enabling them here would cause double-processing of the cognitive
-            // state (processInput, checkSafety, recall, remember, tick).
-            const cognitiveMiddleware = createCognitiveMiddleware(
-                this._agent.cognitive,  // CognitiveCore instance
-                {
-                    enableGuard: false,
-                    enableRecall: false,
-                    enableMemory: false,
-                    enableEvolution: false,
-                    ...(lmConfig.middleware || {})
-                }
-            );
+        // 4. Create event bus transport
+        const eventBusTransport = createEventBusTransport(
+            deps.eventBus,
+            lmConfig.logger || {}
+        );
 
-            // 4. Create event bus transport
-            const eventBusTransport = createEventBusTransport(
-                deps.eventBus,
-                lmConfig.logger || {}
-            );
+        // 5. Build MiddlewareManager and register cognitive hooks
+        const middlewareManager = new MiddlewareManager();
+        middlewareManager.use(cognitiveMiddleware.toHooks());
 
-            // 5. Build MiddlewareManager and register cognitive hooks
-            const middlewareManager = new MiddlewareManager();
-            middlewareManager.use(cognitiveMiddleware.toHooks());
+        // 6. Build Logger with event bus transport
+        const logger = new Logger({
+            transports: [eventBusTransport]
+        });
 
-            // 6. Build Logger with event bus transport
-            const logger = new Logger({
-                transports: [eventBusTransport]
-            });
+        // 7. Create LScriptRuntime with full feature stack
+        const runtime = new LScriptRuntime({
+            provider: llmProvider,
+            middleware: middlewareManager,
+            logger
+        });
 
-            // 7. Create LScriptRuntime with full feature stack
-            const runtime = new LScriptRuntime({
-                provider: llmProvider,
-                middleware: middlewareManager,
-                logger
-            });
+        // 8. Wire into agent
+        this._agent.initRuntime({
+            runtime,
+            toolBridge,
+            cognitiveMiddleware,
+            eventBusTransport
+        });
 
-            // 8. Wire into agent
-            this._agent.initRuntime({
-                runtime,
-                toolBridge,
-                cognitiveMiddleware,
-                eventBusTransport
-            });
+        // Store references for dispose/diagnostics
+        this._runtime = runtime;
+        this._llmProvider = llmProvider;
 
-            // Store references for dispose/diagnostics
-            this._runtime = runtime;
-            this._llmProvider = llmProvider;
-
-            consoleStyler.log('agentic', 'lmscript runtime initialized successfully');
-        } catch (err) {
-            console.warn('[CognitiveProvider] lmscript runtime init failed, using legacy mode:', err.message);
-            // Agent will fall back to _turnLegacy() automatically
-        }
+        consoleStyler.log('agentic', 'lmscript runtime initialized successfully');
     }
 
     /**
@@ -185,75 +189,74 @@ export class CognitiveProvider extends AgenticProvider {
      * @returns {Promise<string>}
      */
     async run(input, options = {}) {
-        if (!this._agent) {
+        if (!this._agent || !this._deps) {
             throw new Error('CognitiveProvider not initialized. Call initialize() first.');
         }
 
-        const { aiProvider } = this._deps;
-        const originalModel = aiProvider.model;
-        if (options.model) {
-            aiProvider.model = options.model;
-        }
+        return this._deduplicatedRun(input, options, async () => {
+            emitStatus('Starting cognitive processing');
 
-        emitStatus('Starting cognitive processing');
+            // Use the facade's CURRENT historyManager (not the stale captured reference)
+            // because loadConversation() replaces facade.historyManager after provider init.
+            const facade = this._deps.facade;
+            const getHistoryManager = () => facade ? facade.historyManager : this._deps.historyManager;
 
-        // Use the facade's CURRENT historyManager (not the stale captured reference)
-        // because loadConversation() replaces facade.historyManager after provider init.
-        const facade = this._deps.facade;
-        const getHistoryManager = () => facade ? facade.historyManager : this._deps.historyManager;
-
-        try {
-            // 1. Save user message to history IMMEDIATELY before processing
-            const hm = getHistoryManager();
-            if (hm) {
-                hm.addMessage('user', input);
-            }
-
-            // ── 2. Task Decomposition: classify input and possibly plan ─────
-            const plannerConfig = this._agent.config.planner || {};
-            const ws = options?.ws || this._deps.ws;
-            let responseText;
-
-            const useTaskPlanner = plannerConfig.enabled !== false
-                && classifyInput(input, plannerConfig) === 'complex';
-
-            if (useTaskPlanner) {
-                consoleStyler.log('agentic', 'Task classified as complex — generating plan');
-                responseText = await this._runWithPlan(input, options, ws, plannerConfig);
-            } else {
-                // Simple / planner-disabled path — direct turn
-                // Forward onChunk so the agent can stream tokens directly
-                const turnOpts = { signal: options.signal };
-                if (options.onChunk) {
-                    turnOpts.onChunk = options.onChunk;
-                }
-                const result = await this._agent.turn(input, turnOpts);
-                responseText = result.response;
-                // Capture token usage from cognitive agent for the response message
-                if (result.tokenUsage) {
-                    this._lastTokenUsage = result.tokenUsage;
+            try {
+                // 1. Save user message to history IMMEDIATELY before processing
+                const hm = getHistoryManager();
+                if (hm) {
+                    hm.addMessage('user', input);
                 }
 
-                if (this._deps.eventBus) {
-                    this._deps.eventBus.emitTyped('agentic:cognitive-metadata', result.diagnostics);
+                // ── 2. Task Decomposition: classify input and possibly plan ─────
+                const plannerConfig = this._agent.config.planner || {};
+                const ws = options?.ws || this._deps.ws;
+                let responseText;
+
+                const useTaskPlanner = plannerConfig.enabled !== false
+                    && classifyInput(input, plannerConfig) === 'complex';
+
+                if (useTaskPlanner) {
+                    consoleStyler.log('agentic', 'Task classified as complex — generating plan');
+                    responseText = await this._runWithPlan(input, options, ws, plannerConfig);
+                } else {
+                    // Simple / planner-disabled path — direct turn
+                    // Forward model, signal, and onChunk so the agent can use per-request
+                    // model override (via options threading) instead of mutating aiProvider.model
+                    const turnOpts = { signal: options.signal };
+                    if (options.model) {
+                        turnOpts.model = options.model;
+                    }
+                    if (options.onChunk) {
+                        turnOpts.onChunk = options.onChunk;
+                    }
+                    const result = await this._agent.turn(input, turnOpts);
+                    responseText = result.response;
+                    // Capture token usage from cognitive agent for the response message
+                    if (result.tokenUsage) {
+                        this._lastTokenUsage = result.tokenUsage;
+                    }
+
+                    if (this._deps?.eventBus) {
+                        this._deps.eventBus.emitTyped('agentic:cognitive-metadata', result.diagnostics);
+                    }
+                }
+
+                // 3. Save assistant response to history IMMEDIATELY after receiving it
+                emitStatus('Saving conversation history');
+                const hmAfter = getHistoryManager();
+                if (hmAfter) {
+                    hmAfter.addMessage('assistant', responseText);
+                }
+
+                return { response: responseText, tokenUsage: this._lastTokenUsage || null };
+            } finally {
+                // Ensure the tracker is stopped even if an error occurs
+                if (this._agent?.stopTracking) {
+                    this._agent.stopTracking();
                 }
             }
-
-            // 3. Save assistant response to history IMMEDIATELY after receiving it
-            emitStatus('Saving conversation history');
-            const hmAfter = getHistoryManager();
-            if (hmAfter) {
-                hmAfter.addMessage('assistant', responseText);
-            }
-
-            return { response: responseText, tokenUsage: this._lastTokenUsage || null };
-        } finally {
-            // Ensure the tracker is stopped even if an error occurs
-            if (this._agent?.stopTracking) {
-                this._agent.stopTracking();
-            }
-            aiProvider.model = originalModel;
-        }
+        });
     }
 
     /**
@@ -275,8 +278,15 @@ export class CognitiveProvider extends AgenticProvider {
      * @private
      */
     async _runWithPlan(input, options, ws, plannerConfig) {
-        // Generate plan via a lightweight LLM call
+        // Non-streaming callLLM for plan generation (returns JSON — streaming
+        // raw JSON tokens would confuse the parser and pollute the UI)
         const callLLM = async (messages, tools, opts) => {
+            const { onChunk: _, ...noStreamOptions } = options;
+            return this._agent.callLLM(messages, tools, { ...noStreamOptions, ...opts });
+        };
+
+        // Streaming callLLM for synthesis (user-facing prose response)
+        const callLLMStream = async (messages, tools, opts) => {
             return this._agent.callLLM(messages, tools, { ...options, ...opts });
         };
 
@@ -288,8 +298,12 @@ export class CognitiveProvider extends AgenticProvider {
         // If plan generation failed, fall back to direct turn
         if (!plan) {
             consoleStyler.log('agentic', 'Plan generation failed — falling back to direct turn');
-            const result = await this._agent.turn(input, { signal: options.signal });
-            if (this._deps.eventBus) {
+            const result = await this._agent.turn(input, {
+                signal: options.signal,
+                onChunk: options.onChunk,
+                model: options.model,
+            });
+            if (this._deps?.eventBus) {
                 this._deps.eventBus.emitTyped('agentic:cognitive-metadata', result.diagnostics);
             }
             return result.response;
@@ -336,8 +350,8 @@ export class CognitiveProvider extends AgenticProvider {
             skipDependentOnFailure: plannerConfig.skipDependentOnFailure !== false, // default true per config
         });
 
-        // Synthesize final response
-        const finalResponse = await synthesizeResponse(plan, stepResults, callLLM, {
+        // Synthesize final response (use streaming callLLM for user-facing prose)
+        const finalResponse = await synthesizeResponse(plan, stepResults, callLLMStream, {
             signal: options.signal,
         });
 

@@ -110,7 +110,7 @@ export default function OpenClawStep({ config, onChange, onNext, onBack }: OpenC
   return (
     <div className="flex flex-col h-full animate-fade-in-up">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-white mb-2">OpenClaw Integration</h2>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">OpenClaw Integration</h2>
         <p className="text-zinc-400 text-sm">
           OpenClaw adds multi-channel messaging and sandboxed tool execution.
         </p>

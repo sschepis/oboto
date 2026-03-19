@@ -104,6 +104,20 @@ export const useChat = () => {
           setActivityLog([]);
           logIdRef.current = 0;
         }
+        if (!working) {
+          // When the server goes idle, clear any stale _pending flags that
+          // weren't consumed by streaming or message events.  This prevents
+          // the next request's streaming from being injected into an old message.
+          setMessages(prev => {
+            const hasStalePending = prev.some(m => m._pending && m.role === 'ai');
+            if (!hasStalePending) return prev;
+            return prev.map(m =>
+              m._pending && m.role === 'ai'
+                ? { ...m, _pending: undefined }
+                : m
+            );
+          });
+        }
       }),
       wsService.on('status-update', (payload: unknown) => {
         const status = payload as ProjectStatusData;
@@ -231,6 +245,7 @@ export const useChat = () => {
                       ...prev[pendingIdx],
                       id: p.id,  // Use the stream ID so chunks can find it
                       _streaming: true,
+                      _pending: undefined,  // Clear pending flag — now streaming
                   };
                   return newMsgs;
               }
@@ -288,17 +303,23 @@ export const useChat = () => {
               streamingRafRef.current = 0;
           }
           streamingDeltaRef.current = null;
-          setMessages(prev => prev.map(msg =>
-              msg.id === p.id
-                  ? {
+          setMessages(prev => prev.map(msg => {
+              if (msg.id === p.id) {
+                  return {
                       ...msg,
                       content: p.content,  // Authoritative final content
                       _streaming: false,
                       _pending: undefined,
                       ...(p.tokenUsage ? { tokenUsage: p.tokenUsage } : {}),
-                  }
-                  : msg
-          ));
+                  };
+              }
+              // Clear stale _pending flags on other AI messages so they don't
+              // capture the NEXT request's streaming start event.
+              if (msg._pending && msg.role === 'ai') {
+                  return { ...msg, _pending: undefined };
+              }
+              return msg;
+          }));
       }),
 
       // Individual tool-call events from ToolExecutor (read_file, write_file, etc.)
@@ -315,18 +336,23 @@ export const useChat = () => {
                  status: 'running' as const,
              };
              
-             // Check if there's already a pending response message to add to
-             const pendingIdx = prev.findIndex(m => m._pending === true && m.role === 'ai');
+             // Check if there's already a pending or streaming AI message to add to.
+             // A _streaming message is one that already has stream chunks; tool calls
+             // during a multi-turn agent loop should attach to the same message.
+             const targetIdx = prev.findIndex(m =>
+                 m.role === 'ai' && (m._pending === true || m._streaming === true)
+             );
              
-             if (pendingIdx !== -1) {
-                 // Add tool call to existing pending response
-                 const pendingMsg = prev[pendingIdx];
+             if (targetIdx !== -1) {
+                 // Add tool call to existing pending/streaming response
+                 const targetMsg = prev[targetIdx];
                  const updatedMsg: Message = {
-                     ...pendingMsg,
-                     toolCalls: [...(pendingMsg.toolCalls || []), newToolCall]
+                     ...targetMsg,
+                     toolCalls: [...(targetMsg.toolCalls || []), newToolCall],
+                     _pending: true,  // Ensure pending is set for tool-call-end to find
                  };
                  const newMsgs = [...prev];
-                 newMsgs[pendingIdx] = updatedMsg;
+                 newMsgs[targetIdx] = updatedMsg;
                  return newMsgs;
              } else {
                  // Create a new pending response message with this tool call
@@ -347,24 +373,26 @@ export const useChat = () => {
       wsService.on('tool-call-end', (payload: unknown) => {
          const p = payload as { toolName: string; result: unknown };
          setMessages(prev => {
-             // Find the pending response message containing this tool call
-             const pendingIdx = prev.findIndex(m => m._pending === true && m.role === 'ai');
-             if (pendingIdx !== -1) {
-                 const pendingMsg = prev[pendingIdx];
-                 if (pendingMsg.toolCalls) {
-                     const toolIdx = pendingMsg.toolCalls.findIndex(
+             // Find the pending or streaming AI message containing this tool call
+             const targetIdx = prev.findIndex(m =>
+                 m.role === 'ai' && (m._pending === true || m._streaming === true)
+             );
+             if (targetIdx !== -1) {
+                 const targetMsg = prev[targetIdx];
+                 if (targetMsg.toolCalls) {
+                     const toolIdx = targetMsg.toolCalls.findIndex(
                          tc => tc.toolName === p.toolName && tc.status === 'running'
                      );
                      if (toolIdx !== -1) {
-                         const updatedToolCalls = [...pendingMsg.toolCalls];
+                         const updatedToolCalls = [...targetMsg.toolCalls];
                          updatedToolCalls[toolIdx] = {
                              ...updatedToolCalls[toolIdx],
                              result: p.result,
                              status: 'completed',
                          };
-                         const updatedMsg: Message = { ...pendingMsg, toolCalls: updatedToolCalls };
+                         const updatedMsg: Message = { ...targetMsg, toolCalls: updatedToolCalls };
                          const newMsgs = [...prev];
-                         newMsgs[pendingIdx] = updatedMsg;
+                         newMsgs[targetIdx] = updatedMsg;
                          return newMsgs;
                      }
                  }

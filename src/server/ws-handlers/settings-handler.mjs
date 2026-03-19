@@ -10,6 +10,7 @@ import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
 import { reinitPlugins } from './plugin-reinit.mjs';
 import { recordWorkspaceOpen } from '../../workspace/workspace-history.mjs';
+import { workspaceConfigDir } from '../../lib/paths.mjs';
 
 /**
  * Handles: get-settings, update-settings, get-status, set-cwd, refresh-models
@@ -130,6 +131,44 @@ function restoreAISettings(assistant) {
     }
 }
 
+// ── Workspace Settings Persistence ──────────────────────────────────────
+
+const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
+
+/**
+ * Read workspace-level settings from {workingDir}/.oboto/workspace-settings.json.
+ * Returns an empty object if the file doesn't exist or is invalid.
+ */
+function readWorkspaceSettings(workingDir) {
+    if (!workingDir) return {};
+    const filePath = path.join(workspaceConfigDir(workingDir), WORKSPACE_SETTINGS_FILE);
+    try {
+        return readJsonFileSync(filePath) || {};
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Write workspace-level settings to {workingDir}/.oboto/workspace-settings.json.
+ * Merges `updates` into the existing settings (shallow merge).
+ */
+async function writeWorkspaceSettings(workingDir, updates) {
+    if (!workingDir) return;
+    const dir = workspaceConfigDir(workingDir);
+    const filePath = path.join(dir, WORKSPACE_SETTINGS_FILE);
+    try {
+        if (!fs.existsSync(dir)) {
+            await fs.promises.mkdir(dir, { recursive: true });
+        }
+        const existing = readWorkspaceSettings(workingDir);
+        const merged = { ...existing, ...updates };
+        await fs.promises.writeFile(filePath, JSON.stringify(merged, null, 2));
+    } catch (err) {
+        consoleStyler.log('warning', `Failed to write workspace settings: ${err.message}`);
+    }
+}
+
 /**
  * Build the canonical settings payload for sending to the UI.
  * Wrapped in try/catch — always returns a valid payload even on error.
@@ -181,6 +220,9 @@ function buildSettingsPayload(assistant, ctx) {
             }
         }
 
+        // Read workspace-level settings (allowAgentProviderSelection, etc.)
+        const workspaceSettings = readWorkspaceSettings(assistant.workingDir);
+
         return {
             maxTurns: assistant.maxTurns,
             maxSubagents: assistant.maxSubagents,
@@ -189,6 +231,7 @@ function buildSettingsPayload(assistant, ctx) {
             modelRegistry: getRegistrySnapshot(),
             secretsStatus,
             enabledProviders,
+            allowAgentProviderSelection: workspaceSettings.allowAgentProviderSelection ?? true,
         };
     } catch (err) {
         // Fallback — always return a valid payload
@@ -205,6 +248,7 @@ function buildSettingsPayload(assistant, ctx) {
             modelRegistry: getRegistrySnapshot(),
             secretsStatus: {},
             enabledProviders: fallbackEnabled,
+            allowAgentProviderSelection: true,
         };
     }
 }
@@ -385,6 +429,13 @@ async function handleUpdateSettings(data, ctx) {
         if (settings.routing.reasoning_low) process.env.ROUTE_REASONING_LOW = settings.routing.reasoning_low;
         if (settings.routing.summarizer) process.env.ROUTE_SUMMARIZER = settings.routing.summarizer;
         if (settings.routing.code_completion) process.env.ROUTE_CODE_COMPLETION = settings.routing.code_completion;
+    }
+
+    // ── Persist workspace-level settings ─────────────────────────────────
+    if (settings.allowAgentProviderSelection !== undefined) {
+        await writeWorkspaceSettings(assistant.workingDir, {
+            allowAgentProviderSelection: !!settings.allowAgentProviderSelection,
+        });
     }
     
     wsSend(ws, 'status', 'Settings updated');

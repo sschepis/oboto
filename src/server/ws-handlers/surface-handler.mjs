@@ -216,9 +216,69 @@ CRITICAL RULES:
 }
 
 async function handleSurfaceCompilationError(data, ctx) {
-    // Legacy handler — now handled by surface-auto-fix. Kept for backwards compatibility.
-    const { componentName, error } = data.payload;
+    const { surfaceId, componentName, error } = data.payload;
     consoleStyler.log('error', `Surface Compilation Error (${componentName}): ${error}`);
+
+    // Phase 3c: Persist the error in surface metadata so read_surface exposes it to the agent
+    const surfaceManager = ctx.assistant?.toolExecutor?.surfaceManager;
+    if (surfaceManager && surfaceId && componentName) {
+        try {
+            await surfaceManager.setComponentError(surfaceId, componentName, `[Compilation] ${error}`);
+        } catch (e) {
+            consoleStyler.log('warning', `Failed to persist compilation error for ${componentName}: ${e.message}`);
+        }
+    }
+}
+
+/**
+ * Handle runtime render errors reported by the client's error boundary.
+ * Persists the error in surface metadata so the agent can see it via read_surface.
+ */
+async function handleSurfaceRenderError(data, ctx) {
+    const { surfaceId, componentName, error } = data.payload;
+    consoleStyler.log('error', `Surface Render Error (${componentName}): ${error}`);
+
+    const surfaceManager = ctx.assistant?.toolExecutor?.surfaceManager;
+    if (surfaceManager && surfaceId && componentName) {
+        try {
+            await surfaceManager.setComponentError(surfaceId, componentName, `[Render] ${error}`);
+        } catch (e) {
+            consoleStyler.log('warning', `Failed to persist render error for ${componentName}: ${e.message}`);
+        }
+    }
+}
+
+/**
+ * Handle client-side console log entries from surface components.
+ * Persists them in surface metadata so `read_surface` can expose them to the agent.
+ */
+async function handleSurfaceConsoleLog(data, ctx) {
+    const { surfaceId, componentName, entries } = data.payload;
+    if (!surfaceId || !entries || !Array.isArray(entries)) return;
+
+    const surfaceManager = ctx.assistant?.toolExecutor?.surfaceManager;
+    if (surfaceManager?.appendConsoleLogs) {
+        try {
+            await surfaceManager.appendConsoleLogs(surfaceId, componentName, entries);
+        } catch (e) {
+            consoleStyler.log('warning', `Failed to persist console logs for ${componentName}: ${e.message}`);
+        }
+    }
+}
+
+/**
+ * Handle notification from client that a component rendered successfully.
+ * Clears any previously stored error for that component.
+ */
+async function handleSurfaceComponentSuccess(data, ctx) {
+    const { surfaceId, componentName } = data.payload;
+
+    const surfaceManager = ctx.assistant?.toolExecutor?.surfaceManager;
+    if (surfaceManager && surfaceId && componentName) {
+        try {
+            await surfaceManager.clearComponentError(surfaceId, componentName);
+        } catch (_) { /* best effort */ }
+    }
 }
 
 // ─── Auto-Fix ────────────────────────────────────────────────────────────
@@ -780,6 +840,9 @@ export const handlers = {
     'surface-agent-request': handleSurfaceAgentRequest,
     'surface-handler-invoke': handleSurfaceHandlerInvoke,
     'surface-compilation-error': handleSurfaceCompilationError,
+    'surface-render-error': handleSurfaceRenderError,
+    'surface-console-log': handleSurfaceConsoleLog,
+    'surface-component-success': handleSurfaceComponentSuccess,
     'surface-get-state': handleSurfaceGetState,
     'surface-set-state': handleSurfaceSetState,
     'screenshot-captured': handleScreenshotCaptured,

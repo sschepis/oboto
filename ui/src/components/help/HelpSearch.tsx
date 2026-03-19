@@ -132,7 +132,7 @@ const HelpSearch: React.FC<HelpSearchProps> = ({
                   group
                 "
               >
-                <span className="text-[12px] font-medium text-zinc-300 group-hover:text-white transition-colors">
+                <span className="text-[12px] font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
                   {result.article.title}
                 </span>
                 <span className="text-[10px] text-zinc-600">

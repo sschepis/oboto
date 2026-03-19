@@ -2,6 +2,9 @@
 // This module contains all the built-in tool schemas used by the AI
 // REFACTORED: Tool handlers are now distributed in handlers/*.mjs
 // ENHANCED: Output presentation layer (binary guard, overflow, metadata footer)
+// TODO: Cache VM sandbox context across tool calls within a single turn
+// to avoid repeated context creation overhead. VM sandboxing is currently
+// handled in handlers/core-handlers.mjs via vm2.
 
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { emitToolStatus } from '../core/status-reporter.mjs';
@@ -38,6 +41,39 @@ import { PluginLoader } from '../plugins/plugin-loader.mjs';
 import { copyPluginToWorkspace } from '../plugins/plugin-fork.mjs';
 import { sanitizeDirectMarkdown } from '../lib/sanitize-markdown.mjs';
 
+/**
+ * Compute Levenshtein edit distance between two strings.
+ * Used for fuzzy tool name matching when the AI calls a non-existent tool.
+ * Supports an optional `maxDist` parameter for early termination — if the
+ * minimum possible distance for the current row exceeds `maxDist`, returns
+ * `maxDist + 1` immediately to avoid unnecessary computation.
+ */
+function _levenshtein(a, b, maxDist = Infinity) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    // Quick check: length difference alone exceeds maxDist
+    if (Math.abs(m - n) > maxDist) return maxDist + 1;
+    // Use single-row DP for O(min(m,n)) space
+    let prev = new Array(n + 1);
+    let curr = new Array(n + 1);
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+        curr[0] = i;
+        let rowMin = i; // track minimum value in current row for early exit
+        for (let j = 1; j <= n; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+            if (curr[j] < rowMin) rowMin = curr[j];
+        }
+        // Early termination: if every cell in this row exceeds maxDist,
+        // the final distance cannot be ≤ maxDist.
+        if (rowMin > maxDist) return maxDist + 1;
+        [prev, curr] = [curr, prev];
+    }
+    return prev[n];
+}
+
 // Tools whose output should NOT be processed by the presentation layer.
 // These return structured JSON or very short confirmations that don't benefit
 // from binary guards / overflow / metadata footers.
@@ -67,6 +103,7 @@ const PRESENTATION_SKIP_TOOLS = new Set([
     'capture_surface',
     'configure_surface_layout',
     'place_component_in_cell',
+    'read_surface',
     'list_surface_revisions',
     'revert_surface',
     // Recursive AI calls have their own formatting
@@ -387,6 +424,7 @@ export class ToolExecutor {
         this.registerTool('capture_surface', this.surfaceHandlers.captureSurface.bind(this.surfaceHandlers));
         this.registerTool('configure_surface_layout', this.surfaceHandlers.configureSurfaceLayout.bind(this.surfaceHandlers));
         this.registerTool('place_component_in_cell', this.surfaceHandlers.placeComponentInCell.bind(this.surfaceHandlers));
+        this.registerTool('read_surface', this.surfaceHandlers.readSurface.bind(this.surfaceHandlers));
         this.registerTool('list_surface_revisions', this.surfaceHandlers.listSurfaceRevisions.bind(this.surfaceHandlers));
         this.registerTool('revert_surface', this.surfaceHandlers.revertSurface.bind(this.surfaceHandlers));
     }
@@ -540,6 +578,66 @@ export class ToolExecutor {
         return null;
     }
 
+    /**
+     * Find tool names similar to the given unknown name using Levenshtein distance.
+     * Returns up to 5 matches with distance ≤ max(4, name.length * 0.4).
+     * Searches core registry, plugin handlers, custom tools, and MCP tools.
+     * @param {string} name — the unknown tool name
+     * @returns {string[]} — list of similar tool names, sorted by distance
+     */
+    _findSimilarTools(name) {
+        const candidates = new Set();
+
+        // Core tools
+        for (const key of this.toolRegistry.keys()) candidates.add(key);
+
+        // Plugin tools
+        for (const key of this._pluginHandlers.keys()) candidates.add(key);
+
+        // Custom tools
+        if (this.customToolsManager) {
+            try {
+                const schemas = this.customToolsManager.getCustomToolSchemas();
+                for (const s of schemas) {
+                    const n = s.function?.name;
+                    if (n) candidates.add(n);
+                }
+            } catch { /* ignore */ }
+        }
+
+        // MCP tools
+        if (this.mcpClientManager) {
+            try {
+                for (const t of this.mcpClientManager.getAllTools()) {
+                    if (t.name) candidates.add(t.name);
+                }
+            } catch { /* ignore */ }
+        }
+
+        const maxDist = Math.max(4, Math.floor(name.length * 0.4));
+        const scored = [];
+        const nameLower = name.toLowerCase();
+        // Extract word tokens from the unknown name for substring matching
+        const nameTokens = nameLower.split(/[_\-\s]+/).filter(t => t.length > 2);
+
+        for (const candidate of candidates) {
+            const dist = _levenshtein(name, candidate, maxDist);
+            if (dist <= maxDist && dist > 0) {
+                scored.push({ name: candidate, dist });
+            } else if (dist > maxDist && nameTokens.length > 0) {
+                // Fallback: check if all significant tokens appear in the candidate
+                const candidateLower = candidate.toLowerCase();
+                const matchCount = nameTokens.filter(t => candidateLower.includes(t)).length;
+                if (matchCount >= Math.ceil(nameTokens.length * 0.6)) {
+                    // Score higher distance so Levenshtein matches rank first
+                    scored.push({ name: candidate, dist: maxDist + 1 });
+                }
+            }
+        }
+        scored.sort((a, b) => a.dist - b.dist);
+        return scored.slice(0, 5).map(s => s.name);
+    }
+
     async executeTool(toolCall, options = {}) {
         const functionName = toolCall.function.name;
         // Use plugin_default timeout for plugin-registered tools, else per-tool or global default
@@ -690,10 +788,14 @@ export class ToolExecutor {
                 }
                 
                 if (!serverFound) {
-                    throw new Error(`[error] unknown tool: ${functionName}. MCP server matching prefix not found. Use mcp_list_servers to see available servers.`);
+                    const similar = this._findSimilarTools(functionName);
+                    const hint = similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : '';
+                    throw new Error(`[error] unknown tool: ${functionName}. MCP server matching prefix not found.${hint} Use mcp_list_servers to see available servers.`);
                 }
             } else {
-                throw new Error(`[error] unknown tool: ${functionName}. Use list_custom_tools or list_skills to find available tools.`);
+                const similar = this._findSimilarTools(functionName);
+                const hint = similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : '';
+                throw new Error(`[error] unknown tool: ${functionName}.${hint} Use list_custom_tools or list_skills to find available tools.`);
             }
 
             const durationMs = Date.now() - startTime;

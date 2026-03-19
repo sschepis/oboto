@@ -34,7 +34,7 @@ export default function ProviderStep({ config, onChange, onNext, onBack }: Provi
   return (
     <div className="flex flex-col h-full animate-fade-in-up">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-white mb-2">Choose Your AI Provider</h2>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">Choose Your AI Provider</h2>
         <p className="text-zinc-400 text-sm">Select the AI service you would like to use.</p>
       </div>
 

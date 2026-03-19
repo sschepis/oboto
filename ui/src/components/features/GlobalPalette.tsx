@@ -79,7 +79,7 @@ const GlobalPalette: React.FC<GlobalPaletteProps> = ({ isOpen, onClose, onSelect
                 w-full flex items-center gap-3.5 px-4 py-3 rounded-xl
                 transition-all duration-150
                 ${i === selectedIndex
-                  ? 'bg-indigo-600/8 text-white border border-indigo-500/10'
+                  ? 'bg-indigo-600/8 text-zinc-100 border border-indigo-500/10'
                   : 'text-zinc-400 hover:bg-zinc-800/20 border border-transparent'}
               `}
             >

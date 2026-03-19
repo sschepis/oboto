@@ -5,6 +5,9 @@ import { consoleStyler } from '../ui/console-styler.mjs';
 
 const MAX_REVISIONS = 50;
 
+/** Maximum number of console log entries stored per surface. */
+const MAX_CONSOLE_LOGS = 100;
+
 /**
  * SurfaceManager handles the persistence and retrieval of Surface metadata and component source code.
  * Surfaces are stored in .surfaces/ directory in the workspace.
@@ -18,6 +21,170 @@ export class SurfaceManager {
         this.workspaceRoot = workspaceRoot;
         this.surfacesDir = path.join(workspaceRoot, '.surfaces');
         this._initialized = false;
+        /** @private In-memory ring buffers for console logs (surfaceId → entries[]) */
+        this._consoleLogCache = new Map();
+    }
+
+    // ─── Known-bad UI components that cause React Error #130 ────────
+    static BAD_COMPONENTS = {
+        'UI.AlertTitle': 'Use <div className="font-semibold"> inside UI.Alert',
+        'UI.AlertDescription': 'Use <div className="text-sm"> inside UI.Alert',
+        'UI.Stack': 'Use <div className="flex flex-col gap-2">',
+        'UI.Icons.Atom': 'Use UI.Icons.Activity instead',
+        'UI.Icons.Orbit': 'Use UI.Icons.RefreshCw instead',
+        'UI.Icons.Cpu': 'Use UI.Icons.Terminal instead',
+    };
+
+    /**
+     * Validate JSX source code before writing to disk.
+     * Catches the most common errors that cause surface render failures:
+     *   - Missing export default function
+     *   - Import statements (sandbox doesn't support them)
+     *   - Non-existent UI components
+     *   - Unbalanced braces/brackets
+     *   - Empty source
+     *
+     * @param {string} jsxSource - The JSX source to validate
+     * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
+     */
+    static validateJsxSource(jsxSource) {
+        const errors = [];
+        const warnings = [];
+
+        // 1. Must not be empty
+        if (!jsxSource || !jsxSource.trim()) {
+            errors.push('jsx_source is empty');
+            return { valid: false, errors, warnings };
+        }
+
+        const trimmed = jsxSource.trim();
+
+        // 2. Must export a default function component
+        if (!/export\s+default\s+function\b/.test(trimmed)) {
+            errors.push(
+                'Missing "export default function ComponentName(...)". ' +
+                'Every surface component must export a default function component.'
+            );
+        }
+
+        // 3. Must not use import statements (sandbox globals provide everything)
+        const importMatch = trimmed.match(/^import\s+.+from\s+['"].+['"]/m);
+        if (importMatch) {
+            errors.push(
+                `Found import statement: "${importMatch[0]}". ` +
+                'Surface components cannot use imports — React, useState, useEffect, ' +
+                'UI.*, surfaceApi, and useSurfaceLifecycle are all globals.'
+            );
+        }
+
+        // 4. Check for non-existent UI components
+        for (const [bad, fix] of Object.entries(SurfaceManager.BAD_COMPONENTS)) {
+            if (trimmed.includes(bad)) {
+                errors.push(`"${bad}" does not exist and will cause React Error #130. Fix: ${fix}`);
+            }
+        }
+
+        // 5. Check for balanced braces/brackets (skip strings and template literals)
+        let braceCount = 0, parenCount = 0, bracketCount = 0;
+        let inString = false, stringChar = '', inTemplate = false, inLineComment = false, inBlockComment = false;
+        let prevCh = '';
+        for (let i = 0; i < trimmed.length; i++) {
+            const ch = trimmed[i];
+
+            // Handle comments
+            if (!inString && !inTemplate) {
+                if (inLineComment) {
+                    if (ch === '\n') inLineComment = false;
+                    continue;
+                }
+                if (inBlockComment) {
+                    if (ch === '/' && prevCh === '*') inBlockComment = false;
+                    continue;
+                }
+                if (ch === '/' && i + 1 < trimmed.length) {
+                    if (trimmed[i + 1] === '/') { inLineComment = true; continue; }
+                    if (trimmed[i + 1] === '*') { inBlockComment = true; continue; }
+                }
+            }
+
+            // Handle strings
+            if (!inTemplate && !inLineComment && !inBlockComment) {
+                if (inString) {
+                    if (ch === stringChar && prevCh !== '\\') inString = false;
+                    continue;
+                }
+                if (ch === '"' || ch === "'") {
+                    inString = true;
+                    stringChar = ch;
+                    continue;
+                }
+            }
+
+            // Handle template literals
+            if (!inString && !inLineComment && !inBlockComment) {
+                if (ch === '`' && prevCh !== '\\') {
+                    inTemplate = !inTemplate;
+                    continue;
+                }
+                if (inTemplate) continue;
+            }
+
+            // Count brackets outside strings/comments/templates
+            if (!inString && !inTemplate && !inLineComment && !inBlockComment) {
+                if (ch === '{') braceCount++;
+                else if (ch === '}') braceCount--;
+                else if (ch === '(') parenCount++;
+                else if (ch === ')') parenCount--;
+                else if (ch === '[') bracketCount++;
+                else if (ch === ']') bracketCount--;
+            }
+
+            prevCh = ch;
+        }
+
+        if (braceCount !== 0) {
+            errors.push(
+                `Unbalanced braces: ${braceCount > 0
+                    ? braceCount + ' unclosed {'
+                    : Math.abs(braceCount) + ' extra }'}`
+            );
+        }
+        if (parenCount !== 0) {
+            errors.push(
+                `Unbalanced parentheses: ${parenCount > 0
+                    ? parenCount + ' unclosed ('
+                    : Math.abs(parenCount) + ' extra )'}`
+            );
+        }
+        if (bracketCount !== 0) {
+            warnings.push(
+                `Unbalanced brackets: ${bracketCount > 0
+                    ? bracketCount + ' unclosed ['
+                    : Math.abs(bracketCount) + ' extra ]'}`
+            );
+        }
+
+        // 6. Check for common React mistakes
+        if (/\buseState\b/.test(trimmed) && !/\bconst\s+\[/.test(trimmed)) {
+            warnings.push(
+                'useState called but no array destructuring found. ' +
+                'Pattern should be: const [value, setValue] = useState(initial)'
+            );
+        }
+
+        // 7. Check for require() calls
+        if (/\brequire\s*\(/.test(trimmed)) {
+            errors.push(
+                'Found require() call. Surface components run in a sandboxed environment — ' +
+                'use the globally available APIs (UI.*, surfaceApi, React hooks) instead.'
+            );
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors,
+            warnings,
+        };
     }
 
     async _ensureInitialized() {
@@ -146,6 +313,9 @@ export class SurfaceManager {
         try {
             await fs.rm(path.join(this.surfacesDir, id), { recursive: true, force: true });
         } catch (e) {}
+
+        // Clean up in-memory console log cache
+        this._consoleLogCache.delete(id);
 
         return true;
     }
@@ -697,5 +867,131 @@ export class SurfaceManager {
         }
 
         return restoredSurface;
+    }
+
+    // ─── Client-side Error Tracking ───────────────────────────────────
+
+    /**
+     * Record a client-side component error (compile or render failure)
+     * reported by the browser via WebSocket.
+     *
+     * Stored in surface metadata under `_clientErrors[componentName]` so
+     * that subsequent readSurface / preRoute calls can surface them to
+     * the agent.
+     *
+     * @param {string} surfaceId
+     * @param {string} componentName
+     * @param {string} errorMessage  The error message from the browser
+     */
+    async setComponentError(surfaceId, componentName, errorMessage) {
+        const surface = await this.getSurface(surfaceId);
+        if (!surface) return;
+
+        if (!surface._clientErrors) surface._clientErrors = {};
+        surface._clientErrors[componentName] = {
+            message: errorMessage,
+            timestamp: new Date().toISOString(),
+        };
+        surface.updatedAt = new Date().toISOString();
+
+        await fs.writeFile(
+            path.join(this.surfacesDir, `${surfaceId}.sur`),
+            JSON.stringify(surface, null, 2)
+        );
+    }
+
+    /**
+     * Clear a previously recorded client-side error for a component.
+     * Called when a component renders successfully after a fix.
+     *
+     * @param {string} surfaceId
+     * @param {string} componentName
+     */
+    async clearComponentError(surfaceId, componentName) {
+        const surface = await this.getSurface(surfaceId);
+        if (!surface || !surface._clientErrors) return;
+
+        delete surface._clientErrors[componentName];
+        if (Object.keys(surface._clientErrors).length === 0) {
+            delete surface._clientErrors;
+        }
+        surface.updatedAt = new Date().toISOString();
+
+        await fs.writeFile(
+            path.join(this.surfacesDir, `${surfaceId}.sur`),
+            JSON.stringify(surface, null, 2)
+        );
+    }
+
+    /**
+     * Get all client-side errors for a surface.
+     * @param {string} surfaceId
+     * @returns {Promise<Record<string, {message: string, timestamp: string}> | null>}
+     */
+    async getClientErrors(surfaceId) {
+        const surface = await this.getSurface(surfaceId);
+        if (!surface) return null;
+        return surface._clientErrors || null;
+    }
+
+    // ─── Client-side Console Log Capture ──────────────────────────────
+
+    /**
+     * Append client-side console log entries for a surface component.
+     * Entries are kept in an in-memory ring buffer (capped at
+     * MAX_CONSOLE_LOGS) rather than persisted to the `.sur` file on every
+     * batch.  This eliminates the full file read-modify-write cycle that
+     * previously ran every 500 ms per active surface.
+     *
+     * Console logs are ephemeral diagnostic data — losing them on server
+     * restart is acceptable and preferable to the I/O cost of persisting.
+     *
+     * @param {string} surfaceId
+     * @param {string} componentName
+     * @param {Array<{level: string, args: string[], timestamp: number}>} entries
+     */
+    appendConsoleLogs(surfaceId, componentName, entries) {
+        if (!entries || entries.length === 0) return;
+
+        let buf = this._consoleLogCache.get(surfaceId);
+        if (!buf) {
+            buf = [];
+            this._consoleLogCache.set(surfaceId, buf);
+        }
+
+        // Tag each entry with the component name
+        for (const entry of entries) {
+            buf.push({
+                component: componentName,
+                level: entry.level,
+                args: entry.args,
+                timestamp: entry.timestamp,
+            });
+        }
+
+        // Enforce ring buffer limit
+        if (buf.length > MAX_CONSOLE_LOGS) {
+            buf.splice(0, buf.length - MAX_CONSOLE_LOGS);
+        }
+    }
+
+    /**
+     * Get recent console logs for a surface.
+     * @param {string} surfaceId
+     * @param {number} [limit=50] Maximum entries to return (most recent)
+     * @returns {Array<{component: string, level: string, args: string[], timestamp: number}>}
+     */
+    getConsoleLogs(surfaceId, limit = 50) {
+        const buf = this._consoleLogCache.get(surfaceId);
+        if (!buf || buf.length === 0) return [];
+        return buf.slice(-limit);
+    }
+
+    /**
+     * Clear all console logs for a surface.
+     * @param {string} surfaceId
+     */
+    clearConsoleLogs(surfaceId) {
+        this._consoleLogCache.delete(surfaceId);
     }
 }

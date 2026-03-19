@@ -449,7 +449,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                 className={`
                   w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150
                   ${i === selectedInlineIndex
-                    ? 'bg-indigo-600/10 text-white border border-indigo-500/10'
+                    ? 'bg-indigo-600/10 text-zinc-100 border border-indigo-500/10'
                     : 'text-zinc-400 hover:bg-zinc-800/40 border border-transparent'}
                 `}>
                 <div className={`
@@ -478,7 +478,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                 className="
                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                   bg-zinc-800/30 border border-zinc-800/40
-                  text-zinc-400 hover:text-white hover:border-indigo-500/30 hover:bg-indigo-500/5
+                  text-zinc-400 hover:text-zinc-100 hover:border-indigo-500/30 hover:bg-indigo-500/5
                   transition-all duration-200 text-[10px] font-bold tracking-tight
                   active:scale-95 hover:shadow-sm hover:shadow-indigo-500/5
                 "
@@ -570,7 +570,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                                 w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors
                                 ${isActive
                                   ? 'bg-indigo-500/15 text-indigo-300'
-                                  : 'text-zinc-300 hover:bg-white/5 hover:text-white'}
+                                  : 'text-zinc-300 hover:bg-white/5 hover:text-zinc-100'}
                               `}
                             >
                               <span className="flex-1 truncate">{provider}/{m}</span>
@@ -644,7 +644,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                 text-[13px] placeholder:text-zinc-400
                 resize-none max-h-32 min-h-[28px] py-1 outline-none leading-relaxed
                 transition-colors duration-200
-                ${disabled ? 'text-zinc-600 cursor-not-allowed' : 'text-white'}
+                ${disabled ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-100'}
               `}
               rows={1}
             />
@@ -669,7 +669,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               ${isAgentWorking
                 ? (input.trim() || attachments.length > 0)
                   ? 'bg-orange-500 text-black shadow-md shadow-orange-500/20 hover:bg-orange-400'
-                  : 'bg-zinc-700 text-zinc-300 hover:text-white hover:bg-red-500/90 shadow-md shadow-black/20'
+                  : 'bg-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-red-500/90 shadow-md shadow-black/20'
                 : (input.trim() || attachments.length > 0)
                   ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5'
                   : 'bg-zinc-800/40 text-zinc-600 cursor-not-allowed'}
