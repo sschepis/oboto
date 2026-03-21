@@ -60,7 +60,98 @@ const COLOR_PROPS = [
     'border-image', 'border-image-source',
     'mask-image', '-webkit-mask-image',
     'list-style-image',
+    // Additional properties that can hold color values
+    'scrollbar-color', 'stop-color', 'flood-color', 'lighting-color',
+    'text-emphasis-color',
+    '-webkit-text-fill-color', '-webkit-text-stroke-color',
 ];
+
+// ─── CSSOM-level sanitizer ────────────────────────────────────────────────
+
+/**
+ * Recursively walk a CSSRule and sanitize any property value that contains
+ * an unsupported color function.  This modifies the CSSOM objects in-place,
+ * which is what html2canvas reads — unlike textContent replacement, this is
+ * guaranteed to affect what html2canvas's color parser encounters.
+ */
+function sanitizeCSSRule(rule: CSSRule) {
+    // Regular style rules (selectors with declarations)
+    if (rule instanceof CSSStyleRule) {
+        sanitizeCSSStyleDeclaration(rule.style);
+    }
+    // Grouping rules (@media, @supports, @layer, etc.)
+    else if ('cssRules' in rule) {
+        const groupRule = rule as CSSGroupingRule;
+        try {
+            for (let i = 0; i < groupRule.cssRules.length; i++) {
+                sanitizeCSSRule(groupRule.cssRules[i]);
+            }
+        } catch { /* security / cross-origin errors — skip */ }
+    }
+    // @keyframes rules
+    else if (rule instanceof CSSKeyframesRule) {
+        for (let i = 0; i < rule.cssRules.length; i++) {
+            const keyframeRule = rule.cssRules[i];
+            if (keyframeRule instanceof CSSKeyframeRule) {
+                sanitizeCSSStyleDeclaration(keyframeRule.style);
+            }
+        }
+    }
+    // @font-face, @page — can also contain color properties
+    else if ('style' in rule && (rule as any).style instanceof CSSStyleDeclaration) {
+        sanitizeCSSStyleDeclaration((rule as any).style);
+    }
+}
+
+/**
+ * Sanitize every property in a CSSStyleDeclaration that contains an
+ * unsupported color function.  Handles both named properties and custom
+ * properties (--*).
+ */
+function sanitizeCSSStyleDeclaration(style: CSSStyleDeclaration) {
+    for (let i = 0; i < style.length; i++) {
+        const propName = style[i];
+        const val = style.getPropertyValue(propName);
+        if (val && UNSUPPORTED_COLOR_RE.test(val)) {
+            const priority = style.getPropertyPriority(propName);
+            if (propName.startsWith('--')) {
+                // Custom property — replace unsupported functions within the value
+                style.setProperty(propName, replaceUnsupportedColorFunctions(val), priority);
+            } else {
+                // Standard property — replace unsupported functions
+                const fallback = propName === 'color' || propName === 'caret-color'
+                    ? 'inherit'
+                    : replaceUnsupportedColorFunctions(val);
+                style.setProperty(propName, fallback, priority);
+            }
+        }
+    }
+}
+
+/**
+ * Walk ALL stylesheets in the document and sanitize every CSSOM rule
+ * in-place.  This catches:
+ *  - <style> tags (inline stylesheets)
+ *  - <link> stylesheets (external, same-origin)
+ *  - @media, @supports, @layer, @keyframes nested rules
+ *  - CSS custom properties defined in rules
+ */
+function sanitizeCSSOMRules(doc: Document) {
+    for (let s = 0; s < doc.styleSheets.length; s++) {
+        let sheet: CSSStyleSheet;
+        try {
+            sheet = doc.styleSheets[s];
+            // Accessing cssRules on cross-origin sheets throws SecurityError
+            const rules = sheet.cssRules;
+            for (let r = 0; r < rules.length; r++) {
+                sanitizeCSSRule(rules[r]);
+            }
+        } catch {
+            // Cross-origin stylesheet or other access error — skip
+            continue;
+        }
+    }
+}
 
 // ─── Balanced-parenthesis color function replacer ─────────────────────────
 
@@ -137,14 +228,24 @@ function replaceUnsupportedColorFunctions(text: string, replacement = 'transpare
  * Sanitize CSS color values that html2canvas cannot parse.
  * Runs on the cloned DOM inside html2canvas's iframe BEFORE it parses styles.
  *
- * Strategy:
+ * Strategy (defense-in-depth — each layer catches what earlier layers miss):
+ *  0. Sanitize all CSSOM rules in-place (the primary fix — html2canvas reads
+ *     raw CSSOM rule objects, so this is the only way to guarantee it never
+ *     encounters an unsupported color function in stylesheet rules)
  *  1. Replace unsupported color functions in `<style>` text content
  *  2. Sanitize inline style attributes that contain unsupported functions
- *  3. Override computed styles inline so html2canvas's getComputedStyle reads safe values
- *  4. Sanitize CSS custom properties (--*) on elements that contain unsupported functions
+ *  3. Override computed styles inline (with !important) so html2canvas's
+ *     getComputedStyle reads safe values even if a stylesheet rule uses !important
+ *  4. Sanitize CSS custom properties (--*) on elements
  */
 function sanitizeUnsupportedColors(doc: Document, root: HTMLElement) {
-    // 1. Sanitize <style> tags in the cloned document
+    // 0. ★ CSSOM-level sanitization — walk ALL stylesheet rules and fix values
+    //    in-place.  This is the primary defense: html2canvas reads the CSSOM
+    //    rule objects directly, and modifying textContent alone doesn't reliably
+    //    update parsed CSSOM objects.  This also catches <link> stylesheets.
+    sanitizeCSSOMRules(doc);
+
+    // 1. Sanitize <style> tags in the cloned document (belt-and-suspenders)
     const styles = doc.querySelectorAll('style');
     for (const style of Array.from(styles)) {
         if (style.textContent && UNSUPPORTED_COLOR_RE.test(style.textContent)) {
@@ -171,14 +272,15 @@ function sanitizeUnsupportedColors(doc: Document, root: HTMLElement) {
         try {
             const cs = getCS.call(doc.defaultView, el);
 
-            // 3. Check standard color properties
+            // 3. Check standard color properties — use !important to override
+            //    any stylesheet !important rules that might defeat the inline fix
             for (const prop of COLOR_PROPS) {
                 const val = cs.getPropertyValue(prop);
                 if (val && UNSUPPORTED_COLOR_RE.test(val)) {
                     const fallback = prop === 'color' || prop === 'caret-color'
                         ? 'inherit'
                         : 'transparent';
-                    el.style.setProperty(prop, fallback);
+                    el.style.setProperty(prop, fallback, 'important');
                 }
             }
 
@@ -192,7 +294,7 @@ function sanitizeUnsupportedColors(doc: Document, root: HTMLElement) {
                 if (propName.startsWith('--')) {
                     const val = el.style.getPropertyValue(propName);
                     if (val && UNSUPPORTED_COLOR_RE.test(val)) {
-                        el.style.setProperty(propName, replaceUnsupportedColorFunctions(val));
+                        el.style.setProperty(propName, replaceUnsupportedColorFunctions(val), 'important');
                     }
                 }
             }
@@ -210,7 +312,7 @@ function sanitizeUnsupportedColors(doc: Document, root: HTMLElement) {
             if (propName.startsWith('--')) {
                 const val = rootEl.style.getPropertyValue(propName);
                 if (val && UNSUPPORTED_COLOR_RE.test(val)) {
-                    rootEl.style.setProperty(propName, replaceUnsupportedColorFunctions(val));
+                    rootEl.style.setProperty(propName, replaceUnsupportedColorFunctions(val), 'important');
                 }
             }
         }
