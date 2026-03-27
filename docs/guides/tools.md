@@ -93,6 +93,7 @@ Oboto comes with a comprehensive suite of tools categorized by function.
 | `list_skills` | List available skills in the `skills/` directory. |
 | `read_skill` | Read the definition of a specific skill. |
 | `use_skill` | Execute a skill. |
+| `promote_skill` | Promote a workspace-specific skill to the global skills directory for cross-workspace reuse. |
 | `evaluate_math` | Evaluate a mathematical expression. |
 | `unit_conversion` | Convert units. |
 

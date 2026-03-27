@@ -108,6 +108,7 @@ The `surfaceApi` global is available to all surface components at runtime. It pr
 | `surfaceApi.callTool(toolName, args?)` | `Promise<T>` | No | Call a whitelisted server tool directly |
 | `surfaceApi.directInvoke(name, args?)` | `Promise<T>` | No | Execute a registered direct action |
 | `surfaceApi.fetch(url, options?)` | `Promise<FetchResponse>` | No | Server-side HTTP fetch (avoids CORS) |
+| `surfaceApi.fetchRoute(path)` | `Promise<FetchResponse>` | No | Fetch from the workspace content server (auto-resolves localhost port) |
 | `surfaceApi.registerAction(name, def)` | `Promise<void>` | No | Register a server-side direct action |
 | `surfaceApi.listActions(surfaceId?)` | `Promise<Action[]>` | No | List available direct actions |
 | `surfaceApi.callAgent(prompt)` | `Promise<string>` | **Yes** | Send a prompt, get free-text response (use sparingly) |
@@ -126,7 +127,43 @@ The `surfaceApi` global is available to all surface components at runtime. It pr
 
 `read_file`, `write_file`, `list_files`, `edit_file`, `read_many_files`, `write_many_files`, `search_web`, `list_surfaces`, `list_skills`, `evaluate_math`, `unit_conversion`, `get_image_info`
 
-## 5. Surface Lifecycle
+## 5. Surface Sandboxing & Network Restrictions
+
+UI Surfaces run inside a **strict sandbox** by default to prevent data exfiltration and protect user privacy.
+
+### How It Works
+
+The `fetch` API inside a surface is intercepted at the sandbox boundary. In **strict mode** (the default), only requests to `localhost` origins are allowed. Any attempt to call an external URL will be blocked and an error will be logged.
+
+### Fetching from Workspace Routes
+
+Surfaces should use `surfaceApi.fetchRoute('/path')` to make HTTP requests to the workspace's content server (which serves files from `public/` and, if enabled, executes dynamic routes from `routes/`, `.routes/`, or `api/`). This method automatically resolves the correct `localhost` port for the current workspace.
+
+```jsx
+// Fetch from a workspace route — works in both strict and permissive mode
+const data = await surfaceApi.fetchRoute('/api/status');
+```
+
+### Configuring Sandbox Mode
+
+To relax the sandbox restrictions (e.g., for surfaces that need to call external APIs), set `surface.sandboxMode` to `"permissive"` in the workspace's `.oboto.json`:
+
+```json
+{
+  "surface": {
+    "sandboxMode": "permissive"
+  }
+}
+```
+
+| Mode | `fetch` Behavior | Use Case |
+|------|-----------------|----------|
+| `"strict"` (default) | Only `localhost` allowed | Production, untrusted surfaces |
+| `"permissive"` | All origins allowed | Development, trusted surfaces that call external APIs |
+
+> **Security Note:** The strict sandbox is a defense-in-depth measure. Even in permissive mode, surfaces still run within the Electron/browser sandbox. Use `"permissive"` only when you trust the surface code and understand the implications.
+
+## 6. Surface Lifecycle
 
 Components can react to surface visibility changes using the `useSurfaceLifecycle()` hook (globally available):
 
@@ -165,7 +202,7 @@ export default function MyComponent() {
 - `onUnmount` — surface being destroyed
 - `isFocused` — reactive boolean
 
-## 6. Direct Execution vs LLM Calls
+## 7. Direct Execution vs LLM Calls
 
 Surface action handlers should prefer **direct execution** over LLM calls wherever possible. Direct execution is faster, cheaper, deterministic, and more reliable.
 
@@ -304,7 +341,7 @@ export default function AnalyzeButton() {
 }
 ```
 
-## 7. Workflow Example
+## 8. Workflow Example
 
 1.  **User**: "Show me the current project status."
 2.  **Agent**:

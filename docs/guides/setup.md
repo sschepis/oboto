@@ -119,6 +119,78 @@ The cloud proxy supports all major models and automatically routes to the optima
 
 Without `OBOTO_CLOUD_URL` and `OBOTO_CLOUD_KEY`, the cloud module doesn't load at all. Zero impact on startup time, zero cloud code in memory, and all local features work identically.
 
+## Workspace Content Server
+
+Each workspace automatically spins up a local HTTP server on a dynamically assigned port. This server is used by UI Surfaces and can also serve your own content.
+
+### Static Files
+
+By default, the content server serves static files from the `public/` directory in your workspace root. Place HTML, CSS, JS, images, or any other assets there and they will be available at `http://localhost:<port>/`.
+
+### Dynamic Routes (Opt-in)
+
+You can enable dynamic route execution, which allows the server to run JavaScript route handlers found in `routes/`, `.routes/`, or `api/` directories within the workspace.
+
+**Enable via environment variable:**
+```env
+OBOTO_DYNAMIC_ROUTES=true
+```
+
+**Or via `.oboto.json`:**
+```json
+{
+  "dynamicRoutes": {
+    "enabled": true
+  }
+}
+```
+
+> **Security Note:** Dynamic routes execute arbitrary JavaScript on the server. Only enable this for workspaces you trust.
+
+### Server Logs
+
+All content server requests and errors are logged to `server.log` in the workspace root for debugging and auditing.
+
+## Workspace Configuration (`.oboto.json`)
+
+The `.oboto.json` file provides per-workspace configuration. Place it in the root of any workspace directory.
+
+```json
+{
+  "dynamicRoutes": {
+    "enabled": true
+  },
+  "surface": {
+    "sandboxMode": "strict"
+  }
+}
+```
+
+### Available Options
+
+| Key | Values | Default | Description |
+|-----|--------|---------|-------------|
+| `dynamicRoutes.enabled` | `true` / `false` | `false` | Enable JS route handlers in `routes/`, `.routes/`, `api/` |
+| `surface.sandboxMode` | `"strict"` / `"permissive"` | `"strict"` | Controls network access for UI Surfaces. `strict` restricts `fetch` to `localhost`; `permissive` allows any origin |
+
+### Surface Sandboxing
+
+UI Surfaces run in a strict sandbox by default. The `fetch` API inside surfaces is intercepted and restricted to `localhost` origins to prevent data exfiltration. Surfaces should use `surfaceApi.fetchRoute('/path')` to fetch from workspace routes.
+
+To allow surfaces to access external URLs, set `surface.sandboxMode` to `"permissive"`:
+
+```json
+{
+  "surface": {
+    "sandboxMode": "permissive"
+  }
+}
+```
+
+## Conversation Autosave
+
+Chat history is now automatically saved on every turn. A robust file-lock mechanism prevents corruption when multiple processes or conversations write simultaneously. No configuration is required — autosave is always on.
+
 ## Usage
 
 1.  **Access the UI**: Open `http://localhost:5173` (or the production URL).

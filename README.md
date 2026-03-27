@@ -41,7 +41,8 @@
 *   **☁️ Cloud Sync** — Real-time cloud synchronization for conversations, files, and workspaces with presence indicators and multi-device support.
 
 ### User Interface
-*   **🖥️ Generative UI (Surfaces)** — Spawn dynamic React dashboards on the fly to visualize data or create custom control panels.
+*   **🖥️ Generative UI (Surfaces)** — Spawn dynamic React dashboards on the fly to visualize data or create custom control panels. Surfaces run in a **strict sandbox** by default, with `fetch` restricted to `localhost` to prevent data exfiltration (configurable via `.oboto.json`).
+*   **🕐 Chronological UI Rendering** — Tool calls are now interleaved with text exactly as streamed by the model, improving readability of long reasoning chains.
 *   **❓ Integrated Help System** — Contextual help tooltips, searchable help panel, guided tours, feature spotlights, smart suggestions, and "What Is This?" mode for exploring the interface.
 *   **🧙 Setup Wizard** — Guided first-run onboarding that walks through provider selection, API key configuration, workspace setup, and optional OpenClaw integration.
 *   **🎨 UI Themes** — Customizable themes with live preview and theme editor.
@@ -50,6 +51,14 @@
 ### Desktop & Browser
 *   **🖥️ System Tray App** — Electron-based tray application for running Oboto as a persistent background service with workspace management and auto-start on login.
 *   **🌐 Chrome Extension** — Full browser automation and control via a Chrome extension that connects to the Oboto server over WebSocket.
+
+### Workspace & Server
+*   **🌐 Workspace Content Server** — Each workspace automatically spins up a local HTTP server on a dynamic port, serving static files from `public/`. Opt in to **Dynamic Routes** (executing JS handlers from `routes/`, `.routes/`, or `api/`) via `OBOTO_DYNAMIC_ROUTES=true` or `.oboto.json`. All requests are logged to `server.log`.
+*   **💾 Conversation Autosave** — Chat history is automatically saved on every turn with robust lock mechanisms to prevent corruption.
+*   **🔄 Skill Promotion** — Promote workspace-specific skills to the global skills directory with `promoteSkill(name)` so they can be reused across all workspaces.
+
+### Reliability
+*   **🛡️ Agent Loop Reliability** — Improved "doom loop" detection (counting iterations, not individual batched tool calls) and robust handling of cancelled requests to prevent Anthropic API 400 errors.
 
 ### Developer Features
 *   **📦 Library API** — Embeddable as an npm package (`@sschepis/oboto`) with a programmatic API for task execution, streaming, design-and-implement workflows, and custom tool registration.
@@ -111,7 +120,8 @@ Oboto ships with 30 built-in plugins, each extending capabilities in a specific 
 | **Surfaces** | create, update, delete | Dynamic React dashboard generation |
 | **Async Tasks** | spawn, status, cancel | Background task management |
 | **Personas** | set, list, create | Agent personality management |
-| **Skills** | install, list, invoke | Modular skill system |
+| **Skills** | install, list, invoke, promote | Modular skill system with global promotion |
+| **Content Server** | static serve, dynamic routes | Per-workspace HTTP server for static & JS routes |
 | **Embeddings** | embed, search | Vector embedding operations |
 | **TTS** | speak | Text-to-speech via ElevenLabs/OpenAI |
 
@@ -137,6 +147,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 *   [**Surface Components**](docs/guides/surface-components.md) — Reusable surface-kit UI primitives reference
 *   [**Setup & Installation**](docs/guides/setup.md) — Detailed installation instructions
 *   [**Library API Reference**](src/lib/README.md) — Programmatic API for embedding Oboto
+*   [**Changelog**](CHANGELOG.md) — Version history and release notes
 
 ## ⚡ Quick Start
 
@@ -377,6 +388,27 @@ Key configuration options in `.env`:
 | `AI_TEMPERATURE` | `0.7` | Response creativity |
 | `AI_MAX_TOKENS` | `4096` | Max response tokens |
 | `AI_MAX_TURNS` | `100` | Max conversation turns per execution |
+| `OBOTO_DYNAMIC_ROUTES` | `false` | Enable dynamic JS route execution in the workspace content server |
+
+### Workspace Configuration (`.oboto.json`)
+
+Place a `.oboto.json` file in any workspace root to customize per-workspace behavior:
+
+```json
+{
+  "dynamicRoutes": {
+    "enabled": true
+  },
+  "surface": {
+    "sandboxMode": "strict"
+  }
+}
+```
+
+| Key | Values | Default | Description |
+|-----|--------|---------|-------------|
+| `dynamicRoutes.enabled` | `true` / `false` | `false` | Allow executing JS route handlers from `routes/`, `.routes/`, or `api/` |
+| `surface.sandboxMode` | `"strict"` / `"permissive"` | `"strict"` | `strict` restricts surface `fetch` to localhost; `permissive` allows any origin |
 
 ### Model Routing
 
