@@ -157,25 +157,43 @@ Each workspace automatically spins up a local HTTP server on a dynamically assig
 
 By default, the content server serves static files from the `public/` directory in your workspace root. Place HTML, CSS, JS, images, or any other assets there and they will be available at `http://localhost:<port>/`.
 
-### Dynamic Routes (Opt-in)
+### Dynamic Routes (Enabled by Default)
 
-You can enable dynamic route execution, which allows the server to run JavaScript route handlers found in `routes/`, `.routes/`, or `api/` directories within the workspace.
+Dynamic route execution is **enabled by default**, allowing the server to run JavaScript route handlers found in `routes/`, `.routes/`, or `api/` directories within the workspace.
 
-**Enable via environment variable:**
+To **disable** dynamic routes, set the environment variable:
 ```env
-OBOTO_DYNAMIC_ROUTES=true
+OBOTO_DYNAMIC_ROUTES=false
 ```
 
-**Or via `.oboto.json`:**
+Or add to `.oboto.json`:
 ```json
 {
   "dynamicRoutes": {
-    "enabled": true
+    "enabled": false
   }
 }
 ```
 
-> **Security Note:** Dynamic routes execute arbitrary JavaScript on the server. Only enable this for workspaces you trust.
+> **Security Note:** Dynamic routes execute arbitrary JavaScript on the server. Disable this for untrusted workspaces.
+
+### Background Tasks (Enabled by Default)
+
+Background task spawning is **enabled by default**, allowing the agent to create isolated background AI tasks.
+
+To **disable** background tasks, set the environment variable:
+```env
+OBOTO_BACKGROUND_TASKS=false
+```
+
+Or add to `.oboto.json`:
+```json
+{
+  "backgroundTasks": {
+    "enabled": false
+  }
+}
+```
 
 ### Server Logs
 
@@ -188,7 +206,10 @@ The `.oboto.json` file provides per-workspace configuration. Place it in the roo
 ```json
 {
   "dynamicRoutes": {
-    "enabled": true
+    "enabled": false
+  },
+  "backgroundTasks": {
+    "enabled": false
   },
   "surface": {
     "sandboxMode": "strict"
@@ -200,7 +221,8 @@ The `.oboto.json` file provides per-workspace configuration. Place it in the roo
 
 | Key | Values | Default | Description |
 |-----|--------|---------|-------------|
-| `dynamicRoutes.enabled` | `true` / `false` | `false` | Enable JS route handlers in `routes/`, `.routes/`, `api/` |
+| `dynamicRoutes.enabled` | `true` / `false` | `true` | JS route handlers in `routes/`, `.routes/`, `api/`. Set to `false` to disable. |
+| `backgroundTasks.enabled` | `true` / `false` | `true` | Background AI task spawning. Set to `false` to disable. |
 | `surface.sandboxMode` | `"strict"` / `"permissive"` | `"strict"` | Controls network access for UI Surfaces. `strict` restricts `fetch` to `localhost`; `permissive` allows any origin |
 
 ### Surface Sandboxing

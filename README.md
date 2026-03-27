@@ -53,7 +53,7 @@
 *   **🌐 Chrome Extension** — Full browser automation and control via a Chrome extension that connects to the Oboto server over WebSocket.
 
 ### Workspace & Server
-*   **🌐 Workspace Content Server** — Each workspace automatically spins up a local HTTP server on a dynamic port, serving static files from `public/`. Opt in to **Dynamic Routes** (executing JS handlers from `routes/`, `.routes/`, or `api/`) via `OBOTO_DYNAMIC_ROUTES=true` or `.oboto.json`. All requests are logged to `server.log`.
+*   **🌐 Workspace Content Server** — Each workspace automatically spins up a local HTTP server on a dynamic port, serving static files from `public/`. **Dynamic Routes** (executing JS handlers from `routes/`, `.routes/`, or `api/`) and **Background Tasks** are enabled by default. Opt out via `OBOTO_DYNAMIC_ROUTES=false` / `OBOTO_BACKGROUND_TASKS=false` or `.oboto.json`. All requests are logged to `server.log`.
 *   **💾 Conversation Autosave** — Chat history is automatically saved on every turn with robust lock mechanisms to prevent corruption.
 *   **🔄 Skill Promotion** — Promote workspace-specific skills to the global skills directory with `promoteSkill(name)` so they can be reused across all workspaces.
 
@@ -388,16 +388,20 @@ Key configuration options in `.env`:
 | `AI_TEMPERATURE` | `0.7` | Response creativity |
 | `AI_MAX_TOKENS` | `4096` | Max response tokens |
 | `AI_MAX_TURNS` | `100` | Max conversation turns per execution |
-| `OBOTO_DYNAMIC_ROUTES` | `false` | Enable dynamic JS route execution in the workspace content server |
+| `OBOTO_DYNAMIC_ROUTES` | `true` | Enable dynamic JS route execution in the workspace content server. Set to `false` to disable. |
+| `OBOTO_BACKGROUND_TASKS` | `true` | Enable background task spawning. Set to `false` to disable. |
 
 ### Workspace Configuration (`.oboto.json`)
 
-Place a `.oboto.json` file in any workspace root to customize per-workspace behavior:
+Place a `.oboto.json` file in any workspace root to customize per-workspace behavior. Both dynamic routes and background tasks are **enabled by default**; use this file to disable them for specific workspaces:
 
 ```json
 {
   "dynamicRoutes": {
-    "enabled": true
+    "enabled": false
+  },
+  "backgroundTasks": {
+    "enabled": false
   },
   "surface": {
     "sandboxMode": "strict"
@@ -407,7 +411,8 @@ Place a `.oboto.json` file in any workspace root to customize per-workspace beha
 
 | Key | Values | Default | Description |
 |-----|--------|---------|-------------|
-| `dynamicRoutes.enabled` | `true` / `false` | `false` | Allow executing JS route handlers from `routes/`, `.routes/`, or `api/` |
+| `dynamicRoutes.enabled` | `true` / `false` | `true` | Allow executing JS route handlers from `routes/`, `.routes/`, or `api/`. Set to `false` to disable. |
+| `backgroundTasks.enabled` | `true` / `false` | `true` | Allow spawning background AI tasks. Set to `false` to disable. |
 | `surface.sandboxMode` | `"strict"` / `"permissive"` | `"strict"` | `strict` restricts surface `fetch` to localhost; `permissive` allows any origin |
 
 ### Model Routing

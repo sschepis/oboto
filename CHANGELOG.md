@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Workspace Content Server** — Each workspace now automatically spins up a local HTTP server on a dynamic port. By default, static files are served from the `public/` directory within the workspace root, making it easy to serve HTML, CSS, JS, and other assets directly from your project.
 
-- **Dynamic Routes (opt-in)** — Execute arbitrary JavaScript route handlers from `routes/`, `.routes/`, or `api/` directories within the workspace. Opt in by setting the environment variable `OBOTO_DYNAMIC_ROUTES=true` or by adding `{"dynamicRoutes": {"enabled": true}}` to a `.oboto.json` file at the workspace root. All server requests and errors are logged to `server.log` in the workspace root.
+- **Dynamic Routes (enabled by default)** — Execute arbitrary JavaScript route handlers from `routes/`, `.routes/`, or `api/` directories within the workspace. Enabled by default; opt out by setting the environment variable `OBOTO_DYNAMIC_ROUTES=false` or by adding `{"dynamicRoutes": {"enabled": false}}` to a `.oboto.json` file at the workspace root. All server requests and errors are logged to `server.log` in the workspace root.
 
 - **Surface Sandboxing & Network Restrictions** — UI Surfaces now run inside a strict sandbox by default. The `fetch` API is intercepted and restricted to `localhost` to prevent data exfiltration. Surfaces should use `surfaceApi.fetchRoute('/path')` to access workspace content-server routes. Users can relax restrictions by setting `surface.sandboxMode` to `"permissive"` in `.oboto.json`.
 
@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Configuration
 
 - **`.oboto.json`** — New per-workspace configuration file supporting:
-  - `dynamicRoutes.enabled` — Enable dynamic route execution (default: `false`)
+  - `dynamicRoutes.enabled` — Dynamic route execution (default: `true`). Set to `false` to disable.
+  - `backgroundTasks.enabled` — Background task spawning (default: `true`). Set to `false` to disable.
   - `surface.sandboxMode` — `"strict"` (default) or `"permissive"` to control surface network access
 
 ## [1.2.1] — Previous Release

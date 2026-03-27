@@ -3,7 +3,7 @@
 ## Test Environment
 - **URL:** http://localhost:3000
 - **Test Workspace:** /Users/sschepis/Development/obodo-test-workspace
-- **Start Command:** `export OBOTO_DYNAMIC_ROUTES=true && pnpm run build:ui && pnpm run start:server`
+- **Start Command:** `pnpm run build:ui && pnpm run start:server`
 
 ## Test Categories
 
