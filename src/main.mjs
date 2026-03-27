@@ -1,6 +1,8 @@
 // Main entry point for the AI Assistant
 // Orchestrates CLI interface and AI assistant initialization
 
+import fs from 'fs';
+import path from 'path';
 import { EventicFacade as MiniAIAssistant } from './core/eventic-facade.mjs';
 import { CLIInterface } from './cli/cli-interface.mjs';
 import { AiManEventBus } from './lib/event-bus.mjs';
@@ -67,8 +69,26 @@ async function main() {
             });
         }
 
-        // Initialize Task Manager
-        const taskManager = new TaskManager(eventBus);
+        // Initialize Task Manager (enabled by default; opt out via
+        // OBOTO_BACKGROUND_TASKS=false or {"backgroundTasks":{"enabled":false}} in .oboto.json)
+        let taskManager = null;
+        const bgEnvOptOut = process.env.OBOTO_BACKGROUND_TASKS === 'false';
+        let bgConfigOptOut = false;
+        try {
+            const obotoJsonPath = path.join(workingDir, '.oboto.json');
+            if (fs.existsSync(obotoJsonPath)) {
+                const obotoConfig = JSON.parse(fs.readFileSync(obotoJsonPath, 'utf8'));
+                bgConfigOptOut = obotoConfig?.backgroundTasks?.enabled === false;
+            }
+        } catch (e) {
+            consoleStyler.log('warning', `Failed to read .oboto.json for background tasks config: ${e.message}`);
+        }
+
+        if (bgEnvOptOut || bgConfigOptOut) {
+            consoleStyler.log('system', 'Background tasks disabled (opt-out via .oboto.json or OBOTO_BACKGROUND_TASKS=false)');
+        } else {
+            taskManager = new TaskManager(eventBus);
+        }
 
         // Initialize OpenClaw Manager
         openClawManager = new OpenClawManager(secretsManager); // Assign to lifted var

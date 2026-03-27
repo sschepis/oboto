@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { EventicFacade as MiniAIAssistant } from '../core/eventic-facade.mjs';
 import { ConsoleStatusAdapter } from './adapters/console-status-adapter.mjs';
 import { NetworkLLMAdapter } from './adapters/network-llm-adapter.mjs';
@@ -38,7 +40,20 @@ export class AiMan {
         // Initialize event bus and middleware
         this.events = new AiManEventBus();
         this.middleware = new MiddlewareChain();
-        this.taskManager = new TaskManager(this.events);
+
+        // Background tasks: enabled by default; opt out via
+        // OBOTO_BACKGROUND_TASKS=false or {"backgroundTasks":{"enabled":false}} in .oboto.json
+        let bgDisabled = process.env.OBOTO_BACKGROUND_TASKS === 'false';
+        if (!bgDisabled) {
+            try {
+                const obotoJsonPath = path.join(this.workingDir, '.oboto.json');
+                if (fs.existsSync(obotoJsonPath)) {
+                    const obotoConfig = JSON.parse(fs.readFileSync(obotoJsonPath, 'utf8'));
+                    bgDisabled = obotoConfig?.backgroundTasks?.enabled === false;
+                }
+            } catch (_) { /* ignore parse errors */ }
+        }
+        this.taskManager = bgDisabled ? null : new TaskManager(this.events);
 
         // Store config for creating fresh assistants in design/implement
         this._cfg = cfg;

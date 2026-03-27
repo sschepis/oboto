@@ -25,27 +25,26 @@ async function loadWorkspaceConfig(workspaceRoot) {
  * Scans the workspace for JavaScript files exporting a 'route' function
  * and binds them to the Express app.
  *
- * **Disabled by default.** Opt in via OBOTO_DYNAMIC_ROUTES=true env var or
- * `{ "dynamicRoutes": { "enabled": true } }` in .oboto.json.
+ * **Enabled by default.** Opt out via OBOTO_DYNAMIC_ROUTES=false env var or
+ * `{ "dynamicRoutes": { "enabled": false } }` in .oboto.json.
  * Only scans routes/, .routes/, and api/ directories for security.
  *
  * **Security note:** Dynamic routes execute arbitrary JavaScript from the
  * workspace.  The workspace content server runs on a separate port without
  * auth sessions, but route code still has access to process.env and the
- * filesystem.  Only enable for trusted workspaces.
+ * filesystem.  Disable for untrusted workspaces.
  *
  * @param {import('express').Application} app
  * @param {string} workingDir
  */
 export async function mountDynamicRoutes(app, workingDir) {
-    // Opt-in: dynamic route loading executes arbitrary JS from the workspace.
-    // Enable explicitly when you trust the workspace content.
+    // Enabled by default. Opt out explicitly for untrusted workspaces.
     const wsConfig = await loadWorkspaceConfig(workingDir);
-    const envOptIn = process.env.OBOTO_DYNAMIC_ROUTES === 'true';
-    const configOptIn = wsConfig?.dynamicRoutes?.enabled === true;
+    const envOptOut = process.env.OBOTO_DYNAMIC_ROUTES === 'false';
+    const configOptOut = wsConfig?.dynamicRoutes?.enabled === false;
 
-    if (!envOptIn && !configOptIn) {
-        consoleStyler.log('system', 'Dynamic routes disabled (opt-in via .oboto.json or OBOTO_DYNAMIC_ROUTES=true)');
+    if (envOptOut || configOptOut) {
+        consoleStyler.log('system', 'Dynamic routes disabled (opt-out via .oboto.json or OBOTO_DYNAMIC_ROUTES=false)');
         return;
     }
 
