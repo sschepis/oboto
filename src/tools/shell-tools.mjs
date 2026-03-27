@@ -12,6 +12,9 @@ const BLOCKED_PATTERNS = [
     />\s*\/dev\/(?!null\b)/, // writing to devices (allow /dev/null)
 ];
 
+/** Maximum timeout allowed for any shell command (10 minutes). */
+const MAX_TIMEOUT = 600_000;
+
 // Common command suggestions for recovery from failures
 const COMMAND_SUGGESTIONS = {
     127: (cmd) => {
@@ -32,7 +35,7 @@ export class ShellTools {
         this.workingDir = workingDir;
         this.allowList = options.allowList || null; // null = allow all (except blocked)
         this.denyList = options.denyList || BLOCKED_PATTERNS;
-        this.timeout = options.timeout || 30_000;
+        this.timeout = Math.min(options.timeout || 30_000, MAX_TIMEOUT);
     }
 
     /**
@@ -53,7 +56,7 @@ export class ShellTools {
         }
 
         const effectiveCwd = cwd || this.workingDir;
-        const effectiveTimeout = timeout || this.timeout;
+        const effectiveTimeout = Math.min(timeout || this.timeout, MAX_TIMEOUT);
 
         // Security check
         for (const pattern of this.denyList) {
@@ -107,7 +110,7 @@ export class ShellTools {
         }
 
         const effectiveCwd = cwd || this.workingDir;
-        const effectiveTimeout = timeout || this.timeout;
+        const effectiveTimeout = Math.min(timeout || this.timeout, MAX_TIMEOUT);
 
         // Security check
         for (const pattern of this.denyList) {

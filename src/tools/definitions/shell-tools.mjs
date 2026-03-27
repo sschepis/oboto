@@ -8,7 +8,7 @@ export const SHELL_TOOLS = [{
             properties: {
                 command: { type: "string", description: "The shell command to execute" },
                 cwd: { type: "string", description: "Working directory (default: workspace root)" },
-                timeout: { type: "number", description: "Timeout in ms (default: 30000)" }
+                timeout: { type: "number", description: "Timeout in ms (default: 30000, max: 600000)" }
             },
             required: ["command"]
         }

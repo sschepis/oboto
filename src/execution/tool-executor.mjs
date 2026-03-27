@@ -126,6 +126,7 @@ const TOOL_TIMEOUTS = {
     write_many_files: 60_000,
     execute_javascript: 60_000,
     execute_npm_function: 60_000,
+    run_command: 600_000, // 10 minutes — accommodate long-running tasks (e.g. image generation)
     call_ai_assistant: 300_000,
     ask_blocking_question: 24 * 60 * 60 * 1000, // 24 hours — effectively indefinite
     spawn_background_task: 10_000, // Fast return
