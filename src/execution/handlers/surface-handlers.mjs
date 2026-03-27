@@ -435,6 +435,11 @@ export class SurfaceHandlers {
                 }
             }
 
+            // Context anchor: remind the model what it just read and what tools are available
+            const compNames = surface.components.map(c => c.name).join(', ') || '(none)';
+            lines.push('');
+            lines.push(`--- [SYSTEM NOTE: You have just read the source code for surface '${surfaceId}' (components: ${compNames}). You can now use the 'update_surface_component' tool to patch this file, or reference its contents in your thoughts. Do NOT call read_surface again for this surface unless the code has changed.] ---`);
+
             return lines.join('\n');
         } catch (error) {
             return `[error] read_surface: ${error.message}`;

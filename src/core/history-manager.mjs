@@ -27,6 +27,14 @@ export class HistoryManager {
         this._checkpoints = new Map();
         this._summarizer = null;
         this._onChange = null;
+
+        /**
+         * Promise queue for serialising async enforceContextLimits() calls.
+         * Each call chains onto this promise so that concurrent addMessage()
+         * invocations don't create overlapping summarisation requests.
+         * @type {Promise<void>}
+         */
+        this._limitQueue = Promise.resolve();
     }
 
     /**
@@ -89,8 +97,12 @@ export class HistoryManager {
         
         this.history.push(message);
         
-        // Check context limits and optimize if needed
-        this.enforceContextLimits();
+        // Check context limits and optimize if needed.
+        // Enqueue onto the serial promise queue so concurrent calls don't
+        // create overlapping summarisation requests (async race fix).
+        this._limitQueue = this._limitQueue
+            .then(() => this.enforceContextLimits())
+            .catch(err => consoleStyler.log('error', `enforceContextLimits failed: ${err.message}`));
         
         if (this._onChange) {
             this._onChange(this).catch?.(() => {}); // fire and forget
@@ -109,7 +121,10 @@ export class HistoryManager {
             message.timestamp = new Date().toISOString();
         }
         this.history.push(message);
-        this.enforceContextLimits();
+        // Enqueue context-limit enforcement (same serial queue as addMessage)
+        this._limitQueue = this._limitQueue
+            .then(() => this.enforceContextLimits())
+            .catch(err => consoleStyler.log('error', `enforceContextLimits failed: ${err.message}`));
         if (this._onChange) {
             this._onChange(this).catch?.(() => {});
         }

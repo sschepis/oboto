@@ -11,30 +11,66 @@ export class CoreHandlers {
         this.assistant = options.assistant || null; // Reference to parent assistant for conversation management
     }
 
-    // Read full conversation history
+    // Read full conversation history — includes tool call results from the
+    // live AI provider's conversationHistory (which contains the raw tool
+    // results that HistoryManager may have summarised away).
     async readConversationHistory(args) {
-        if (!this.historyManager) {
-            return "[error] read_conversation_history: History manager not available.";
+        // Prefer the live AI provider's conversationHistory (includes tool
+        // call / tool result messages) over HistoryManager's summarised view.
+        const liveHistory = this.assistant?.aiProvider?.conversationHistory;
+        const source = (liveHistory && liveHistory.length > 0)
+            ? liveHistory
+            : (this.historyManager ? this.historyManager.getHistory() : null);
+
+        if (!source) {
+            return "[error] read_conversation_history: Neither AI provider history nor history manager is available.";
         }
-        
+
         const { limit = 50, offset = 0 } = args;
-        let messages = this.historyManager.getHistory();
-        
-        // Skip system prompt if desired? No, keep it as it's part of history.
-        // But usually we want recent history.
-        
+        let messages = [...source]; // shallow copy to avoid mutation
+
         if (offset > 0) {
-            // Remove last 'offset' messages
-            if (offset >= messages.length) return "[]";
+            if (offset >= messages.length) return "No messages found at that offset.";
             messages = messages.slice(0, -offset);
         }
-        
+
         if (limit !== -1) {
-            // Take last 'limit' messages
             messages = messages.slice(-limit);
         }
-        
-        return JSON.stringify(messages, null, 2);
+
+        // Format messages for readability — especially tool results which can
+        // be very large.  Truncate individual message content to keep the
+        // response manageable.
+        const MAX_CONTENT_LEN = 2000;
+        const formatted = messages.map(m => {
+            const entry = { role: m.role };
+            if (m.name) entry.name = m.name;
+            if (m.tool_call_id) entry.tool_call_id = m.tool_call_id;
+
+            // Summarise tool_calls array (assistant requesting tools)
+            if (m.tool_calls && Array.isArray(m.tool_calls)) {
+                entry.tool_calls = m.tool_calls.map(tc => ({
+                    id: tc.id,
+                    function: tc.function?.name,
+                    arguments_length: tc.function?.arguments?.length ?? 0,
+                }));
+            }
+
+            // Content: truncate very large payloads (e.g. read_surface output)
+            if (typeof m.content === 'string') {
+                if (m.content.length > MAX_CONTENT_LEN) {
+                    entry.content = m.content.substring(0, MAX_CONTENT_LEN) + `\n… (truncated, ${m.content.length} chars total)`;
+                } else {
+                    entry.content = m.content;
+                }
+            } else if (m.content != null) {
+                entry.content = m.content; // could be null for tool_calls-only messages
+            }
+
+            return entry;
+        });
+
+        return JSON.stringify(formatted, null, 2);
     }
 
     // Promote memory to global store
