@@ -174,6 +174,7 @@ export class CoreHandlers {
                 clearTimeout: clearTimeout,
                 setInterval: setInterval,
                 clearInterval: clearInterval,
+                fetch: globalThis.fetch,
                 // Stubs for front-end globals that AI-generated code may reference
                 surfaceApi: {},
                 UI: {},
