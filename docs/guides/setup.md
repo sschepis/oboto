@@ -45,27 +45,57 @@ This guide will help you set up and run the Oboto AI Assistant.
 ## Running the Application
 
 ### Option A: Server Mode (Recommended)
-This runs the backend server and the web UI.
+This runs the backend server with the web UI.
 
-1.  **Start the Backend Server**
-    ```bash
-    npm run serve
-    ```
-    This will start the server on `http://localhost:3000`.
+**Via installed binary (after `npm install -g @sschepis/oboto`):**
+```bash
+oboto-server
+# or
+oboto --server
+```
 
-2.  **Start the Frontend (Development)**
-    In a new terminal:
-    ```bash
-    npm run dev:ui
-    ```
-    This will launch the UI on `http://localhost:5173`.
+**Via npm scripts (from source checkout):**
+```bash
+npm run start:server
+```
+Access the UI at `http://localhost:3000`.
+
+**Development with hot-reloading UI:**
+```bash
+# Terminal 1: Start the backend
+npm run start:server
+
+# Terminal 2: Start the Vite dev server
+npm run dev:ui
+```
+Access the dev UI at `http://localhost:5173`.
 
 ### Option B: CLI Mode
 Run the assistant directly in your terminal.
 
+**Via installed binary:**
+```bash
+# Interactive mode
+oboto
+
+# Single-shot mode
+oboto "Create a REST API for user management"
+```
+
+**Via npm scripts:**
 ```bash
 npm start
 ```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--server` | Start the Express + WebSocket server with web UI |
+| `--cwd <path>` | Set the working directory (default: current directory) |
+| `--resume` | Resume previous session on startup |
+| `--help`, `-h` | Show help message and exit |
+| `--version`, `-v` | Show version number and exit |
 
 ### Option C: Production Build
 To build the UI for production serving:
@@ -187,13 +217,31 @@ To allow surfaces to access external URLs, set `surface.sandboxMode` to `"permis
 }
 ```
 
+## Agentic Providers
+
+Oboto ships with two agentic provider backends that control how the agent loop executes:
+
+| Provider | ID | Description |
+|----------|----|-------------|
+| **Unified** | `unified` | Default. Combines cognitive reasoning, safety guardrails, memory, and learning layers into a single provider. |
+| **NewAgent** | `newagent` | Autonomous CLI-style agent with virtual filesystem (VFS), AST pipeline, dual memory, and batch command execution via AgentRunner. |
+
+Set the default provider in your `.env` or config:
+```env
+AI_AGENTIC_PROVIDER=unified
+```
+
+You can also switch providers at runtime via the Settings UI or the `/provider` command.
+
+> **Note:** The legacy `eventic`, `cognitive`, `lmscript`, `maha`, and `megacode` providers have been consolidated into the `unified` and `newagent` providers. If your config references a removed provider ID, it will fall back to `unified`.
+
 ## Conversation Autosave
 
 Chat history is now automatically saved on every turn. A robust file-lock mechanism prevents corruption when multiple processes or conversations write simultaneously. No configuration is required — autosave is always on.
 
 ## Usage
 
-1.  **Access the UI**: Open `http://localhost:5173` (or the production URL).
+1.  **Access the UI**: Open `http://localhost:5173` (or the production URL at port 3000).
 2.  **Start a Chat**: Type your request in the input box.
 3.  **Use Tools**: The agent will automatically use tools as needed. You can also invoke specific commands (e.g., `/plan`, `/analyze`).
 4.  **Manage Files**: Use the built-in file editor tab to view and edit code.

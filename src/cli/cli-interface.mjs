@@ -4,6 +4,7 @@
 import readline from 'readline';
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
 export class CLIInterface {
@@ -148,6 +149,18 @@ export class CLIInterface {
         const args = process.argv.slice(2);
         let workingDir = process.cwd();
 
+        // Handle --help / -h early — print usage and exit
+        if (args.includes('--help') || args.includes('-h')) {
+            this.displayHelp();
+            process.exit(0);
+        }
+
+        // Handle --version / -v early — print version and exit
+        if (args.includes('--version') || args.includes('-v')) {
+            this.displayVersion();
+            process.exit(0);
+        }
+
         // Extract --cwd <path> first (used by tray app's daemon manager).
         // Splice it out before any other index lookups so subsequent
         // indexOf calls see stable positions.
@@ -200,11 +213,20 @@ export class CLIInterface {
     displayHelp() {
         const theme = consoleStyler.getTheme();
         const helpContent = `
-${consoleStyler.icons.ai} AI Assistant Help:
+${consoleStyler.icons.ai} Oboto — AI-Powered Everything Assistant
 
 ${theme.primary('USAGE:')}
-  Interactive mode: node ai.mjs
-  Single-shot mode: node ai.mjs "your question or command"
+  oboto                                  Interactive mode
+  oboto "your question or command"       Single-shot mode
+  oboto --server                         Start web server with UI
+  oboto-server                           Start web server (alias)
+
+${theme.warning('FLAGS:')}
+  --server          Start the Express + WebSocket server with web UI
+  --cwd <path>      Set the working directory (default: cwd)
+  --resume          Resume previous session on startup
+  --help, -h        Show this help message
+  --version, -v     Show version number
 
 ${theme.warning('SPECIAL COMMANDS (Interactive mode only):')}
   \\         - Delete the last exchange from conversation history
@@ -213,25 +235,30 @@ ${theme.warning('SPECIAL COMMANDS (Interactive mode only):')}
   exit      - Exit the program
 
 ${theme.info('EXAMPLES:')}
-  node ai.mjs "Create a simple calculator function"
-  node ai.mjs "Use axios to fetch data from jsonplaceholder.typicode.com"
-  node ai.mjs "Install and use uuid to generate 5 random IDs"
+  oboto "Create a simple calculator function"
+  oboto "Use axios to fetch data from jsonplaceholder.typicode.com"
+  oboto --server --cwd /path/to/project
+  oboto-server
 
 ${theme.success('FEATURES:')}
-  ${consoleStyler.icons.check} Execute JavaScript code with automatic npm package installation
-  ${consoleStyler.icons.check} Create and manage custom reusable tools
-  ${consoleStyler.icons.check} Multi-step task management with todo lists
-  ${consoleStyler.icons.check} Error recovery and retry mechanisms
-  ${consoleStyler.icons.check} Quality evaluation and response improvement
-  ${consoleStyler.icons.check} Workspace management for complex tasks
-  ${consoleStyler.icons.check} Text-to-speech support (with ElevenLabs API key)
-  ${consoleStyler.icons.check} Enhanced console styling with themes
+  ${consoleStyler.icons.check} Multi-agent architecture with parallel conversations
+  ${consoleStyler.icons.check} Autonomous agent loop with tool execution
+  ${consoleStyler.icons.check} Generative UI surfaces (dynamic React dashboards)
+  ${consoleStyler.icons.check} Plugin ecosystem (30+ built-in plugins)
+  ${consoleStyler.icons.check} Multi-provider AI support (OpenAI, Gemini, Anthropic, local LLMs)
+  ${consoleStyler.icons.check} Workspace management and content server
+  ${consoleStyler.icons.check} Skill system with modular extensions
+  ${consoleStyler.icons.check} MCP (Model Context Protocol) integration
 
 ${theme.system('REQUIREMENTS:')}
   ${consoleStyler.icons.bullet} Node.js v18+ (for native fetch support)
-  ${consoleStyler.icons.bullet} One of: LMStudio/Ollama (local), OpenAI API key, or Google Gemini API key
-  ${consoleStyler.icons.bullet} Set AI_MODEL in .env (e.g., gpt-4o, gemini-2.0-flash, or local model name)
+  ${consoleStyler.icons.bullet} One of: LMStudio/Ollama (local), OpenAI, Google Gemini, or Anthropic API key
+  ${consoleStyler.icons.bullet} Set AI_MODEL in .env (e.g., gpt-4o, gemini-2.5-flash, or local model name)
   ${consoleStyler.icons.bullet} Optional: ElevenLabs API key for text-to-speech
+
+${theme.accent('AGENTIC PROVIDERS:')}
+  unified    — Cognitive + safety + memory + learning layers (default)
+  newagent   — Autonomous CLI-style agent with VFS, AST pipeline, batch commands
 
 ${theme.accent('THEMES:')}
   Available: ${consoleStyler.getAvailableThemes().join(', ')}
@@ -239,6 +266,17 @@ ${theme.accent('THEMES:')}
 `;
 
         console.log(helpContent);
+    }
+
+    // Display version information
+    displayVersion() {
+        try {
+            const require = createRequire(import.meta.url);
+            const pkg = require('../../package.json');
+            console.log(`oboto v${pkg.version}`);
+        } catch {
+            console.log('oboto (version unknown)');
+        }
     }
 
     // Display error information
