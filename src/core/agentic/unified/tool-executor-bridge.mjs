@@ -392,7 +392,13 @@ export class ToolExecutorBridge {
    * @returns {Promise<{results: Array<{role: string, tool_call_id: string, name: string, content: string}>, hasErrors: boolean}>}
    */
   async executeToolBatch(toolCalls, options = {}) {
-    const { signal } = options;
+    const { signal, turnId } = options;
+
+    // Propagate turnId to the underlying ToolExecutor so that the VM cache
+    // key remains stable across all tool calls within a single iteration.
+    if (turnId && this._toolExecutor && typeof this._toolExecutor === 'object') {
+      this._toolExecutor.turnId = turnId;
+    }
     const results = [];
     let hasErrors = false;
 

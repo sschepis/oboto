@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronRight, Folder, FileText, FolderOpen, Copy, Trash2, ExternalLink, Files, X, RefreshCw, ChevronsDown, ChevronsUp } from 'lucide-react';
+import { ChevronRight, Folder, FileText, FolderOpen, Copy, Trash2, ExternalLink, Files, X, RefreshCw, ChevronsDown, ChevronsUp, Pencil, FolderInput, AppWindow } from 'lucide-react';
 import type { FileNode } from '../../hooks/useChat';
 import { wsService } from '../../services/wsService';
 
@@ -35,16 +35,53 @@ interface FileTreeNodeProps {
   forceExpand?: boolean;
   /** When true, all directories start expanded; when false, all start collapsed */
   defaultExpanded?: boolean;
+  /** Drag-and-drop: currently dragged path */
+  draggedPath: string | null;
+  onDragStart: (path: string) => void;
+  onDragEnd: () => void;
+  onDropOnFolder: (targetFolder: string) => void;
+  /** Inline rename state */
+  renamingPath: string | null;
+  renameValue: string;
+  onRenameChange: (value: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
 }
 
-const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, onFileClick, onContextMenu, forceExpand, defaultExpanded }) => {
+const FileTreeNode: React.FC<FileTreeNodeProps> = ({
+  node, depth, parentPath, onFileClick, onContextMenu,
+  forceExpand, defaultExpanded,
+  draggedPath, onDragStart, onDragEnd, onDropOnFolder,
+  renamingPath, renameValue, onRenameChange, onRenameCommit, onRenameCancel,
+}) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded !== undefined ? defaultExpanded : depth < 1);
+  const [isDragOver, setIsDragOver] = useState(false);
   const isDir = node.type === 'directory';
   const hasChildren = isDir && node.children && node.children.length > 0;
   const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
   const effectiveOpen = forceExpand || isOpen;
+  const isRenaming = renamingPath === fullPath;
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      // Select filename without extension for files
+      if (!isDir) {
+        const dotIdx = renameValue.lastIndexOf('.');
+        if (dotIdx > 0) {
+          renameInputRef.current.setSelectionRange(0, dotIdx);
+        } else {
+          renameInputRef.current.select();
+        }
+      } else {
+        renameInputRef.current.select();
+      }
+    }
+  }, [isRenaming]);
 
   const handleClick = () => {
+    if (isRenaming) return;
     if (isDir) {
       setIsOpen(!isOpen);
     } else {
@@ -58,6 +95,44 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, on
     onContextMenu(e, fullPath, node.type);
   };
 
+  // Drag-and-drop handlers
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('text/plain', fullPath);
+    e.dataTransfer.effectAllowed = 'move';
+    onDragStart(fullPath);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!isDir) return;
+    if (draggedPath === fullPath) return; // Can't drop on self
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    if (isDir && draggedPath && draggedPath !== fullPath) {
+      onDropOnFolder(fullPath);
+    }
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onRenameCommit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onRenameCancel();
+    }
+  };
+
   // File extension color hints
   const getFileColor = (name: string): string => {
     const ext = name.split('.').pop()?.toLowerCase();
@@ -69,6 +144,8 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, on
       case 'md': return 'text-zinc-400/60';
       case 'html': return 'text-orange-400/60';
       case 'svg': case 'png': case 'jpg': return 'text-emerald-400/60';
+      case 'mp3': case 'wav': case 'ogg': case 'm4a': case 'flac': case 'aac': return 'text-violet-400/60';
+      case 'mp4': case 'webm': case 'mov': return 'text-fuchsia-400/60';
       default: return 'text-zinc-600';
     }
   };
@@ -78,7 +155,15 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, on
       <button
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        className="flex items-center gap-1.5 w-full text-left py-[3px] px-1 rounded-md hover:bg-zinc-800/40 transition-all duration-100 group cursor-pointer relative"
+        draggable={!isRenaming}
+        onDragStart={handleDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex items-center gap-1.5 w-full text-left py-[3px] px-1 rounded-md hover:bg-zinc-800/40 transition-all duration-100 group cursor-pointer relative ${
+          isDragOver ? 'bg-indigo-500/15 ring-1 ring-indigo-500/30' : ''
+        } ${draggedPath === fullPath ? 'opacity-40' : ''}`}
         style={{ paddingLeft: `${depth * 14 + 4}px` }}
       >
         {/* Indentation guides */}
@@ -108,13 +193,26 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, on
             <FileText size={11} className={`shrink-0 ${getFileColor(node.name)}`} />
           </>
         )}
-        <span className={`text-[10px] truncate transition-colors duration-100 ${
-          isDir 
-            ? 'text-zinc-400 font-medium group-hover:text-zinc-300' 
-            : 'text-zinc-500 group-hover:text-zinc-400'
-        }`}>
-          {node.name}
-        </span>
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            value={renameValue}
+            onChange={(e) => onRenameChange(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            onBlur={onRenameCommit}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[10px] bg-zinc-900 border border-indigo-500/50 rounded px-1 py-0 text-zinc-200 focus:outline-none focus:border-indigo-400 min-w-[60px] flex-1"
+          />
+        ) : (
+          <span className={`text-[10px] truncate transition-colors duration-100 ${
+            isDir 
+              ? 'text-zinc-400 font-medium group-hover:text-zinc-300' 
+              : 'text-zinc-500 group-hover:text-zinc-400'
+          }`}>
+            {node.name}
+          </span>
+        )}
       </button>
       
       {/* Children with collapse transition */}
@@ -130,6 +228,15 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({ node, depth, parentPath, on
               onContextMenu={onContextMenu}
               forceExpand={forceExpand}
               defaultExpanded={defaultExpanded}
+              draggedPath={draggedPath}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDropOnFolder={onDropOnFolder}
+              renamingPath={renamingPath}
+              renameValue={renameValue}
+              onRenameChange={onRenameChange}
+              onRenameCommit={onRenameCommit}
+              onRenameCancel={onRenameCancel}
             />
           ))}
         </div>
@@ -159,6 +266,15 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
   /** undefined = default (depth < 1), true = expand all, false = collapse all */
   const [defaultExpanded, setDefaultExpanded] = useState<boolean | undefined>(undefined);
   const menuRef = useRef<HTMLDivElement>(null);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+
+  // Drag-and-drop state
+  const [draggedPath, setDraggedPath] = useState<string | null>(null);
+  const [isDragOverPanel, setIsDragOverPanel] = useState(false);
+
+  // Inline rename state
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const handleExpandAll = useCallback(() => {
     setDefaultExpanded(true);
@@ -206,16 +322,88 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
     });
   };
 
-  const handleAction = async (action: 'open' | 'copy-path' | 'duplicate' | 'delete') => {
+  // Drag-and-drop handlers
+  const handleDragStart = useCallback((path: string) => {
+    setDraggedPath(path);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedPath(null);
+    setIsDragOverPanel(false);
+  }, []);
+
+  const handleDropOnFolder = useCallback((targetFolder: string) => {
+    if (draggedPath && draggedPath !== targetFolder) {
+      wsService.moveFile(draggedPath, targetFolder);
+    }
+    setDraggedPath(null);
+  }, [draggedPath]);
+
+  // Panel-level drop (drop on root / background area)
+  const handlePanelDragOver = useCallback((e: React.DragEvent) => {
+    if (!draggedPath) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOverPanel(true);
+  }, [draggedPath]);
+
+  const handlePanelDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving the panel container itself
+    if (treeContainerRef.current && !treeContainerRef.current.contains(e.relatedTarget as Node)) {
+      setIsDragOverPanel(false);
+    }
+  }, []);
+
+  const handlePanelDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverPanel(false);
+    if (draggedPath) {
+      // Drop on root = move to workspace root
+      wsService.moveFile(draggedPath, '.');
+      setDraggedPath(null);
+    }
+  }, [draggedPath]);
+
+  // Rename handlers
+  const startRename = useCallback((path: string) => {
+    const name = path.split('/').pop() || '';
+    setRenamingPath(path);
+    setRenameValue(name);
+    setContextMenu(null);
+  }, []);
+
+  const commitRename = useCallback(() => {
+    if (!renamingPath || !renameValue.trim()) {
+      setRenamingPath(null);
+      setRenameValue('');
+      return;
+    }
+    const oldName = renamingPath.split('/').pop() || '';
+    if (renameValue.trim() !== oldName) {
+      const parent = renamingPath.substring(0, renamingPath.lastIndexOf('/'));
+      const newPath = parent ? `${parent}/${renameValue.trim()}` : renameValue.trim();
+      wsService.renameFile(renamingPath, newPath);
+    }
+    setRenamingPath(null);
+    setRenameValue('');
+  }, [renamingPath, renameValue]);
+
+  const cancelRename = useCallback(() => {
+    setRenamingPath(null);
+    setRenameValue('');
+  }, []);
+
+  const handleAction = async (action: 'open' | 'copy-path' | 'duplicate' | 'delete' | 'rename' | 'reveal-in-finder' | 'open-with-default') => {
     if (!contextMenu) return;
     const { path } = contextMenu;
-    setContextMenu(null);
 
     switch (action) {
       case 'open':
+        setContextMenu(null);
         onFileClick?.(path);
         break;
       case 'copy-path':
+        setContextMenu(null);
         try {
           await navigator.clipboard.writeText(path);
         } catch (err) {
@@ -223,6 +411,7 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
         }
         break;
       case 'duplicate': {
+        setContextMenu(null);
         const name = path.split('/').pop() || '';
         const parent = path.substring(0, path.lastIndexOf('/'));
         const newName = window.prompt('Enter new name for duplicate:', `copy_${name}`);
@@ -233,9 +422,21 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
         break;
       }
       case 'delete':
+        setContextMenu(null);
         if (window.confirm(`Are you sure you want to delete ${path}?`)) {
           wsService.deleteFile(path);
         }
+        break;
+      case 'rename':
+        startRename(path);
+        break;
+      case 'reveal-in-finder':
+        setContextMenu(null);
+        wsService.revealInFinder(path);
+        break;
+      case 'open-with-default':
+        setContextMenu(null);
+        wsService.openWithDefault(path);
         break;
     }
   };
@@ -249,7 +450,13 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
   }
 
   return (
-    <div className="space-y-0 relative">
+    <div
+      ref={treeContainerRef}
+      className={`space-y-0 relative ${isDragOverPanel ? 'bg-indigo-500/5 ring-1 ring-inset ring-indigo-500/20 rounded-lg' : ''}`}
+      onDragOver={handlePanelDragOver}
+      onDragLeave={handlePanelDragLeave}
+      onDrop={handlePanelDrop}
+    >
       <div className="flex items-center justify-between mb-2 px-1">
         <h4 className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.15em]">
           Workspace Files
@@ -315,15 +522,31 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
             onContextMenu={handleContextMenu}
             forceExpand={!!filterPattern}
             defaultExpanded={defaultExpanded}
+            draggedPath={draggedPath}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDropOnFolder={handleDropOnFolder}
+            renamingPath={renamingPath}
+            renameValue={renameValue}
+            onRenameChange={setRenameValue}
+            onRenameCommit={commitRename}
+            onRenameCancel={cancelRename}
           />
         ))}
       </div>
+
+      {/* Drop hint when dragging over the panel background */}
+      {isDragOverPanel && draggedPath && (
+        <div className="absolute inset-x-0 bottom-0 py-1 text-center text-[9px] text-indigo-400/70 pointer-events-none">
+          Drop to move to workspace root
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-50 w-48 bg-[#0e0e0e] border border-zinc-800/60 rounded-xl shadow-2xl shadow-black/50 py-1 animate-scale-in overflow-hidden"
+          className="fixed z-50 w-52 bg-[#0e0e0e] border border-zinc-800/60 rounded-xl shadow-2xl shadow-black/50 py-1 animate-scale-in overflow-hidden"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           {contextMenu.type === 'file' && (
@@ -335,6 +558,13 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
               Open
             </button>
           )}
+          <button
+            onClick={() => handleAction('rename')}
+            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
+          >
+            <Pencil size={12} className="text-zinc-500" />
+            Rename
+          </button>
           <button
             onClick={() => handleAction('copy-path')}
             className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
@@ -348,6 +578,21 @@ const FileTree: React.FC<FileTreeProps> = ({ files, onFileClick }) => {
           >
             <Files size={12} className="text-zinc-500" />
             Duplicate
+          </button>
+          <div className="h-px bg-zinc-800/40 mx-2 my-1" />
+          <button
+            onClick={() => handleAction('reveal-in-finder')}
+            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
+          >
+            <FolderInput size={12} className="text-zinc-500" />
+            Reveal in Finder
+          </button>
+          <button
+            onClick={() => handleAction('open-with-default')}
+            className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100 flex items-center gap-2.5 transition-colors duration-100"
+          >
+            <AppWindow size={12} className="text-zinc-500" />
+            Open...
           </button>
           <div className="h-px bg-zinc-800/40 mx-2 my-1" />
           <button

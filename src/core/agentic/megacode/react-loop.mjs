@@ -144,18 +144,21 @@ export class ReactLoop {
             emitStatus('Could not load conversation history — starting fresh');
         }
 
+        // Allow per-execution override of max iterations (e.g. background tasks)
+        const effectiveMaxIterations = options.maxIterations || this._maxIterations;
+
         // Add user input as the current turn
         conversationTurns.push({ role: 'user', content: input });
 
         try {
-            while (iterations < this._maxIterations) {
+            while (iterations < effectiveMaxIterations) {
                 checkAbort(options.signal);
                 iterations++;
                 runMetrics.iterations = iterations;
 
                 // --- Status: Iteration start ---
                 tracker.setActivity(
-                    `Sending request to AI — iteration ${iterations}/${this._maxIterations}`,
+                    `Sending request to AI — iteration ${iterations}/${effectiveMaxIterations}`,
                     { phase: 'llm-call' }
                 );
 
@@ -164,7 +167,7 @@ export class ReactLoop {
                     deps.eventBus.emit('agentic:megacode-step', {
                         type: 'iteration-start',
                         iteration: iterations,
-                        maxIterations: this._maxIterations,
+                        maxIterations: effectiveMaxIterations,
                         timestamp: Date.now(),
                     });
                 }
@@ -237,7 +240,7 @@ export class ReactLoop {
                     }
 
                     // Emit progress event
-                    emitProgress(deps, runMetrics, allToolCalls, budget, this._maxIterations);
+                    emitProgress(deps, runMetrics, allToolCalls, budget, effectiveMaxIterations);
 
                     return {
                         response: action.response,
@@ -333,7 +336,7 @@ export class ReactLoop {
                     streamManager.token(llmResponse);
                 }
 
-                emitProgress(deps, runMetrics, allToolCalls, budget, this._maxIterations);
+                emitProgress(deps, runMetrics, allToolCalls, budget, effectiveMaxIterations);
 
                 return {
                     response: llmResponse,
@@ -345,15 +348,15 @@ export class ReactLoop {
             }
 
             // --- Max iterations reached — attempt synthesis ---
-            emitCommentary(`Reached iteration limit (${this._maxIterations}) — synthesizing final response`);
+            emitCommentary(`Reached iteration limit (${effectiveMaxIterations}) — synthesizing final response`);
             tracker.setActivity('Synthesizing response from collected results…', { phase: 'llm-call' });
 
             const synthesisResponse = await synthesizeAtLimit(
-                systemPrompt, conversationTurns, allToolCalls, deps, options, budget, this._maxIterations
+                systemPrompt, conversationTurns, allToolCalls, deps, options, budget, effectiveMaxIterations
             );
 
             tracker.stop();
-            emitProgress(deps, runMetrics, allToolCalls, budget, this._maxIterations);
+            emitProgress(deps, runMetrics, allToolCalls, budget, effectiveMaxIterations);
 
             return {
                 response: synthesisResponse,

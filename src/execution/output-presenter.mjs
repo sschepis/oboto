@@ -23,8 +23,26 @@ const MAX_LINES = 200;
 const MAX_BYTES = 50 * 1024; // 50KB
 const CONTROL_CHAR_THRESHOLD = 0.10; // 10%
 
-// Overflow files are written here
-const OVERFLOW_DIR = path.join(os.tmpdir(), 'ai-man-overflow');
+// Overflow workspace root — defaults to cwd, overridden by ToolExecutor
+let _overflowWorkspaceRoot = process.cwd();
+
+/**
+ * Set the workspace root used for overflow file storage.
+ * Called by ToolExecutor during initialization so overflow files
+ * are stored inside the workspace (accessible to the VFS sandbox).
+ * @param {string} root — absolute path to workspace root
+ */
+export function setOverflowWorkspaceRoot(root) {
+    _overflowWorkspaceRoot = root;
+}
+
+/**
+ * Get the overflow directory (inside workspace so agent can access it).
+ * @returns {string}
+ */
+function getOverflowDir() {
+    return path.join(_overflowWorkspaceRoot, '.ai-man', 'overflow');
+}
 
 // Counter for overflow files within this process
 let overflowCounter = 0;
@@ -142,7 +160,7 @@ export function formatBinaryError(toolName, detection, filePath) {
  * @param {string} output — raw tool output
  * @returns {{ truncated: boolean, output: string, overflowPath: string|null }}
  */
-export function handleOverflow(output) {
+export async function handleOverflow(output) {
     if (!output || typeof output !== 'string') {
         return { truncated: false, output: output || '', overflowPath: null };
     }
@@ -158,8 +176,11 @@ export function handleOverflow(output) {
     const truncatedLines = lines.slice(0, MAX_LINES);
     const truncatedOutput = truncatedLines.join('\n');
 
-    // Save full output to temp file
-    const overflowPath = saveOverflowFile(output);
+    // Save full output to workspace-local overflow file (async)
+    const overflowPath = await saveOverflowFile(output);
+
+    // Use workspace-relative path so VFS sandbox can access it
+    const relPath = path.relative(_overflowWorkspaceRoot, overflowPath);
 
     const totalLines = lines.length;
     const sizeStr = formatBytes(byteLength);
@@ -167,9 +188,9 @@ export function handleOverflow(output) {
     const hint = [
         '',
         `--- output truncated (${totalLines} lines, ${sizeStr}) ---`,
-        `Full output: ${overflowPath}`,
-        `Explore: run_command({ command: "cat ${overflowPath} | grep <pattern>" })`,
-        `         run_command({ command: "cat ${overflowPath} | tail -100" })`,
+        `Full output: ${relPath}`,
+        `Explore: run({ command: "cat ${relPath} | grep <pattern>" })`,
+        `         run({ command: "cat ${relPath} | tail -100" })`,
     ].join('\n');
 
     return {
@@ -184,21 +205,21 @@ export function handleOverflow(output) {
  * @param {string} content — full output
  * @returns {string} — path to the temp file
  */
-function saveOverflowFile(content) {
+async function saveOverflowFile(content) {
+    const overflowDir = getOverflowDir();
+
     // Ensure overflow directory exists
-    if (!fs.existsSync(OVERFLOW_DIR)) {
-        fs.mkdirSync(OVERFLOW_DIR, { recursive: true });
-    }
+    await fs.promises.mkdir(overflowDir, { recursive: true });
 
     overflowCounter++;
     const fileName = `cmd-${overflowCounter}-${Date.now()}.txt`;
-    const filePath = path.join(OVERFLOW_DIR, fileName);
+    const filePath = path.join(overflowDir, fileName);
 
     try {
-        fs.writeFileSync(filePath, content, 'utf8');
+        await fs.promises.writeFile(filePath, content, 'utf8');
     } catch (e) {
         // If we can't write, return a placeholder
-        return `/tmp/ai-man-overflow/${fileName} (write failed: ${e.message})`;
+        return `${overflowDir}/${fileName} (write failed: ${e.message})`;
     }
 
     return filePath;
@@ -287,7 +308,7 @@ export function attachStderr(output, stderr, exitCode) {
  * }} options
  * @returns {string} — processed output ready for LLM context
  */
-export function presentToolOutput(rawOutput, options = {}) {
+export async function presentToolOutput(rawOutput, options = {}) {
     const {
         toolName = 'unknown',
         durationMs = 0,
@@ -310,7 +331,7 @@ export function presentToolOutput(rawOutput, options = {}) {
     }
 
     // ── Step 2: Overflow Mode (before stderr, so truncation doesn't hide errors) ──
-    const overflow = handleOverflow(output);
+    const overflow = await handleOverflow(output);
     output = overflow.output;
 
     // ── Step 3: stderr Attachment (after overflow, so agent always sees failure reasons) ──
@@ -343,13 +364,14 @@ export function formatBytes(bytes) {
  * Removes files older than 1 hour.
  */
 export function cleanupOverflowFiles() {
-    if (!fs.existsSync(OVERFLOW_DIR)) return;
+    const overflowDir = getOverflowDir();
+    if (!fs.existsSync(overflowDir)) return;
 
     const cutoff = Date.now() - (60 * 60 * 1000); // 1 hour
     try {
-        const files = fs.readdirSync(OVERFLOW_DIR);
+        const files = fs.readdirSync(overflowDir);
         for (const file of files) {
-            const filePath = path.join(OVERFLOW_DIR, file);
+            const filePath = path.join(overflowDir, file);
             const stat = fs.statSync(filePath);
             if (stat.mtimeMs < cutoff) {
                 fs.unlinkSync(filePath);

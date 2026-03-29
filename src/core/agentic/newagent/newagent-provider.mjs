@@ -426,8 +426,11 @@ export class NewAgentProvider extends AgenticProvider {
         };
 
         // Append user message to persistent conversation history (Fix 1)
-        this._conversationHistory.push({ type: 'user', content: input });
-        let finalHistory = [...this._conversationHistory];
+        // Use per-conversation history from options if provided, falling
+        // back to the provider-local history for backward compatibility.
+        const convHistory = options.conversationHistory || this._conversationHistory;
+        convHistory.push({ type: 'user', content: input });
+        let finalHistory = [...convHistory];
         let finalResponse = '';
         let doomDetected = false;
 
@@ -492,7 +495,7 @@ export class NewAgentProvider extends AgenticProvider {
           }
 
           // Start the autonomous loop with the full persistent history
-          runner.start([...this._conversationHistory]).catch(reject);
+          runner.start([...convHistory]).catch(reject);
         });
 
         // ────────────────────────────────────────────────────────────

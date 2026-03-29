@@ -153,67 +153,128 @@ export class MemorySystem {
    * @property {Object}  [tokenUsage] — token usage stats
    */
 
-  /**
-   * Store an experience record.
-   *
-   * @param {ExperienceRecord} experience
-   */
-  recordExperience(experience) {
-    const record = {
-      input: (experience.input ?? '').substring(0, 500),
-      response: (experience.response ?? '').substring(0, 500),
-      toolsUsed: experience.toolsUsed ?? [],
-      success: !!experience.success,
-      timestamp: experience.timestamp ?? Date.now(),
-      duration: experience.duration ?? 0,
-      tokenUsage: experience.tokenUsage ?? null,
-    };
+   /**
+    * Store an experience record.
+    * When a conversationId is provided, the record is tagged with it
+    * so it can be scoped during queries.
+    *
+    * @param {ExperienceRecord} experience
+    * @param {string} [conversationId] — optional conversation identifier
+    */
+   recordExperience(experience, conversationId) {
+     const record = {
+       input: (experience.input ?? '').substring(0, 500),
+       response: (experience.response ?? '').substring(0, 500),
+       toolsUsed: experience.toolsUsed ?? [],
+       success: !!experience.success,
+       timestamp: experience.timestamp ?? Date.now(),
+       duration: experience.duration ?? 0,
+       tokenUsage: experience.tokenUsage ?? null,
+       conversationId: conversationId || null,
+     };
 
-    this._experiences.push(record);
+     this._experiences.push(record);
 
-    // Evict oldest when capacity is reached
-    while (this._experiences.length > this._maxExperiences) {
-      this._experiences.shift();
+     // Evict oldest when capacity is reached
+     while (this._experiences.length > this._maxExperiences) {
+       this._experiences.shift();
+     }
+   }
+
+   /**
+    * Find similar past experiences by keyword matching against input text.
+    * When a conversationId is provided, only experiences from that
+    * conversation are searched (isolated write model).  Without a
+    * conversationId, all experiences are searched (shared read model).
+    *
+    * @param {string} input — current input to match against
+    * @param {number} [limit=5] — max results
+    * @param {string} [conversationId] — optional conversation scope
+    * @returns {Array<ExperienceRecord>} matched experiences sorted by relevance
+    */
+   queryExperiences(input, limit = 5, conversationId) {
+     let pool = this._experiences;
+     // Filter to the target conversation if specified
+     if (conversationId) {
+       pool = pool.filter(exp => exp.conversationId === conversationId);
+     }
+     if (pool.length === 0) return [];
+
+     const queryWords = new Set(
+       input.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
+     );
+
+     const scored = pool.map((exp) => {
+       const expWords = exp.input.toLowerCase().split(/\s+/);
+       const overlap = expWords.filter((w) => queryWords.has(w)).length;
+       const recency =
+         1 / (1 + (Date.now() - exp.timestamp) / (1000 * 60 * 60));
+       return { ...exp, _score: overlap * 0.7 + recency * 0.3 };
+     });
+
+     return scored
+       .sort((a, b) => b._score - a._score)
+       .slice(0, limit)
+       .filter((s) => s._score > 0);
+   }
+
+   /**
+    * Get the N most recent experiences.
+    *
+    * @param {number} [count=10] — number of experiences to return
+    * @returns {Array<ExperienceRecord>}
+    */
+   getRecentExperiences(count = 10) {
+     return this._experiences.slice(-count);
+   }
+
+   /**
+     * Return a deep copy of all experiences for a specific conversation.
+     * Used when promoting a conversation to an agent — the cloned experiences
+     * seed the agent's local experience store.
+     *
+     * @param {string} conversationId — conversation to clone experiences from
+     * @returns {Array<ExperienceRecord>} deep-cloned array of experiences
+     */
+    cloneConversationExperiences(conversationId) {
+      if (!conversationId) return [];
+      const filtered = this._experiences.filter(
+        exp => exp.conversationId === conversationId
+      );
+      return JSON.parse(JSON.stringify(filtered));
     }
-  }
 
-  /**
-   * Find similar past experiences by keyword matching against input text.
-   *
-   * @param {string} input — current input to match against
-   * @param {number} [limit=5] — max results
-   * @returns {Array<ExperienceRecord>} matched experiences sorted by relevance
-   */
-  queryExperiences(input, limit = 5) {
-    if (this._experiences.length === 0) return [];
+   /**
+     * Get references to all experiences for a specific conversation.
+     * Unlike `cloneConversationExperiences`, this does NOT deep copy —
+     * use when read-only access is sufficient.
+     *
+     * @param {string} conversationId — conversation to retrieve experiences for
+     * @returns {Array<ExperienceRecord>}
+     */
+    getExperiencesForConversation(conversationId) {
+      if (!conversationId) return [];
+      return this._experiences.filter(
+        exp => exp.conversationId === conversationId
+      );
+    }
 
-    const queryWords = new Set(
-      input.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
-    );
-
-    const scored = this._experiences.map((exp) => {
-      const expWords = exp.input.toLowerCase().split(/\s+/);
-      const overlap = expWords.filter((w) => queryWords.has(w)).length;
-      const recency =
-        1 / (1 + (Date.now() - exp.timestamp) / (1000 * 60 * 60));
-      return { ...exp, _score: overlap * 0.7 + recency * 0.3 };
-    });
-
-    return scored
-      .sort((a, b) => b._score - a._score)
-      .slice(0, limit)
-      .filter((s) => s._score > 0);
-  }
-
-  /**
-   * Get the N most recent experiences.
-   *
-   * @param {number} [count=10] — number of experiences to return
-   * @returns {Array<ExperienceRecord>}
-   */
-  getRecentExperiences(count = 10) {
-    return this._experiences.slice(-count);
-  }
+   /**
+     * Remove all experience records for a specific conversation.
+     * Called when a conversation is cleared to prevent stale experiences
+     * from influencing future interactions.
+     *
+     * @param {string} conversationId — conversation to clear
+     * @returns {number} number of experiences removed
+     */
+    clearConversationExperiences(conversationId) {
+     if (!conversationId) return 0;
+     const before = this._experiences.length;
+     this._experiences = this._experiences.filter(
+       exp => exp.conversationId !== conversationId
+     );
+     return before - this._experiences.length;
+   }
 
   // ════════════════════════════════════════════════════════════════════
   // Pattern Memory Layer
@@ -364,27 +425,28 @@ export class MemorySystem {
     return { holographic, experiences, patterns };
   }
 
-  /**
-   * Store an interaction in all appropriate memory layers.
-   *
-   * @param {Object} interaction
-   * @param {string}  interaction.input       — user input text
-   * @param {string}  interaction.response    — agent response text
-   * @param {Array<string>} [interaction.toolsUsed] — tool names
-   * @param {boolean} [interaction.success]   — whether the turn succeeded
-   * @param {number}  [interaction.timestamp] — epoch ms
-   * @param {number}  [interaction.duration]  — turn duration ms
-   * @param {Object}  [interaction.tokenUsage] — token stats
-   */
-  storeInteraction(interaction) {
-    // Holographic layer
-    if (interaction.input && interaction.response) {
-      this.store(interaction.input, interaction.response);
-    }
+   /**
+    * Store an interaction in all appropriate memory layers.
+    *
+    * @param {Object} interaction
+    * @param {string}  interaction.input       — user input text
+    * @param {string}  interaction.response    — agent response text
+    * @param {Array<string>} [interaction.toolsUsed] — tool names
+    * @param {boolean} [interaction.success]   — whether the turn succeeded
+    * @param {number}  [interaction.timestamp] — epoch ms
+    * @param {number}  [interaction.duration]  — turn duration ms
+    * @param {Object}  [interaction.tokenUsage] — token stats
+    * @param {string}  [conversationId] — optional conversation identifier for experience scoping
+    */
+   storeInteraction(interaction, conversationId) {
+     // Holographic layer (shared workspace-level — all conversations benefit)
+     if (interaction.input && interaction.response) {
+       this.store(interaction.input, interaction.response);
+     }
 
-    // Experience layer
-    this.recordExperience(interaction);
-  }
+     // Experience layer (scoped to conversation)
+     this.recordExperience(interaction, conversationId);
+   }
 
   /**
    * Return memory system diagnostics.

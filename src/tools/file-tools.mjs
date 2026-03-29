@@ -132,6 +132,14 @@ export class FileTools {
                     `Use: list_files({ path: "${parentDir}" }) to see available directories.`;
             }
             
+            // Check if the path is actually a directory (prevents ENOTDIR crash)
+            const pathStat = fs.statSync(resolvedPath);
+            if (!pathStat.isDirectory()) {
+                const parentDir = path.dirname(dirPath) || '.';
+                return `[error] list_files: '${dirPath}' is a file, not a directory. ` +
+                    `Use: cat ${dirPath} to read it, or ls ${parentDir} to list its parent.`;
+            }
+            
             const files = [];
             const MAX_FILES = 5000;
             const MAX_DEPTH = 10;

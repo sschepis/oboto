@@ -25,7 +25,11 @@ async function handleChat(data, ctx) {
     const userInput = typeof data.payload === 'string' ? data.payload : (data.payload?.message || '');
     const activeSurfaceId = data.surfaceId || null;
     const modelOverride = data.model || (typeof data.payload === 'object' ? data.payload?.model : null) || null;
-    consoleStyler.log('user', `Web User: ${userInput}${activeSurfaceId ? ` [surface: ${activeSurfaceId}]` : ''}${modelOverride ? ` [model: ${modelOverride}]` : ''}`);
+
+    // Resolve the target conversation from the message or the client's active conversation.
+    const conversationId = data.conversationId || ws._activeConversation || assistant?.getActiveConversationName?.() || 'chat';
+    const convCtx = assistant?.conversationManager?.getConversationContext?.(conversationId) || null;
+    consoleStyler.log('user', `Web User [${conversationId}]: ${userInput}${activeSurfaceId ? ` [surface: ${activeSurfaceId}]` : ''}${modelOverride ? ` [model: ${modelOverride}]` : ''}`);
 
     // Detect natural language requests to create a new conversation
     const newConvoMatch = userInput.match(/^(?:create|start|open|make|begin)\s+(?:a\s+)?new\s+(?:chat|conversation)(?:\s+(?:called|named)\s+["']?([a-zA-Z0-9_-]+)["']?)?$/i);
@@ -52,9 +56,31 @@ async function handleChat(data, ctx) {
         }
         return;
     }
+
+    // Detect natural language requests to promote a conversation to an agent
+    const promoteMatch = userInput.match(
+        /^(?:promote|make|turn|fork|convert)\s+(?:this\s+)?(?:conversation|chat|convo)\s+(?:to|into|as)\s+(?:an?\s+)?agent(?:\s+(?:called|named)\s+["']?([a-zA-Z0-9_-]+)["']?)?$/i
+    );
+    if (promoteMatch) {
+        const agentName = promoteMatch[1] || undefined;
+        try {
+            const result = await assistant.promoteConversation({
+                conversationName: conversationId,
+                agentName,
+                mode: 'fork',
+            });
+            sendAiMessage(ws, `🤖 Promoted this conversation to agent **"${result.agentName}"** (ID: \`${result.agentId}\`). The agent is now running independently with a copy of our conversation history.`);
+            const conversations = await assistant.listConversations();
+            broadcast('conversation-list', conversations);
+        } catch (err) {
+            sendAiMessage(ws, `❌ Failed to promote conversation: ${err.message}`);
+        }
+        return;
+    }
     
-    // ── Chime-in: If the agent is already working, queue the message ──
-    if (activeRef.controller && assistant.isBusy()) {
+    // ── Chime-in: If the target conversation is busy, queue the message ──
+    const isBusy = convCtx ? convCtx.isBusy : (activeRef.controller && assistant.isBusy());
+    if (isBusy) {
         const queued = assistant.queueChimeIn(userInput);
         if (queued) {
             consoleStyler.log('system', `💬 User chimed in while agent is working: "${userInput.substring(0, 80)}..."`);
@@ -128,6 +154,17 @@ async function handleChat(data, ctx) {
     const streamMsgId = generateSimpleId('stream');
     let streamStarted = false;
 
+    // Mark the conversation context as busy so other operations know
+    // this conversation is being worked on.
+    if (convCtx) convCtx.markBusy();
+
+    // Begin tracking an in-progress message on the HistoryManager so that
+    // partial streaming content is periodically flushed to disk and can be
+    // recovered if the server crashes mid-stream.
+    // Use the conversation-specific history manager when available.
+    const hm = convCtx ? convCtx.historyManager : assistant.historyManager;
+    hm.beginInProgressMessage('assistant');
+
     // Chunk batching: buffer incoming tokens and flush every BATCH_INTERVAL_MS
     // to avoid sending hundreds of tiny WS messages per second.
     const BATCH_INTERVAL_MS = 50;
@@ -162,6 +199,10 @@ async function handleChat(data, ctx) {
             });
         }
 
+        // Accumulate into the in-progress message for crash recovery.
+        // This triggers a debounced disk save every ~5 seconds.
+        hm.appendToInProgressMessage(delta);
+
         chunkBuffer += delta;
         if (!batchTimer) {
             batchTimer = setTimeout(flushChunkBuffer, BATCH_INTERVAL_MS);
@@ -173,7 +214,9 @@ async function handleChat(data, ctx) {
             signal: activeRef.controller.signal,
             model: modelOverride,
             ws,
-            onChunk
+            onChunk,
+            // Pass conversation-scoped AI provider history when available
+            ...(convCtx ? { conversationHistory: convCtx.aiProviderHistory } : {})
         });
         
         // Read token usage stored by the facade during run()
@@ -194,10 +237,14 @@ async function handleChat(data, ctx) {
             sendAiMessage(ws, processContentForUI(responseText), tokenUsage ? { tokenUsage } : {});
         }
 
+        // The agentic provider already added user + assistant messages to
+        // historyManager.  The in-progress message was just a crash-recovery
+        // shadow — discard it now (the canonical message is already in history).
+        // Use keepPartial=false since the full response is already committed.
+        hm.discardInProgressMessage(false);
+
         // Persist the conversation to disk as a safety net.
         // Runs in background to avoid blocking the UI status transition to 'idle'.
-        // The agentic provider already saves user + assistant messages, so this
-        // is a redundant safety net — fire-and-forget is acceptable.
         assistant.saveConversation().catch((e) => {
             consoleStyler.log('error', `Failed to save conversation: ${e.message}`);
         });
@@ -209,6 +256,12 @@ async function handleChat(data, ctx) {
     } catch (err) {
         // Clear any pending batch timer on error
         if (batchTimer) clearTimeout(batchTimer);
+
+        // Preserve any partial streaming content so it survives the error.
+        // keepPartial=true commits the accumulated text to history with an
+        // "[interrupted]" marker — this is the critical crash-recovery path.
+        hm.discardInProgressMessage(/* keepPartial */ true);
+
         if (err.name === 'AbortError' || err.message?.includes('cancelled') || err.message?.includes('aborted')) {
             consoleStyler.log('system', 'Task execution cancelled by user');
             if (streamStarted) {
@@ -250,10 +303,14 @@ async function handleChat(data, ctx) {
                 sendAiMessage(ws, `❌ An error occurred: ${err.message || 'Unknown error'}`);
             }
         }
+        // Persist conversation with the recovered partial content
+        assistant.saveConversation().catch(() => {});
     } finally {
         // Safety net: ensure batch timer is always cleaned up
         if (batchTimer) clearTimeout(batchTimer);
         activeRef.controller = null;
+        // Mark conversation context as idle so other operations can proceed
+        if (convCtx) convCtx.markIdle();
         if (agentLoopController) agentLoopController.setForegroundBusy(false);
         wsSend(ws, 'status', 'idle');
     }

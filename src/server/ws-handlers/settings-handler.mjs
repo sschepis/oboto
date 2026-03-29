@@ -4,7 +4,7 @@ import os from 'node:os';
 import { consoleStyler } from '../../ui/console-styler.mjs';
 import { getRegistrySnapshot, fetchRemoteModels, fetchModelsForProvider } from '../../core/model-registry.mjs';
 import { config } from '../../config.mjs';
-import { getProjectInfo, getDirectoryTree } from '../ws-helpers.mjs';
+import { getProjectInfo, getDirectoryTree, convertHistoryToUIMessages } from '../ws-helpers.mjs';
 import { readJsonFileSync } from '../../lib/json-file-utils.mjs';
 import { wsSend, wsSendError } from '../../lib/ws-utils.mjs';
 import { migrateWorkspaceConfig } from '../../lib/migrate-config-dirs.mjs';
@@ -483,16 +483,38 @@ async function handleSetCwd(data, ctx) {
             } catch (e) {
                 // Non-fatal — the UI will just show what it has
             }
-            // Still load conversation state on browser reload
+            // On browser reload (same CWD), prefer the in-memory history which
+            // is always the most up-to-date.  Re-calling loadConversation() would
+            // re-read from disk, which might be stale if an async save hasn't
+            // flushed yet — causing conversation loss on reload.
             try {
-                await assistant.loadConversation();
+                // First, save current in-memory state to disk as a safety net
+                await assistant.saveConversation().catch(() => {});
+
+                // Send the in-memory history directly to the reconnecting client
+                const history = assistant.historyManager.getHistory();
+                const uiMessages = convertHistoryToUIMessages(history);
+                wsSend(ws, 'history-loaded', uiMessages);
+
+                // Also send conversation metadata
                 const convList = await assistant.listConversations();
                 wsSend(ws, 'conversation-list', convList);
+                wsSend(ws, 'conversation-switched', {
+                    name: assistant.getActiveConversationName(),
+                    isDefault: assistant.conversationManager?.isDefaultConversation()
+                });
             } catch (e) {
-                // Non-fatal — conversation loading on reload failed, UI can still function.
-                // Send empty history so the client exits any workspace-switching spinner.
-                consoleStyler.log('warning', `Failed to load conversation on reload: ${e.message}`);
-                wsSend(ws, 'history-loaded', []);
+                // Fallback: try loadConversation as a last resort
+                consoleStyler.log('warning', `Failed to send in-memory history on reload, trying disk: ${e.message}`);
+                try {
+                    await assistant.loadConversation();
+                    const convList = await assistant.listConversations();
+                    wsSend(ws, 'conversation-list', convList);
+                } catch (e2) {
+                    consoleStyler.log('warning', `Failed to load conversation on reload: ${e2.message}`);
+                    // DON'T send empty history-loaded — let the client's
+                    // localStorage fallback handle it instead.
+                }
             }
             return;
         }

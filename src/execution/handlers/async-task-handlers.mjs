@@ -28,7 +28,7 @@ export class AsyncTaskHandlers {
      * The task gets a fully isolated EventicFacade instance.
      */
     async spawnWorkspaceTask(args) {
-        const { workspace_path, task_description, query, context, init_git = false } = args;
+        const { workspace_path, task_description, query, context, init_git = false, env_vars } = args;
 
         if (!this.taskManager) {
             return "[error] spawn_workspace_task: Task Manager is not available. Background tasks are disabled.";
@@ -45,6 +45,7 @@ export class AsyncTaskHandlers {
                 query,
                 context,
                 initGit: init_git,
+                envVars: env_vars,
                 aiAssistantClass: this.aiAssistantClass,
                 eventBus: this.eventBus,
                 originWorkspace: process.cwd(),

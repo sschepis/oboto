@@ -40,6 +40,35 @@ export class MemoryBridge {
   }
 
   // ════════════════════════════════════════════════════════════════════
+  // Static Factory — Agent-scoped Bridge
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Create a MemoryBridge for a promoted conversation agent.
+   *
+   * The bridge shares the workspace-level MemorySystem (holographic +
+   * experience + pattern read access) but uses agent-local
+   * AssociativeStringStore instances for voluntary and involuntary memory.
+   *
+   * @param {Object} sharedMemorySystem — workspace-level MemorySystem
+   * @param {import('./memory.mjs').AssociativeStringStore} localVoluntary — agent-owned voluntary store
+   * @param {import('./memory.mjs').AssociativeStringStore} localInvoluntary — agent-owned involuntary store
+   * @param {Object} [opts] — additional options
+   * @param {Object} [opts.cognitiveLayer]
+   * @param {Object} [opts.learningEngine]
+   * @returns {MemoryBridge}
+   */
+  static forAgent(sharedMemorySystem, localVoluntary, localInvoluntary, opts = {}) {
+    return new MemoryBridge({
+      voluntaryMem: localVoluntary,
+      involuntaryMem: localInvoluntary,
+      memorySystem: sharedMemorySystem,
+      cognitiveLayer: opts.cognitiveLayer ?? null,
+      learningEngine: opts.learningEngine ?? null,
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
   // Unified Recall
   // ════════════════════════════════════════════════════════════════════
 

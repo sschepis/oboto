@@ -38,12 +38,14 @@ export const UNIFIED_CONFIG = {
 
   // ── Core ReAct loop limits ─────────────────────────────────────────
   loop: {
-    /** Max tool-call iterations within a single turn. */
+    /** Max tool-call iterations within a single turn (interactive). */
     maxIterations: 25,
+    /** Max tool-call iterations for background/workspace tasks. */
+    maxBackgroundIterations: 75,
     /** Max continuation rounds when the LLM announces intent without acting. */
     maxContinuations: 5,
     /** Hard ceiling on total LLM calls per turn (iterations + continuations). */
-    maxTotalLLMCalls: 50,
+    maxTotalLLMCalls: 100,
     /** Consecutive iterations with no tool calls before aborting. */
     maxEmptyIterations: 4,
   },

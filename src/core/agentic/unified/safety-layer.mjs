@@ -111,9 +111,11 @@ export class SafetyLayer {
    * @param {Array<Object>} toolResults — recent tool call results
    *   (`[{ toolName, args, result }]`)
    * @param {number} iteration — current loop iteration index
+   * @param {number} [maxIterOverride] — optional per-task max iteration override
+   *   (e.g. background tasks use `maxBackgroundIterations`)
    * @returns {{ doomed: boolean, reason: string|null, pattern: string|null }}
    */
-  checkDoom(history, toolResults, iteration) {
+  checkDoom(history, toolResults, iteration, maxIterOverride) {
     const doomConfig = this._config.doom ?? {};
     if (!doomConfig.enabled) {
       return { doomed: false, reason: null, pattern: null };
@@ -122,7 +124,7 @@ export class SafetyLayer {
     // Track the iteration for recordToolCall's internal counter
     this._iterationCounter = iteration;
 
-    const maxIterations = this._config.loop?.maxIterations ?? 25;
+    const maxIterations = maxIterOverride || (this._config.loop?.maxIterations ?? 25);
 
     // ── 1. Iteration ceiling ─────────────────────────────────────────
     if (iteration >= maxIterations) {

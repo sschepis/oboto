@@ -17,4 +17,6 @@ export { PipelineExecutionError, ASTManager, UtilityAdapter, PipelineEngine } fr
 export { executeCommand } from './executor.mjs';
 export { getRuntime, executeFunction } from './api.mjs';
 export { AgentRunner } from './AgentRunner.mjs';
+export { ConversationAgent } from './conversation-agent.mjs';
+export { ConversationAgentManager } from './conversation-agent-manager.mjs';
 export { AGENT_SOURCE_DIR, AGENT_PROJECT_ROOT, getSourceManifest, selfRead, selfWrite, selfList, selfRestart, invalidateModuleCache, mountSourceInVFS } from './self-awareness.mjs';

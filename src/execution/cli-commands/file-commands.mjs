@@ -16,8 +16,8 @@ import path from 'path';
 export function createFileCommands(fileTools) {
     return {
         cat: {
-            help: 'Read a text file. For images use "see". For binary use "cat -b".',
-            usage: 'cat <path> [-b]',
+            help: 'Read a text file. Supports line ranges via cat file:100-200. For images use "see". For binary use "cat -b".',
+            usage: 'cat <path>[:<start>-<end>] [-b]',
             /**
              * @param {string[]} args — positional arguments
              * @param {string} [stdin] — piped input (ignored for cat)
@@ -34,7 +34,21 @@ export function createFileCommands(fileTools) {
                     };
                 }
 
-                const filePath = args[0];
+                let filePath = args[0];
+                let lineStart = null;
+                let lineEnd = null;
+
+                // Support line-range syntax: cat file.txt:100-200
+                if (filePath.includes(':')) {
+                    const colonIdx = filePath.lastIndexOf(':');
+                    const rangePart = filePath.substring(colonIdx + 1);
+                    const rangeMatch = rangePart.match(/^(\d+)(?:-(\d+))?$/);
+                    if (rangeMatch) {
+                        filePath = filePath.substring(0, colonIdx);
+                        lineStart = parseInt(rangeMatch[1], 10);
+                        lineEnd = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : lineStart;
+                    }
+                }
 
                 // Detect directory paths and redirect to ls
                 try {
@@ -53,6 +67,16 @@ export function createFileCommands(fileTools) {
 
                 if (result.startsWith('[error]')) {
                     return { output: result, exitCode: 1 };
+                }
+
+                // Apply line-range extraction if requested
+                if (lineStart !== null) {
+                    const allLines = result.split('\n');
+                    const start = Math.max(1, lineStart);
+                    const end = Math.min(allLines.length, lineEnd);
+                    const selectedLines = allLines.slice(start - 1, end);
+                    const header = `[lines ${start}-${end} of ${allLines.length}]`;
+                    return { output: `${header}\n${selectedLines.join('\n')}`, exitCode: 0 };
                 }
 
                 return { output: result, exitCode: 0 };
@@ -121,6 +145,16 @@ export function createFileCommands(fileTools) {
                         return { output: `[error] ls: ${err.message}`, exitCode: 1 };
                     }
                 }
+
+                // Pre-check: if ls is called on a file, auto-redirect to cat
+                try {
+                    const resolvedDir = fileTools.validatePath(dirPath);
+                    if (fs.existsSync(resolvedDir) && !fs.statSync(resolvedDir).isDirectory()) {
+                        // Auto-redirect: ls on a file → cat
+                        const catResult = await fileTools.readFile({ path: dirPath });
+                        return { output: catResult, exitCode: catResult.startsWith('[error]') ? 1 : 0 };
+                    }
+                } catch { /* fall through to listFiles */ }
 
                 const result = await fileTools.listFiles({ path: dirPath, recursive, includeHidden: showHidden });
 

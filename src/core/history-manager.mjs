@@ -12,6 +12,14 @@ const CHARS_PER_TOKEN = 4;
 /**
  * Manages conversation history, token estimation, and context limits.
  */
+/**
+ * Default interval (ms) between in-progress message autosaves.
+ * During streaming, the in-progress message content is updated on every
+ * token, but a disk write is only triggered at most once per interval
+ * to avoid disk thrashing.
+ */
+const IN_PROGRESS_SAVE_INTERVAL_MS = 5_000;
+
 export class HistoryManager {
     /**
      * @param {number|null} maxTokens - Maximum allow tokens
@@ -27,6 +35,19 @@ export class HistoryManager {
         this._checkpoints = new Map();
         this._summarizer = null;
         this._onChange = null;
+
+        /**
+         * In-progress message — stores a partial assistant response during
+         * streaming so that if the server crashes, the accumulated text can
+         * be recovered on next startup.  Stored separately from `this.history`
+         * so that providers reading history for LLM context don't see the
+         * partial text, but it IS included in the serialised save payload.
+         * @type {Object|null}
+         */
+        this._inProgressMessage = null;
+
+        /** @private Timer handle for debounced in-progress saves */
+        this._inProgressTimer = null;
 
         /**
          * Promise queue for serialising async enforceContextLimits() calls.
@@ -109,9 +130,143 @@ export class HistoryManager {
         }
     }
 
+    // ─── In-progress message tracking ─────────────────────────────────────
+    // These methods allow streaming responses to be periodically flushed to
+    // disk so that partial content survives server restarts.
+
+    /**
+     * Start tracking an in-progress assistant message.
+     * Call this when streaming begins. The message is not added to `history`
+     * until {@link commitInProgressMessage} is called, but it IS included in
+     * the serialised save payload so disk reflects the partial content.
+     *
+     * @param {string} [role='assistant'] - Message role
+     * @returns {Object} The in-progress message object
+     */
+    beginInProgressMessage(role = 'assistant') {
+        this._inProgressMessage = {
+            id: uuidv4(),
+            role,
+            content: '',
+            timestamp: new Date().toISOString(),
+            _inProgress: true,
+        };
+        return this._inProgressMessage;
+    }
+
+    /**
+     * Append text to the in-progress message and schedule a debounced save.
+     * Called on every streaming token/chunk — the save is debounced to
+     * `IN_PROGRESS_SAVE_INTERVAL_MS` to avoid disk thrashing.
+     *
+     * @param {string} delta - Text chunk to append
+     */
+    appendToInProgressMessage(delta) {
+        if (!this._inProgressMessage) return;
+        this._inProgressMessage.content += delta;
+
+        // Schedule a debounced save if not already pending
+        if (!this._inProgressTimer && this._onChange) {
+            this._inProgressTimer = setTimeout(() => {
+                this._inProgressTimer = null;
+                if (this._onChange) {
+                    this._onChange(this).catch?.(() => {});
+                }
+            }, IN_PROGRESS_SAVE_INTERVAL_MS);
+        }
+    }
+
+    /**
+     * Finalise the in-progress message: promote it into `history` with the
+     * definitive content (which may differ slightly from the accumulated
+     * chunks due to post-processing), clear the in-progress slot, and fire
+     * the onChange callback for a final save.
+     *
+     * @param {string} [finalContent] - If provided, overrides the accumulated
+     *   content. Pass the fully-processed response text here.
+     * @param {Object} [extra] - Extra fields to merge (tool_calls, etc.)
+     * @returns {Object} The committed message
+     */
+    commitInProgressMessage(finalContent, extra = {}) {
+        if (!this._inProgressMessage) {
+            // Fallback: nothing in progress — just addMessage normally
+            const content = finalContent || '';
+            this.addMessage('assistant', content);
+            return this.history[this.history.length - 1];
+        }
+
+        // Clear timer
+        if (this._inProgressTimer) {
+            clearTimeout(this._inProgressTimer);
+            this._inProgressTimer = null;
+        }
+
+        const msg = this._inProgressMessage;
+        this._inProgressMessage = null;
+
+        // Use final content if provided (post-processed), else use accumulated
+        if (finalContent !== undefined && finalContent !== null) {
+            msg.content = finalContent;
+        }
+        delete msg._inProgress;
+
+        // Merge any extra fields
+        Object.assign(msg, extra);
+
+        // Push into history (use pushMessage so context limits are checked)
+        this.pushMessage(msg);
+
+        return msg;
+    }
+
+    /**
+     * Discard the in-progress message without committing it to history.
+     * Call this if streaming is aborted/errored.
+     *
+     * If `keepPartial` is true, the partial content is committed to history
+     * with a `[partial - interrupted]` suffix so it isn't lost.
+     *
+     * @param {boolean} [keepPartial=true] - Whether to save partial content
+     * @returns {Object|null} The discarded/committed message, or null
+     */
+    discardInProgressMessage(keepPartial = true) {
+        if (!this._inProgressMessage) return null;
+
+        if (this._inProgressTimer) {
+            clearTimeout(this._inProgressTimer);
+            this._inProgressTimer = null;
+        }
+
+        const msg = this._inProgressMessage;
+        this._inProgressMessage = null;
+
+        if (keepPartial && msg.content && msg.content.trim().length > 0) {
+            msg.content += '\n\n*[Response interrupted — partial content preserved]*';
+            delete msg._inProgress;
+            this.pushMessage(msg);
+            return msg;
+        }
+
+        // Fire onChange to clear the in-progress from the saved file
+        if (this._onChange) {
+            this._onChange(this).catch?.(() => {});
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the current in-progress message, if any.
+     * Used by serialisation code to include it in the save payload.
+     * @returns {Object|null}
+     */
+    getInProgressMessage() {
+        return this._inProgressMessage;
+    }
+
     /**
      * Add a complete message object directly
-     * @param {Object} message 
+     * @param {Object} message
      */
     pushMessage(message) {
         if (!message.id) {

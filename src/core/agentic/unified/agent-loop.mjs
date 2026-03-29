@@ -167,7 +167,9 @@ export class AgentLoop {
     // PHASE 2: INTENT CLASSIFICATION
     // ════════════════════════════════════════════════════════════════
 
-    const history = this._ai?.conversationHistory || [];
+    // Use per-conversation history passed from the caller (ConversationContext),
+    // falling back to the AI provider's singleton for backward compatibility.
+    const history = options.conversationHistory || this._ai?.conversationHistory || [];
     const intent = classifyIntent(input, history);
 
     // ════════════════════════════════════════════════════════════════
@@ -387,6 +389,9 @@ export class AgentLoop {
 
     let finalResponse = '';
 
+    // ── Phase-level timing diagnostics ─────────────────────────────
+    const timing = { llmCallMs: 0, toolExecutionMs: 0, otherMs: 0 };
+
     // ── Main iteration loop ────────────────────────────────────────
     for (let iteration = 1; iteration <= maxIterations; iteration++) {
       // ── Abort check ──────────────────────────────────────────────
@@ -427,6 +432,7 @@ export class AgentLoop {
       let response;
       try {
         this._stream.setActivity('Sending request to AI model', 'llm-call');
+        const llmStart = Date.now();
         response = await this._ai.ask(currentPrompt, {
           tools,
           signal,
@@ -434,6 +440,7 @@ export class AgentLoop {
           onChunk,
           model,
         });
+        timing.llmCallMs += Date.now() - llmStart;
         llmCallCount++;
 
         // Extract usage from the response and update turn metrics
@@ -474,10 +481,13 @@ export class AgentLoop {
         this._stream.phaseStart('tools', `Executing ${toolCalls.length} tool(s)…`);
 
         // Execute tool batch
+        const toolStart = Date.now();
+        const turnId = `turn-${iteration}`;
         const { results, hasErrors } = await this._toolBridge.executeToolBatch(
           toolCalls,
-          { signal },
+          { signal, turnId },
         );
+        timing.toolExecutionMs += Date.now() - toolStart;
 
         toolCallCount += toolCalls.length;
         allToolResults.push(...results);
@@ -504,6 +514,7 @@ export class AgentLoop {
           this._ai?.conversationHistory || [],
           doomInputs,
           iteration,
+          maxIterations,
         );
         if (doomResult.doomed) {
           doomDetected = true;
@@ -746,6 +757,9 @@ export class AgentLoop {
     // ── Complete ───────────────────────────────────────────────────
     this._stream.complete();
 
+    const totalDuration = Date.now() - startTime;
+    timing.otherMs = totalDuration - timing.llmCallMs - timing.toolExecutionMs;
+
     return {
       response: finalResponse,
       toolResults: allToolResults,
@@ -761,7 +775,8 @@ export class AgentLoop {
         precheckUsed,
         validation,
         learningSuggestion,
-        duration: Date.now() - startTime,
+        duration: totalDuration,
+        timing,
       },
       tokenUsage: turnTokenUsage,
     };

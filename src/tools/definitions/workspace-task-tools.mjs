@@ -26,6 +26,10 @@ export const WORKSPACE_TASK_TOOLS = [
                     init_git: {
                         type: "boolean",
                         description: "If creating a new directory, initialize a git repository. Default: false"
+                    },
+                    env_vars: {
+                        type: "object",
+                        description: "Environment variables to pass to the workspace task (e.g. API keys like RUNWAYML_API_SECRET, SHOTSTACK_API_KEY). These will be available via process.env in the task's execution environment."
                     }
                 },
                 required: ["workspace_path", "task_description", "query"]

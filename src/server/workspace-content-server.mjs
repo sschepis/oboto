@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { localhostCors } from './cors-middleware.mjs';
-import { mountDynamicRoutes } from './dynamic-router.mjs';
+import { createDynamicRouteController } from './dynamic-router.mjs';
 import { WorkspaceServerLog } from './workspace-server-log.mjs';
 
 function escapeHtml(str) {
@@ -21,11 +21,12 @@ export class WorkspaceContentServer {
         this.server = null;
         this.port = null;
         this.workspaceRoot = null;
-        this.routeMap = null;
         /** @private @type {WorkspaceServerLog|null} */
         this._serverLog = null;
         /** @private @type {Object|null} — parsed .oboto.json workspace config */
         this._workspaceConfig = null;
+        /** @private @type {{ reload: Function, getRoutes: Function }|null} */
+        this._routeController = null;
     }
 
     /**
@@ -44,8 +45,7 @@ export class WorkspaceContentServer {
         // Create server log instance
         this._serverLog = new WorkspaceServerLog(workspaceRoot);
 
-        // Load optional route map and workspace config
-        this.routeMap = await this.loadRouteMap(workspaceRoot);
+        // Load workspace config
         this._workspaceConfig = await this._loadWorkspaceConfig(workspaceRoot);
 
         this.app.use(localhostCors());
@@ -64,15 +64,12 @@ export class WorkspaceContentServer {
             next();
         });
 
-        if (this.routeMap) {
-            this.applyRouteMap(this.app, this.routeMap, workspaceRoot);
-        } else {
-            this.applyDefaultRoutes(this.app, workspaceRoot);
-        }
+        this.applyDefaultRoutes(this.app, workspaceRoot);
 
         // Mount dynamic routes from workspace routes/, .routes/, api/ directories
+        // Uses a swappable sub-router so routes can be hot-reloaded without restarting.
         try {
-            await mountDynamicRoutes(this.app, workspaceRoot);
+            this._routeController = await createDynamicRouteController(this.app, workspaceRoot);
         } catch (e) {
             consoleStyler.log('warning', `Failed to mount dynamic routes: ${e.message}`);
         }
@@ -90,7 +87,6 @@ export class WorkspaceContentServer {
             this.server = this.app.listen(0, () => {
                 this.port = this.server.address().port;
                 consoleStyler.log('system', `Workspace content server running on port ${this.port}`);
-                if (this.routeMap) consoleStyler.log('system', '  (Using custom route map)');
                 resolve(this.port);
             });
             this.server.on('error', (err) => {
@@ -120,6 +116,27 @@ export class WorkspaceContentServer {
 
     getPort() {
         return this.port;
+    }
+
+    /**
+     * Hot-reload dynamic routes from workspace route directories.
+     * Re-scans routes/, .routes/, and api/ and atomically swaps the route table.
+     *
+     * @returns {Promise<{ mounted: number, routes: string[] }>}
+     */
+    async reloadRoutes() {
+        if (!this._routeController) {
+            return { mounted: 0, routes: [], error: 'No route controller available (server not started or routes disabled)' };
+        }
+        return this._routeController.reload();
+    }
+
+    /**
+     * Get list of currently mounted dynamic route paths.
+     * @returns {string[]}
+     */
+    getRoutes() {
+        return this._routeController?.getRoutes() || [];
     }
 
     /**
@@ -158,19 +175,6 @@ export class WorkspaceContentServer {
         return null;
     }
 
-    async loadRouteMap(workspaceRoot) {
-        const mapPath = path.join(workspaceRoot, '.route-map.json');
-        if (fs.existsSync(mapPath)) {
-            try {
-                const content = await fs.promises.readFile(mapPath, 'utf8');
-                return JSON.parse(content);
-            } catch (e) {
-                consoleStyler.log('warning', `Failed to load .route-map.json: ${e.message}`);
-            }
-        }
-        return null;
-    }
-
     applyDefaultRoutes(app, workspaceRoot) {
         // Serve generated images at /images/
         const imagesPath = path.join(workspaceRoot, 'public', 'generated-images');
@@ -193,6 +197,22 @@ export class WorkspaceContentServer {
         
         // Root index
         app.get('/', (req, res) => this.serveRootIndex(req, res, workspaceRoot, publicPath));
+
+        // Serve workspace files (media, etc.) via HTTP for streaming support
+        app.get('/workspace-file/*filePath', (req, res) => {
+            const relativePath = req.params.filePath;
+            if (!relativePath) return res.status(400).json({ error: 'No file path specified' });
+            const fullPath = path.resolve(workspaceRoot, relativePath);
+            // Path traversal protection (also allow exact match for workspace root)
+            const resolvedRoot = path.resolve(workspaceRoot);
+            if (!fullPath.startsWith(resolvedRoot + path.sep) && fullPath !== resolvedRoot) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
+            if (!fs.existsSync(fullPath)) {
+                return res.status(404).json({ error: 'File not found' });
+            }
+            res.sendFile(fullPath);
+        });
 
         // Serve Surface API & HTML
         app.get('/api/surface/:id', (req, res) => this.handleSurfaceApi(req, res));
@@ -313,47 +333,6 @@ export class WorkspaceContentServer {
         `);
     }
 
-    applyRouteMap(app, map, workspaceRoot) {
-        consoleStyler.log('system', 'Applying custom route map from .route-map.json');
-        const resolvePath = (p) => path.resolve(workspaceRoot, p);
-
-        for (const [route, target] of Object.entries(map)) {
-            // Wildcard handling: /foo/* -> bar/*
-            if (route.endsWith('/*')) {
-                const routePrefix = route.slice(0, -2); // remove /*
-                const targetPath = target.endsWith('/*') ? target.slice(0, -2) : target;
-                
-                if (target.startsWith('surface:')) {
-                     consoleStyler.log('warning', `Wildcard not supported for surface target: ${target}`);
-                     continue;
-                }
-
-                const absTarget = resolvePath(targetPath);
-                if (fs.existsSync(absTarget)) {
-                    app.use(routePrefix, express.static(absTarget));
-                    consoleStyler.log('system', `  Mapped ${route} -> ${targetPath}`);
-                } else {
-                    consoleStyler.log('warning', `  Target directory not found: ${targetPath}`);
-                }
-            } else {
-                // Exact match
-                if (target.startsWith('surface:')) {
-                    const surfaceId = target.split(':')[1];
-                    app.get(route, (req, res) => this.handleSurfaceHtml(req, res, surfaceId));
-                    consoleStyler.log('system', `  Mapped ${route} -> Surface ${surfaceId}`);
-                } else {
-                    const absTarget = resolvePath(target);
-                    if (fs.existsSync(absTarget)) {
-                        app.get(route, (req, res) => res.sendFile(absTarget));
-                        consoleStyler.log('system', `  Mapped ${route} -> File ${target}`);
-                    } else {
-                        consoleStyler.log('warning', `  Target file not found: ${target}`);
-                    }
-                }
-            }
-        }
-    }
-
     async handleSurfaceApi(req, res, surfaceIdOverride) {
         const surfaceId = surfaceIdOverride || req.params.id;
         const surfacesDir = path.join(this.workspaceRoot, '.surfaces');
@@ -451,21 +430,6 @@ export class WorkspaceContentServer {
     }
 
     resolveImagePath(filename) {
-        if (!this.routeMap) {
-            return `/images/${filename}`;
-        }
-
-        // Try to find a mapping for public/generated-images
-        for (const [route, target] of Object.entries(this.routeMap)) {
-            // Check for exact directory match (with or without ./)
-            const cleanTarget = target.endsWith('/*') ? target.slice(0, -2) : target;
-            if (cleanTarget === 'public/generated-images' || cleanTarget === './public/generated-images') {
-                const cleanRoute = route.endsWith('/*') ? route.slice(0, -2) : route;
-                return `${cleanRoute}/${filename}`;
-            }
-        }
-        
-        // Fallback: return default if no mapping found
         return `/images/${filename}`;
     }
 }

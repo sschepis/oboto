@@ -28,6 +28,9 @@ import { PluginManager } from '../plugins/plugin-manager.mjs';
 import { ConversationController } from './controllers/conversation-controller.mjs';
 import { SessionController } from './controllers/session-controller.mjs';
 
+// Conversation-to-agent promotion
+import { ConversationAgentManager } from './agent/conversation-agent-manager.mjs';
+
 // Extracted modules
 import {
     updateSystemPrompt as _updateSystemPrompt,
@@ -68,7 +71,10 @@ export class EventicFacade {
         this.packageManager = new PackageManager();
         this.customToolsManager = new CustomToolsManager();
         this.workspaceManager = new WorkspaceManager();
-        this.historyManager = new HistoryManager();
+        // historyManager is now a getter that resolves through conversationManager
+        // (see the `get historyManager()` accessor below).  We store a fallback
+        // HistoryManager for use before conversationManager is initialized.
+        this._fallbackHistoryManager = new HistoryManager();
         this.conversationManager = new ConversationManager(this.workingDir);
         this.mcpClientManager = new McpClientManager(this.workingDir);
         this.personaManager = new PersonaManager(this.workingDir);
@@ -173,6 +179,18 @@ export class EventicFacade {
             this._getAgenticDeps()
         ).catch(err => {
             consoleStyler.log('error', `Failed to activate agentic provider "${defaultAgenticProvider}": ${err.message}`);
+        });
+
+        // ── Conversation-to-Agent Promotion Manager ────────────────────────
+        // Must be created after aiProvider, toolExecutor, and engine are available
+        // so that _getAgenticDeps() returns fully-populated deps.
+        this.conversationAgentManager = new ConversationAgentManager({
+            workingDir: this.workingDir,
+            deps: this._getAgenticDeps(),
+        });
+        // Initialize in background — non-blocking so the facade constructor stays sync-friendly
+        this._agentManagerInitPromise = this.conversationAgentManager.initialize().catch(err => {
+            consoleStyler.log('error', `ConversationAgentManager init error: ${err.message}`);
         });
 
         // Track the facade's busy state
@@ -354,7 +372,129 @@ export class EventicFacade {
         return this.conversationController.getActiveConversationName();
     }
 
+    // ─── Conversation-to-Agent Promotion delegates ───────────────────────
+
+    /**
+     * Promote a conversation to a standalone agent.
+     *
+     * @param {Object} config
+     * @param {string} config.conversationName — name of conversation to promote
+     * @param {string} [config.agentName] — human-readable name for the agent
+     * @param {'fork'|'in-place'} [config.mode='fork'] — promotion mode
+     * @param {string} [config.instruction] — initial instruction
+     * @param {string} [config.persona] — persona overlay
+     * @param {Object} [config.toolRestrictions] — tool access restrictions
+     * @returns {Promise<Object>} promotion result
+     */
+    async promoteConversation(config) {
+        if (this._agentManagerInitPromise) {
+            await this._agentManagerInitPromise;
+            this._agentManagerInitPromise = null;
+        }
+
+        const ctx = this.conversationManager.getConversationContext(config.conversationName);
+        if (!ctx) {
+            throw new Error(`Conversation "${config.conversationName}" not found.`);
+        }
+
+        // Get the shared MemorySystem from the active unified provider (if available)
+        const activeProvider = this.agenticRegistry.getActive();
+        const memorySystem = activeProvider?._memorySystem ?? null;
+
+        return await this.conversationAgentManager.createAgent({
+            conversationContext: ctx,
+            parentConversation: config.conversationName,
+            agentName: config.agentName,
+            mode: config.mode,
+            instruction: config.instruction,
+            persona: config.persona,
+            toolRestrictions: config.toolRestrictions,
+            memorySystem,
+        });
+    }
+
+    /**
+     * List all promoted agents.
+     * @returns {Array<Object>}
+     */
+    listPromotedAgents() {
+        return this.conversationAgentManager.listAgents();
+    }
+
+    /**
+     * Send a message to a promoted agent.
+     * @param {string} agentId
+     * @param {string} message
+     * @returns {Promise<string>}
+     */
+    async sendAgentMessage(agentId, message) {
+        if (this._agentManagerInitPromise) {
+            await this._agentManagerInitPromise;
+            this._agentManagerInitPromise = null;
+        }
+        return await this.conversationAgentManager.sendMessage(agentId, message);
+    }
+
+    /**
+     * Terminate a promoted agent.
+     * @param {string} agentId
+     * @returns {{ agentId: string }}
+     */
+    terminateAgent(agentId) {
+        return this.conversationAgentManager.terminateAgent(agentId);
+    }
+
+    /**
+     * Pause a promoted agent.
+     * @param {string} agentId
+     * @returns {{ agentId: string, status: string }}
+     */
+    pauseAgent(agentId) {
+        return this.conversationAgentManager.pauseAgent(agentId);
+    }
+
+    /**
+     * Resume a paused promoted agent.
+     * @param {string} agentId
+     * @returns {{ agentId: string, status: string }}
+     */
+    resumeAgent(agentId) {
+        return this.conversationAgentManager.resumeAgent(agentId);
+    }
+
+    /**
+     * Get status/diagnostics for a promoted agent.
+     * @param {string} agentId
+     * @returns {Object}
+     */
+    getAgentStatus(agentId) {
+        return this.conversationAgentManager.getAgentStatus(agentId);
+    }
+
     // ─── State & accessors ───────────────────────────────────────────────
+
+    /**
+     * Dynamic getter for historyManager — resolves through the ConversationManager
+     * so callers always get the active conversation's HistoryManager without the
+     * facade holding a stale reference.
+     */
+    get historyManager() {
+        try {
+            return this.conversationManager.getActiveHistoryManager();
+        } catch {
+            return this._fallbackHistoryManager;
+        }
+    }
+
+    /**
+     * Setter for backward compatibility — assignments are no-ops since
+     * the getter now resolves dynamically.  Callers that previously wrote
+     * `facade.historyManager = x` will silently succeed without effect.
+     */
+    set historyManager(_hm) {
+        // No-op: historyManager is now resolved dynamically via getter.
+        // Assignments are accepted silently for backward compatibility.
+    }
 
     isBusy() { return this._isBusy; }
 
@@ -393,12 +533,17 @@ export class EventicFacade {
     }
 
     refreshServices() {
-        // Refresh toolExecutor references
+        // Services resolve historyManager dynamically via the facade getter,
+        // but some subsystems cache the reference.  Update those caches.
+        const hm = this.historyManager;
         if (this.toolExecutor) {
-            this.toolExecutor.historyManager = this.historyManager;
+            this.toolExecutor.historyManager = hm;
             if (this.toolExecutor.coreHandlers) {
-                this.toolExecutor.coreHandlers.historyManager = this.historyManager;
+                this.toolExecutor.coreHandlers.historyManager = hm;
             }
+        }
+        if (this.statePlugin) {
+            this.statePlugin.historyManager = hm;
         }
     }
 

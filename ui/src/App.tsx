@@ -14,6 +14,7 @@ import TabBar from './components/layout/TabBar';
 import FileEditor from './components/features/FileEditor';
 import ImageViewer from './components/features/ImageViewer';
 import PdfViewer from './components/features/PdfViewer';
+import MediaPlayer from './components/features/MediaPlayer';
 import HtmlPreview from './components/features/HtmlPreview';
 import KeyboardShortcutsHelp from './components/features/KeyboardShortcutsHelp';
 import TaskManagerPanel from './components/features/TaskManagerPanel';
@@ -601,6 +602,15 @@ function App() {
                 className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
               >
                 <PdfViewer filePath={tab.filePath!} />
+              </div>
+            ))}
+
+            {tabManager.tabs.filter(t => t.type === 'media').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <MediaPlayer filePath={tab.filePath!} />
               </div>
             ))}
 

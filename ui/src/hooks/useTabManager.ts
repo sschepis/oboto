@@ -128,6 +128,18 @@ export function useTabManager(
     return ext === 'pdf';
   }, []);
 
+  // Determine if a file is a media file (audio/video)
+  const isMediaFile = useCallback((filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    return ['mp3', 'mp4', 'wav', 'ogg', 'webm', 'm4a', 'flac', 'aac', 'mov'].includes(ext);
+  }, []);
+
+  // Determine if a file is a markdown file
+  const isMarkdownFile = useCallback((filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    return ['md', 'mdx', 'markdown'].includes(ext);
+  }, []);
+
   // Determine if a file is a surface definition
   const isSurfaceFile = useCallback((filePath: string) => {
     return filePath.endsWith('.sur');
@@ -145,7 +157,9 @@ export function useTabManager(
     const htmlPreview = isHtmlFile(filePath);
     const imagePreview = isImageFile(filePath);
     const pdfPreview = isPdfFile(filePath);
-    const tabId = htmlPreview ? `html-preview:${filePath}` : filePath;
+    const mediaPreview = isMediaFile(filePath);
+    const markdownPreview = isMarkdownFile(filePath);
+    const tabId = htmlPreview ? `html-preview:${filePath}` : mediaPreview ? `media:${filePath}` : markdownPreview ? `markdown:${filePath}` : filePath;
 
     const existingTab = tabs.find(t => t.id === tabId);
     if (existingTab) {
@@ -154,15 +168,15 @@ export function useTabManager(
       const fileName = filePath.split('/').pop() || filePath;
       const newTab: EditorTab = {
         id: tabId,
-        label: htmlPreview ? `▶ ${fileName}` : fileName,
-        type: htmlPreview ? 'html-preview' : imagePreview ? 'image' : pdfPreview ? 'pdf' : 'file',
+        label: htmlPreview ? `▶ ${fileName}` : mediaPreview ? `♫ ${fileName}` : fileName,
+        type: htmlPreview ? 'html-preview' : imagePreview ? 'image' : pdfPreview ? 'pdf' : mediaPreview ? 'media' : markdownPreview ? 'markdown' : 'file',
         filePath,
         isDirty: false,
       };
       setTabs(prev => [...prev, newTab]);
       setActiveTabId(tabId);
     }
-  }, [tabs, isHtmlFile, isImageFile, isPdfFile, isSurfaceFile, handleSurfaceClick]);
+  }, [tabs, isHtmlFile, isImageFile, isPdfFile, isMediaFile, isMarkdownFile, isSurfaceFile, handleSurfaceClick]);
 
   // Switch from HTML preview to code editor for the same file
   const handleSwitchToEditor = useCallback((filePath: string) => {

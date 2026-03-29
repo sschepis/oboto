@@ -52,10 +52,19 @@ export class ConversationController {
     }
 
     async switchConversation(name) {
+        // Busy-state guard: reject switch if current conversation is busy
+        const currentCtx = this.manager.getActiveConversationContext();
+        if (currentCtx && currentCtx.isBusy) {
+            return {
+                switched: false,
+                name,
+                error: 'Cannot switch while the current conversation has an active operation. Wait for it to finish or cancel it first.'
+            };
+        }
+
         const result = await this.manager.switchConversation(name);
 
         if (result.switched) {
-            this.assistant.historyManager = this.manager.getActiveHistoryManager();
             this.assistant.refreshServices(); // Sync services with new history manager
             await this.assistant.updateSystemPrompt();
 
@@ -75,7 +84,6 @@ export class ConversationController {
         const result = await this.manager.deleteConversation(name);
 
         if (result.deleted) {
-            this.assistant.historyManager = this.manager.getActiveHistoryManager();
             this.assistant.refreshServices();
 
             if (this.eventBus) {
@@ -96,9 +104,8 @@ export class ConversationController {
         const result = await this.manager.renameConversation(oldName, newName);
 
         if (result.success) {
-            // If active conversation was renamed, update references
+            // If active conversation was renamed, refresh services
             if (this.manager.getActiveConversationName() === result.newName) {
-                 this.assistant.historyManager = this.manager.getActiveHistoryManager();
                  this.assistant.refreshServices();
             }
 
@@ -122,7 +129,6 @@ export class ConversationController {
             // If we cleared the active conversation, refresh the history manager
             const activeName = this.manager.getActiveConversationName();
             if (name == null || result.name === activeName) {
-                this.assistant.historyManager = this.manager.getActiveHistoryManager();
                 this.assistant.refreshServices();
                 // Also clear the AI provider's in-memory conversation history
                 this.assistant.aiProvider?.clearHistory?.();
@@ -148,5 +154,34 @@ export class ConversationController {
 
     getActiveConversationName() {
         return this.manager.getActiveConversationName();
+    }
+
+    /**
+     * Promote a conversation to a standalone agent.
+     *
+     * @param {string} conversationName — name of the conversation to promote
+     * @param {Object} config — promotion configuration
+     * @param {string} [config.agentName] — human-readable name for the agent
+     * @param {'fork'|'in-place'} [config.mode='fork'] — promotion mode
+     * @param {string} [config.instruction] — initial instruction
+     * @param {string} [config.persona] — persona/system prompt overlay
+     * @param {Object} [config.toolRestrictions] — tool access restrictions
+     * @returns {Promise<Object>} promotion result
+     */
+    async promoteToAgent(conversationName, config = {}) {
+        const result = await this.assistant.promoteConversation({
+            conversationName,
+            ...config,
+        });
+
+        if (this.eventBus) {
+            this.eventBus.emit('server:conversation-promoted', result);
+
+            // Refresh conversation list (in-place promotion marks the conversation)
+            const conversations = await this.manager.listConversations();
+            this.eventBus.emit('server:conversation-list', conversations);
+        }
+
+        return result;
     }
 }

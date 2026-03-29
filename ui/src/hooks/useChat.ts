@@ -15,6 +15,58 @@ const INITIAL_MESSAGES: Message[] = [
 ];
 
 const LS_CWD_KEY = 'ai-man:workspace-cwd';
+const LS_MESSAGES_KEY = 'ai-man:conversation-messages';
+const LS_ACTIVE_CONV_KEY = 'ai-man:active-conversation';
+
+/**
+ * Persist messages to localStorage as a safety net against data loss.
+ * Only stores serializable fields (strips internal flags like _pending, _streaming).
+ * Keyed by workspace + conversation name to avoid cross-workspace contamination.
+ */
+function persistMessagesToLocalStorage(messages: Message[], conversationName: string) {
+  try {
+    const cwd = localStorage.getItem(LS_CWD_KEY) || 'default';
+    const key = `${LS_MESSAGES_KEY}:${cwd}:${conversationName}`;
+    // Strip internal transient flags before persisting
+    const cleaned = messages
+      .filter(m => m.role === 'user' || m.role === 'ai') // only user+ai
+      .map(m => ({
+        id: m.id,
+        role: m.role,
+        type: m.type,
+        content: m.content,
+        timestamp: m.timestamp,
+        toolCalls: m.toolCalls,
+        testResults: m.testResults,
+        tokenUsage: m.tokenUsage,
+      }));
+    localStorage.setItem(key, JSON.stringify(cleaned));
+    localStorage.setItem(LS_ACTIVE_CONV_KEY, conversationName);
+  } catch {
+    // localStorage might be full or unavailable — non-fatal
+  }
+}
+
+/**
+ * Restore messages from localStorage. Used as a fallback when the server
+ * sends empty history (e.g. loadConversation failure on reload).
+ */
+function restoreMessagesFromLocalStorage(conversationName: string): Message[] | null {
+  try {
+    const cwd = localStorage.getItem(LS_CWD_KEY) || 'default';
+    const key = `${LS_MESSAGES_KEY}:${cwd}:${conversationName}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed as Message[];
+      }
+    }
+  } catch {
+    // Parse error — non-fatal
+  }
+  return null;
+}
 
 export interface ActivityLogEntry {
   id: number;
@@ -67,9 +119,56 @@ export const useChat = () => {
   // state updates and GC pressure from creating new message arrays.
   const streamingDeltaRef = useRef<{ id: string; accumulated: string } | null>(null);
   const streamingRafRef = useRef<number>(0);
+  // Refs for localStorage persistence (kept in sync via effects)
+  const messagesRef = useRef<Message[]>(messages);
+  const activeConversationRef = useRef<string>(activeConversation);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Keep ref in sync with state for access in effects/callbacks without dependency loops
   useEffect(() => { queueRef.current = messageQueue; }, [messageQueue]);
+  useEffect(() => { activeConversationRef.current = activeConversation; }, [activeConversation]);
+
+  // ── Persist messages to localStorage on every change (debounced) ──────
+  // This is the safety net that ensures conversation data survives page reload
+  // even if the server hasn't yet persisted to disk.
+  useEffect(() => {
+    messagesRef.current = messages;
+    // Debounce localStorage writes to avoid thrashing during streaming
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      // Only persist if we have meaningful messages (not an empty state after clear)
+      if (messages.length > 0) {
+        persistMessagesToLocalStorage(messages, activeConversationRef.current);
+      }
+    }, 500);
+  }, [messages]);
+  
+  // ── beforeunload handler: trigger server-side save + localStorage flush ──
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Immediately flush to localStorage (no debounce)
+      if (messagesRef.current.length > 0) {
+        persistMessagesToLocalStorage(messagesRef.current, activeConversationRef.current);
+      }
+      // Fire server-side save (synchronous send — may or may not arrive)
+      wsService.saveConversationSync();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+  
+  // ── Periodic server-side save (every 30s while connected) ──────────────
+  // Ensures the server persists to disk regularly, not just on chat completion
+  useEffect(() => {
+    if (!isConnected) return;
+    const interval = setInterval(() => {
+      if (messagesRef.current.length > 0) {
+        wsService.saveConversation();
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [isConnected]);
   
   // We keep a ref to tasks to update the messages efficiently or just rely on messages state
   // But updating a specific message deep in the array requires finding it.
@@ -182,7 +281,26 @@ export const useChat = () => {
         });
       }),
       wsService.on('history-loaded', (payload: unknown) => {
-        setMessages(payload as Message[]);
+        const serverMessages = payload as Message[];
+        if (serverMessages.length > 0) {
+          // Server has real history — use it and update localStorage cache
+          setMessages(serverMessages);
+          // Update localStorage with the server's authoritative copy
+          const convName = activeConversationRef.current;
+          persistMessagesToLocalStorage(serverMessages, convName);
+        } else {
+          // Server sent empty history — try to restore from localStorage
+          // This happens on reload when loadConversation() fails or
+          // the conversation file is stale/missing.
+          const convName = activeConversationRef.current;
+          const cached = restoreMessagesFromLocalStorage(convName);
+          if (cached && cached.length > 0) {
+            console.log(`[useChat] Server sent empty history — restored ${cached.length} messages from localStorage`);
+            setMessages(cached);
+          } else {
+            setMessages([]);
+          }
+        }
         // Clear workspace-switching state once the server has sent the new history
         setWorkspaceSwitching(false);
         // Cancel the safety timeout since we got a real response
@@ -449,6 +567,8 @@ export const useChat = () => {
         const p = payload as { name: string; switched?: boolean };
         if (p.name) {
           setActiveConversation(p.name);
+          // Keep the wsService in sync so outgoing messages use the correct conversationId
+          wsService.setActiveConversation(p.name);
         }
       }),
       wsService.on('conversation-renamed', () => {
@@ -491,6 +611,11 @@ export const useChat = () => {
       if (streamingRafRef.current) {
         cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = 0;
+      }
+      // Cancel any pending localStorage persist timer
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
       }
     };
   }, []);
@@ -685,10 +810,19 @@ export const useChat = () => {
 
   const switchConversation = (name: string) => {
     if (name === activeConversation) return;
+    // Persist current conversation to localStorage before switching
+    if (messages.length > 0) {
+      persistMessagesToLocalStorage(messages, activeConversation);
+    }
     wsService.switchConversation(name);
   };
 
   const deleteConversation = (name: string) => {
+    // Clear localStorage cache for the deleted conversation
+    try {
+      const cwd = localStorage.getItem(LS_CWD_KEY) || 'default';
+      localStorage.removeItem(`${LS_MESSAGES_KEY}:${cwd}:${name}`);
+    } catch { /* non-fatal */ }
     wsService.deleteConversation(name);
   };
 
@@ -697,6 +831,13 @@ export const useChat = () => {
   };
 
   const clearConversation = (name?: string) => {
+    // Clear localStorage cache for this conversation so the fallback
+    // doesn't restore stale messages after an intentional clear
+    const convName = name || activeConversation;
+    try {
+      const cwd = localStorage.getItem(LS_CWD_KEY) || 'default';
+      localStorage.removeItem(`${LS_MESSAGES_KEY}:${cwd}:${convName}`);
+    } catch { /* non-fatal */ }
     wsService.clearConversation(name);
     // Messages will be cleared reactively when 'history-loaded' arrives with empty array
   };

@@ -8,7 +8,6 @@
 import path from 'path';
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { buildSystemPrompt } from './facade-prompt.mjs';
-import { HistoryManager } from './history-manager.mjs';
 import { McpClientManager } from './mcp-client-manager.mjs';
 import { ResoLangService } from './resolang-service.mjs';
 import { ConsciousnessProcessor } from './consciousness-processor.mjs';
@@ -64,9 +63,18 @@ export async function loadConversation(facade) {
         // Also set on the AI provider for per-request injection
         facade.aiProvider.systemPrompt = currentSystemPrompt;
 
-        // Sync up history with AI Provider
-        facade.historyManager = activeHm;
-        facade.aiProvider.conversationHistory = JSON.parse(JSON.stringify(activeHm.getHistory()));
+        // Sync up history with AI Provider via ConversationContext
+        // The facade.historyManager getter resolves dynamically — no assignment needed.
+        // Store the AI provider history in the active ConversationContext so it's
+        // per-conversation rather than a singleton on the provider.
+        const activeCtx = facade.conversationManager.getActiveConversationContext();
+        if (activeCtx) {
+            activeCtx.aiProviderHistory = JSON.parse(JSON.stringify(activeHm.getHistory()));
+        }
+        // Keep backward-compat: also sync the provider's singleton (used as fallback)
+        facade.aiProvider.conversationHistory = activeCtx
+            ? activeCtx.aiProviderHistory
+            : JSON.parse(JSON.stringify(activeHm.getHistory()));
 
         // Sync with tools/plugins
         if (facade.toolExecutor) {
@@ -164,10 +172,10 @@ export async function changeWorkingDirectory(facade, newDir) {
     if (facade.conversationManager) {
         await facade.conversationManager.switchWorkspace(facade.workingDir);
     }
-    // Reset history manager so it doesn't reference stale workspace data.
-    // loadConversation() (called by settings-handler after this method) will
-    // replace it with the new workspace's active history manager.
-    facade.historyManager = new HistoryManager();
+    // The facade.historyManager getter resolves dynamically through
+    // ConversationManager — no manual reset needed. loadConversation()
+    // (called by settings-handler after this method) will initialize the
+    // new workspace's active conversation context.
     // Persist any pending facts from the old consciousness before replacing it
     if (facade.consciousness) {
         try { await facade.consciousness.persist(); } catch { /* best-effort */ }

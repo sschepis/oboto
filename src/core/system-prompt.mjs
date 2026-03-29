@@ -464,27 +464,69 @@ The workspace content server logs all HTTP requests and errors to \`server.log\`
     if (dynamicRoutesEnabled) {
         prompt += `
 
-### Dynamic Routes
-Create \`.mjs\` or \`.js\` files in \`routes/\`, \`.routes/\`, or \`api/\` directories to add HTTP endpoints:
+### Dynamic Routes (Next.js-style)
+Create \`.mjs\`, \`.js\`, or \`.ts\` files in \`.routes/\`, \`routes/\`, or \`api/\` directories to add HTTP endpoints using **Next.js-style file-based routing**.
 
-1. Export an async \`route\` function: \`export async function route(req, res) { ... }\`
-2. File path maps to URL:
-   - \`routes/\` and \`.routes/\` are **container** directories — the directory name is stripped: \`routes/data.mjs\` → \`/data\`, \`routes/api/klines.mjs\` → \`/api/klines\`
-   - \`api/\` is a **namespace** directory — the directory name is kept: \`api/users/index.mjs\` → \`/api/users\`
-3. Routes handle all HTTP methods (GET, POST, PUT, DELETE) with full Express req/res access.
-4. Routes reload automatically on workspace switch.
-5. Use \`.routes/\` (hidden directory) for routes you don't want visible in the workspace file listing.
+#### Route Directories
+- \`.routes/\` and \`routes/\` are **container** directories — the directory name is stripped from the URL path.
+- \`api/\` is a **namespace** directory — \`api\` is kept in the URL path.
+- \`.routes/\` takes **priority** over \`routes/\` when both define the same route path.
 
-**Example route** (\`routes/items.mjs\`):
+#### File Path → URL Mapping (Next.js conventions)
+| File Path | URL |
+|-----------|-----|
+| \`routes/items.mjs\` | \`/items\` |
+| \`routes/api/users/index.mjs\` | \`/api/users\` |
+| \`routes/api/users/[id].mjs\` | \`/api/users/:id\` |
+| \`routes/blog/[...slug].mjs\` | \`/blog/*\` (catch-all) |
+| \`routes/docs/[[...slug]].mjs\` | \`/docs\` and \`/docs/*\` (optional catch-all) |
+| \`routes/(admin)/dashboard.mjs\` | \`/dashboard\` (route group, stripped from URL) |
+
+#### Route File Exports
+Routes support three export styles:
+
+**1. Default export** (handles all HTTP methods):
 \`\`\`js
-export async function route(req, res) {
-  if (req.method === 'GET') {
-    res.json({ items: ['alpha', 'beta', 'gamma'] });
-  } else {
-    res.status(405).json({ error: 'Method not allowed' });
-  }
+export default async function handler(req, res) {
+  res.json({ items: ['alpha', 'beta', 'gamma'] });
 }
 \`\`\`
+
+**2. Named HTTP method exports** (Next.js App Router style):
+\`\`\`js
+export async function GET(req, res) {
+  res.json({ items: ['alpha', 'beta', 'gamma'] });
+}
+export async function POST(req, res) {
+  const body = req.body;
+  res.json({ created: true });
+}
+\`\`\`
+
+**3. Legacy \`route\` export** (still supported):
+\`\`\`js
+export async function route(req, res) {
+  res.json({ ok: true });
+}
+\`\`\`
+
+#### Dynamic Route Parameters
+Access dynamic parameters via \`req.params\`:
+\`\`\`js
+// routes/api/users/[id].mjs → /api/users/:id
+export async function GET(req, res) {
+  const userId = req.params.id;
+  res.json({ userId });
+}
+\`\`\`
+
+#### Priority Rules
+1. Static segments match before dynamic segments.
+2. Dynamic segments (\`[param]\`) match before catch-all segments (\`[...slug]\`).
+3. Catch-all segments match before optional catch-all segments (\`[[...slug]]\`).
+4. \`.routes/\` definitions override \`routes/\` definitions for the same path.
+
+Routes reload automatically on workspace switch. Use the \`reload_routes\` tool after creating, editing, or deleting route files to hot-reload them without restarting the server.
 
 ### Surface + Route Integration
 Surfaces run as sandboxed React components (not iframes) and can fetch data from workspace routes using \`surfaceApi\`.
@@ -505,10 +547,7 @@ useEffect(() => {
 }, []);
 \`\`\`
 
-**Important:** Do NOT use relative URLs like \`fetch('/items')\` — surfaces run on the main app origin, not the workspace content server origin. Always use \`surfaceApi.fetchRoute()\` or \`surfaceApi.contentServerUrl()\` to construct the correct URL.
-
-### Route Map
-Create \`.route-map.json\` in the workspace root for custom URL-to-file mappings. Supports static file serving, directory serving (with \`/*\` wildcards), and surface proxying (\`surface:id\`).`;
+**Important:** Do NOT use relative URLs like \`fetch('/items')\` — surfaces run on the main app origin, not the workspace content server origin. Always use \`surfaceApi.fetchRoute()\` or \`surfaceApi.contentServerUrl()\` to construct the correct URL.`;
     }
 
     prompt += `

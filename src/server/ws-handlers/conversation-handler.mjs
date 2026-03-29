@@ -25,13 +25,23 @@ async function handleCreateConversation(data, ctx) {
         if (result.created) {
             // Auto-switch to new conversation (default behavior)
             if (autoSwitch !== false) {
-                try {
-                    await assistant.switchConversation(result.name);
-                } catch (switchErr) {
-                    consoleStyler.log('warning', `Auto-switch after create failed: ${switchErr.message}`);
-                    // Fallback: manually broadcast the switch events
-                    broadcast('conversation-switched', { name: result.name, switched: true });
-                    broadcast('history-loaded', []);
+                // Only auto-switch if the agent is not currently busy
+                if (!assistant.isBusy()) {
+                    try {
+                        await assistant.switchConversation(result.name);
+                    } catch (switchErr) {
+                        consoleStyler.log('warning', `Auto-switch after create failed: ${switchErr.message}`);
+                        // Fallback: manually broadcast the switch events
+                        broadcast('conversation-switched', { name: result.name, switched: true });
+                        broadcast('history-loaded', []);
+                    }
+                } else {
+                    // Conversation created but not switched — notify UI
+                    wsSend(ws, 'conversation-created', {
+                        ...result,
+                        autoSwitchDeferred: true,
+                        reason: 'Agent is currently busy'
+                    });
                 }
             }
             const conversations = await assistant.listConversations();
@@ -53,6 +63,8 @@ async function handleSwitchConversation(data, ctx) {
         // which the web-server forwards as broadcasts. We only need to send the
         // conversation list here (not emitted by the controller for switches).
         if (result.switched) {
+            // Track which conversation this client is now viewing
+            ws._activeConversation = name;
             const conversations = await assistant.listConversations();
             broadcast('conversation-list', conversations);
         } else {
@@ -118,11 +130,25 @@ async function handleRenameConversation(data, ctx) {
     }
 }
 
+/**
+ * Explicitly save the current conversation to disk.
+ * Called by the client before page unload or periodically to ensure persistence.
+ */
+async function handleSaveConversation(data, ctx) {
+    const { assistant } = ctx;
+    try {
+        await assistant.saveConversation();
+    } catch (err) {
+        consoleStyler.log('error', `Failed to save conversation on explicit request: ${err.message}`);
+    }
+}
+
 export const handlers = {
     'list-conversations': handleListConversations,
     'create-conversation': handleCreateConversation,
     'switch-conversation': handleSwitchConversation,
     'clear-conversation': handleClearConversation,
     'delete-conversation': handleDeleteConversation,
-    'rename-conversation': handleRenameConversation
+    'rename-conversation': handleRenameConversation,
+    'save-conversation': handleSaveConversation,
 };

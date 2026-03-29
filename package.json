@@ -101,6 +101,7 @@
     "tray:build:mac": "cd tray-app && npx electron-builder --mac",
     "tray:build:win": "cd tray-app && npx electron-builder --win",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:routes": "node --test src/server/__tests__/dynamic-router.test.mjs",
     "install:skills": "node scripts/install-skills.mjs",
     "check:deps": "node --input-type=module -e \"import{readFileSync}from'node:fs';const p=JSON.parse(readFileSync('./package.json','utf8'));if(Object.values(p.dependencies||{}).some(v=>v.includes('workspace:'))){console.error('ERROR: workspace: protocol deps found');process.exit(1)}else{console.log('Dependencies OK')}\"",
     "check:exports": "node --input-type=module -e \"async function run(){const m=await import('./src/lib/index.mjs');const exports=['AiMan','Oboto','ConsoleStatusAdapter','NetworkLLMAdapter','MemoryAdapter','AiManEventBus','MiddlewareChain','CancellationError','DesignResult','TaskManager','TaskCheckpointManager','CheckpointStore','AssistantFacade','config','FlowManager'];const missing=exports.filter(e=>!m[e]);if(missing.length){console.error('Missing lib exports:',missing);process.exit(1)}console.log('All',exports.length,'lib exports OK');const s=await import('./src/server/server.mjs');if(!s.createServer){console.error('Missing server export: createServer');process.exit(1)}console.log('Server export OK');const p=await import('./src/plugins/index.mjs');const pExports=['PluginManager','PluginLoader','createPluginAPI','PluginStorage'];const pMissing=pExports.filter(e=>!p[e]);if(pMissing.length){console.error('Missing plugin exports:',pMissing);process.exit(1)}console.log('All',pExports.length,'plugin exports OK')}run().catch(e=>{console.error('Export check FAILED:',e.message);process.exit(1)})\"",
@@ -180,6 +181,7 @@
     "@types/react-dom": "^19.2.3",
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
+    "supertest": "^7.2.2",
     "ts-jest": "^29.4.6"
   }
 }

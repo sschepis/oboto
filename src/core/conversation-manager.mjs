@@ -16,6 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { HistoryManager } from './history-manager.mjs';
+import { ConversationContext } from './conversation-context.mjs';
 import { consoleStyler } from '../ui/console-styler.mjs';
 
 const CONVERSATIONS_DIR = '.conversations';
@@ -33,7 +34,7 @@ export class ConversationManager {
         this.maxTokens = options.maxTokens || null;
         this.contextWindowSize = options.contextWindowSize || null;
 
-        /** @type {Map<string, HistoryManager>} Loaded conversations keyed by name */
+        /** @type {Map<string, ConversationContext>} Loaded conversations keyed by name */
         this._conversations = new Map();
 
         /** @type {string} Name of the currently active conversation */
@@ -56,8 +57,8 @@ export class ConversationManager {
 
         // Always ensure the default conversation exists
         if (!this._conversations.has(DEFAULT_CONVERSATION)) {
-            const hm = this._createHistoryManager(DEFAULT_CONVERSATION);
-            this._conversations.set(DEFAULT_CONVERSATION, hm);
+            const ctx = this._createConversationContext(DEFAULT_CONVERSATION);
+            this._conversations.set(DEFAULT_CONVERSATION, ctx);
         }
 
         // Try to load persisted history for the default conversation
@@ -106,14 +107,18 @@ export class ConversationManager {
         }
 
         const result = [];
-        for (const [name, hm] of this._conversations) {
+        for (const [name, ctx] of this._conversations) {
+            const hm = ctx.historyManager;
             const history = hm.getHistory();
             result.push({
                 name,
                 messageCount: history.length,
                 isActive: name === this._activeConversation,
                 isDefault: name === DEFAULT_CONVERSATION,
-                estimatedTokens: hm.getTotalTokens()
+                estimatedTokens: hm.getTotalTokens(),
+                isBusy: ctx.isBusy,
+                isPromoted: ctx.isPromoted || false,
+                promotedToAgentId: ctx.promotedToAgentId || null,
             });
         }
 
@@ -137,12 +142,12 @@ export class ConversationManager {
             return { name: sanitized, created: false, error: `Conversation "${sanitized}" already exists.` };
         }
 
-        const hm = this._createHistoryManager(sanitized);
+        const ctx = this._createConversationContext(sanitized);
         if (systemPrompt) {
-            hm.initialize(systemPrompt);
+            ctx.historyManager.initialize(systemPrompt);
         }
 
-        this._conversations.set(sanitized, hm);
+        this._conversations.set(sanitized, ctx);
         await this._saveToDisk(sanitized);
 
         consoleStyler.log('system', `📝 Created conversation: ${sanitized}`);
@@ -254,9 +259,12 @@ export class ConversationManager {
         }
 
         // Update the in-memory map
-        const hm = this._conversations.get(oldName);
+        const ctx = this._conversations.get(oldName);
         this._conversations.delete(oldName);
-        this._conversations.set(sanitizedNewName, hm);
+        if (ctx) {
+            ctx.name = sanitizedNewName;
+        }
+        this._conversations.set(sanitizedNewName, ctx);
 
         // Update active conversation pointer if needed
         if (this._activeConversation === oldName) {
@@ -276,9 +284,12 @@ export class ConversationManager {
         if (!target) {
             return { cleared: false, name, error: 'Invalid conversation name.' };
         }
-        const hm = this._conversations.get(target);
-        if (hm) {
+        const ctx = this._conversations.get(target);
+        if (ctx) {
+            const hm = ctx.historyManager;
             hm.reset();
+            // Also clear per-conversation state (AI history, experiences)
+            ctx.clearConversationState();
             // _saveToDisk skips empty histories, so force-write the cleared state
             const history = hm.getHistory();
             if (history.length === 0) {
@@ -307,13 +318,13 @@ export class ConversationManager {
      * @returns {HistoryManager}
      */
     getActiveHistoryManager() {
-        let hm = this._conversations.get(this._activeConversation);
-        if (!hm) {
+        let ctx = this._conversations.get(this._activeConversation);
+        if (!ctx) {
             // Defensive: create if missing
-            hm = this._createHistoryManager(this._activeConversation);
-            this._conversations.set(this._activeConversation, hm);
+            ctx = this._createConversationContext(this._activeConversation);
+            this._conversations.set(this._activeConversation, ctx);
         }
-        return hm;
+        return ctx.historyManager;
     }
 
     /**
@@ -322,7 +333,40 @@ export class ConversationManager {
      * @returns {HistoryManager|null}
      */
     getHistoryManager(name) {
+        const ctx = this._conversations.get(name);
+        return ctx ? ctx.historyManager : null;
+    }
+
+    /**
+     * Get the ConversationContext for a specific conversation (without switching).
+     * @param {string} name
+     * @returns {ConversationContext|null}
+     */
+    getConversationContext(name) {
         return this._conversations.get(name) || null;
+    }
+
+    /**
+     * Get the ConversationContext for the currently active conversation.
+     * @returns {ConversationContext}
+     */
+    getActiveConversationContext() {
+        let ctx = this._conversations.get(this._activeConversation);
+        if (!ctx) {
+            ctx = this._createConversationContext(this._activeConversation);
+            this._conversations.set(this._activeConversation, ctx);
+        }
+        return ctx;
+    }
+
+    /**
+     * Check if a conversation has an active operation in progress.
+     * @param {string} name
+     * @returns {boolean}
+     */
+    isConversationBusy(name) {
+        const ctx = this._conversations.get(name);
+        return ctx ? ctx.isBusy : false;
     }
 
     /**
@@ -359,10 +403,11 @@ export class ConversationManager {
             return { reported: false, error: 'The default conversation cannot report to itself.' };
         }
 
-        const parentHm = this._conversations.get(DEFAULT_CONVERSATION);
-        if (!parentHm) {
+        const parentCtx = this._conversations.get(DEFAULT_CONVERSATION);
+        if (!parentCtx) {
             return { reported: false, error: 'Parent conversation not found.' };
         }
+        const parentHm = parentCtx.historyManager;
 
         const reportContent = [
             `📋 **Report from child conversation "${childName}"**`,
@@ -405,6 +450,12 @@ export class ConversationManager {
     /**
      * Load a conversation from disk into the in-memory map.
      * Creates an empty HistoryManager if the file doesn't exist.
+     *
+     * If the saved file contains an `inProgressMessage` (a partial streaming
+     * response that was being accumulated when the server last shut down),
+     * it is recovered by appending it to the history with an "[interrupted]"
+     * marker so the content is not lost.
+     *
      * @param {string} name
      * @returns {boolean} True if loaded from disk, false if created fresh.
      */
@@ -419,14 +470,31 @@ export class ConversationManager {
         try {
             const data = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
 
-            let hm = this._conversations.get(name);
-            if (!hm) {
-                hm = this._createHistoryManager(name);
-                this._conversations.set(name, hm);
+            let ctx = this._conversations.get(name);
+            if (!ctx) {
+                ctx = this._createConversationContext(name);
+                this._conversations.set(name, ctx);
             }
+            const hm = ctx.historyManager;
 
             if (data.history && Array.isArray(data.history)) {
                 hm.setHistory(data.history, true);
+
+                // Recover in-progress message from a previous session that was
+                // interrupted (e.g. server crash during streaming).
+                if (data.inProgressMessage && data.inProgressMessage.content) {
+                    const recovered = { ...data.inProgressMessage };
+                    delete recovered._inProgress;
+                    if (!recovered.content.includes('[Response interrupted')) {
+                        recovered.content += '\n\n*[Response interrupted — partial content recovered from autosave]*';
+                    }
+                    if (!recovered.id) recovered.id = undefined; // pushMessage will assign
+                    hm.pushMessage(recovered);
+                    consoleStyler.log('system', `♻ Recovered in-progress message for conversation "${name}" (${recovered.content.length} chars)`);
+                    // Re-save to clear the inProgressMessage from the file
+                    await this._saveToDisk(name);
+                }
+
                 return true;
             }
         } catch (error) {
@@ -438,6 +506,8 @@ export class ConversationManager {
 
     /**
      * Save a conversation to disk.
+     * Includes any in-progress (streaming) message so partial content
+     * survives server crashes.
      * @param {string} name
      */
     async _saveToDisk(name) {
@@ -447,8 +517,9 @@ export class ConversationManager {
             // Wait for any pending save for this conversation to complete
             try { await currentLock; } catch { /* ignore previous errors */ }
 
-            const hm = this._conversations.get(name);
-            if (!hm) return;
+            const ctx = this._conversations.get(name);
+            if (!ctx) return;
+            const hm = ctx.historyManager;
 
             const history = hm.getHistory();
             // Only save if there's meaningful content
@@ -462,6 +533,14 @@ export class ConversationManager {
                 timestamp: new Date().toISOString(),
                 history
             };
+
+            // Include in-progress message (partial streaming response) if any.
+            // This is stored as a separate key so it doesn't pollute the
+            // canonical history array, but can be recovered on restart.
+            const inProgress = hm.getInProgressMessage?.();
+            if (inProgress && inProgress.content) {
+                data.inProgressMessage = inProgress;
+            }
 
             try {
                 await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
@@ -495,7 +574,8 @@ export class ConversationManager {
             const history = JSON.parse(content);
 
             if (Array.isArray(history) && history.length > 0) {
-                const hm = this._conversations.get(DEFAULT_CONVERSATION);
+                const ctx = this._conversations.get(DEFAULT_CONVERSATION);
+                const hm = ctx ? ctx.historyManager : null;
                 if (hm) {
                     hm.setHistory(history, true);
                     await this._saveToDisk(DEFAULT_CONVERSATION);
@@ -522,13 +602,24 @@ export class ConversationManager {
      */
     _createHistoryManager(name) {
         const hm = new HistoryManager(this.maxTokens, this.contextWindowSize);
-        // Automatically save to disk when a new message is added to ensure we don't lose anything
+        // Automatically save to disk when a new message is added to ensure we don't lose anything.
+        // Return the promise so callers can optionally await/catch it.
         hm.setOnChange(() => {
-            this._saveToDisk(name).catch(e => {
+            return this._saveToDisk(name).catch(e => {
                 consoleStyler.log('error', `Autosave failed for conversation "${name}": ${e.message}`);
             });
         });
         return hm;
+    }
+
+    /**
+     * Create a fresh ConversationContext wrapping a new HistoryManager.
+     * @param {string} name - The name of the conversation
+     * @returns {ConversationContext}
+     */
+    _createConversationContext(name) {
+        const hm = this._createHistoryManager(name);
+        return new ConversationContext(name, hm);
     }
 
     /**

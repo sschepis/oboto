@@ -42,6 +42,9 @@ export class ClientConnectionHandler {
     handleConnection(ws, req) {
         // Store the HTTP upgrade request on the WebSocket for downstream handlers
         ws._req = req;
+        // Track which conversation this client is currently viewing.
+        // Default to 'chat' (the built-in conversation).
+        ws._activeConversation = this.assistant?.getActiveConversationName?.() || 'chat';
         consoleStyler.log('system', 'Client connected');
 
         // Send connection status

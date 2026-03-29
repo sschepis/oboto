@@ -159,8 +159,8 @@ export class CommandRouter {
 
         const durationMs = Date.now() - startTime;
 
-        // Apply presentation layer to the final output
-        return presentToolOutput(result.output, {
+        // Apply presentation layer to the final output (async for overflow writes)
+        return await presentToolOutput(result.output, {
             toolName: 'run',
             durationMs,
             exitCode: result.exitCode,

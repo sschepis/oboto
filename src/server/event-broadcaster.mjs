@@ -65,6 +65,33 @@ export class EventBroadcaster {
     }
 
     /**
+     * Broadcast a message only to clients whose `_activeConversation` matches
+     * the given conversationId.  Falls back to broadcasting to all clients if
+     * no conversationId is provided (backward compatibility).
+     * @param {string} type - The message type.
+     * @param {any} payload - The message payload.
+     * @param {string} [conversationId] - Target conversation ID.
+     */
+    broadcastToConversation(type, payload, conversationId) {
+        if (!this.wss) return; // destroyed
+        if (!conversationId) {
+            return this.broadcast(type, payload);
+        }
+        let msg;
+        try {
+            msg = JSON.stringify({ type, payload, conversationId });
+        } catch (e) {
+            consoleStyler.log('warning', `broadcastToConversation: failed to serialize "${type}" payload — ${e.message}`);
+            return;
+        }
+        this.wss.clients.forEach(client => {
+            if (client.readyState === 1 && client._activeConversation === conversationId) {
+                client.send(msg);
+            }
+        });
+    }
+
+    /**
      * Helper to broadcast file tree updates to all clients.
      */
     async broadcastFileTree() {
@@ -122,8 +149,17 @@ export class EventBroadcaster {
         });
         this._on('server:next-steps', (data) => broadcast('next-steps', data));
         this._on('server:history-loaded', (data) => {
-            const uiMessages = convertHistoryToUIMessages(data);
-            broadcast('history-loaded', uiMessages);
+            const uiMessages = convertHistoryToUIMessages(
+                Array.isArray(data) ? data : (data?.history || data)
+            );
+            // Scope history-loaded to the relevant conversation if the event
+            // includes a conversationId; otherwise broadcast to all.
+            const convId = data?.conversationId || null;
+            if (convId) {
+                this.broadcastToConversation('history-loaded', uiMessages, convId);
+            } else {
+                broadcast('history-loaded', uiMessages);
+            }
         });
 
         // Task Lifecycle Events
@@ -219,7 +255,15 @@ export class EventBroadcaster {
         this._on('agent-loop:invocation', (data) => broadcast('agent-loop-invocation', data));
 
         // Conversation Management Events
-        this._on('server:conversation-switched', (data) => broadcast('conversation-switched', data));
+        // conversation-switched is scoped to clients viewing the relevant conversation
+        this._on('server:conversation-switched', (data) => {
+            const convId = data?.name || null;
+            if (convId) {
+                this.broadcastToConversation('conversation-switched', data, convId);
+            } else {
+                broadcast('conversation-switched', data);
+            }
+        });
         this._on('server:conversation-list', (data) => broadcast('conversation-list', data));
 
         // Embed Events — inline embedded objects (YouTube, Spotify, etc.)

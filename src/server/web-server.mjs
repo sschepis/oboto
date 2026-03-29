@@ -52,6 +52,7 @@ import { handlers as skillsHandlers } from './ws-handlers/skills-handler.mjs';
 import { handlers as cloudHandlers } from './ws-handlers/cloud-handler.mjs';
 import { handlers as pluginHandlers } from './ws-handlers/plugin-handler.mjs';
 import { handlers as personaHandlers } from './ws-handlers/persona-handler.mjs';
+import { handlers as agentHandlers } from './ws-handlers/agent-handler.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +78,7 @@ function buildDispatcher() {
     dispatcher.registerAll(cloudHandlers);
     dispatcher.registerAll(pluginHandlers);
     dispatcher.registerAll(personaHandlers);
+    dispatcher.registerAll(agentHandlers);
     return dispatcher;
 }
 
@@ -268,9 +270,34 @@ export async function startServer(assistant, workingDir, eventBus, port = 3000, 
     clientHandler.initialize();
 
     // ── Graceful shutdown cleanup ──────────────────────────────────────
-    const shutdown = () => {
+    const shutdown = async () => {
+        // Force-exit safety net: if graceful shutdown hangs, terminate after 5s
+        const forceExitTimer = setTimeout(() => {
+            consoleStyler.log('error', 'Graceful shutdown timed out — forcing exit');
+            process.exit(1);
+        }, 5000);
+        // Keep the timer from preventing exit on its own
+        forceExitTimer.unref();
+
+        // Flush any in-progress streaming messages and save all conversations.
+        // Race against a 3s timeout so a slow save doesn't stall shutdown.
+        try {
+            const hm = assistant.historyManager;
+            if (hm?.getInProgressMessage?.()) {
+                hm.discardInProgressMessage(/* keepPartial */ true);
+            }
+            const saveTimeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Save timed out during shutdown')), 3000)
+            );
+            await Promise.race([assistant.saveConversation(), saveTimeout]);
+        } catch (e) {
+            consoleStyler.log('error', `Shutdown save failed: ${e.message}`);
+        }
         eventBroadcaster.destroy();
-        server.close();
+        server.close(() => {
+            clearTimeout(forceExitTimer);
+            process.exit(0);
+        });
     };
     process.once('SIGTERM', shutdown);
     process.once('SIGINT', shutdown);

@@ -66,8 +66,11 @@ export class EventicAIProvider {
         // Append previous history — but skip when recordHistory is false,
         // since these are stateless utility calls (e.g. next-steps generation)
         // that must not be contaminated by the main conversation context.
+        // Per-call history (from ConversationContext) is preferred over the
+        // singleton this.conversationHistory for conversation isolation.
+        const history = options.conversationHistory || this.conversationHistory;
         if (options.recordHistory !== false) {
-            messages.push(...this.conversationHistory);
+            messages.push(...history);
         }
         
         let fullPrompt = prompt;
@@ -236,8 +239,9 @@ export class EventicAIProvider {
             
             // Update history if requested (guard against null prompt from askWithMessages)
             if (options.recordHistory !== false && prompt != null) {
-                this.conversationHistory.push({ role: 'user', content: prompt });
-                this.conversationHistory.push(message || { role: 'assistant', content });
+                const targetHistory = options.conversationHistory || this.conversationHistory;
+                targetHistory.push({ role: 'user', content: prompt });
+                targetHistory.push(message || { role: 'assistant', content });
             }
 
             // Handle empty content (e.g. thinking models that forgot to output text)

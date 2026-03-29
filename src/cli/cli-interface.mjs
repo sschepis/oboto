@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { consoleStyler } from '../ui/console-styler.mjs';
+import { VmSandboxError } from '../lib/vm-sandbox-error.mjs';
 
 export class CLIInterface {
     constructor() {
@@ -332,8 +333,10 @@ ${theme.accent('THEMES:')}
             // VM2 sandbox errors (e.g. ReferenceError from AI-generated code)
             // are not system-fatal — notify listeners so sandbox state can be
             // reset, but don't kill the process.
-            if (stack.includes('vm.js') || stack.includes('vm2/lib/')) {
-                consoleStyler.log('warn', 'Sandbox error caught (non-fatal) — suppressing process exit');
+            // Use instanceof check instead of fragile stack string matching
+            // to avoid silently swallowing non-sandbox errors (e.g. missing modules).
+            if (reason instanceof VmSandboxError) {
+                consoleStyler.log('warn', `Sandbox error caught: ${msg}`);
                 try {
                     process.emit('sandbox-error', { reason, promise });
                 } catch { /* listeners may not exist — safe to ignore */ }

@@ -180,7 +180,7 @@ export class LMScriptProvider extends AgenticProvider {
         let iterations = 0;
         let continuations = 0;
         let streamed = false;
-        const maxIter = this._config.maxIterations;
+        const maxIter = options.maxIterations || this._config.maxIterations;
         const maxContinuations = this._config.maxContinuations;
         const eventBus = this._deps.eventBus;
         const ws = options.ws || this._deps.ws;

@@ -216,8 +216,16 @@ export class UnifiedProvider extends AgenticProvider {
       this._agentLoop.setStreamController(turnStream);
       this._toolBridge.setStreamController(turnStream);
 
+      // Resolve conversation-scoped history for the agent loop.
+      // Prefer per-call options.conversationHistory (from ConversationContext),
+      // falling back to the deps historyManager for backward compat.
+      const convHistory = options.conversationHistory
+        || this._deps?.historyManager?.getHistory()
+        || [];
+      const loopOptions = { ...options, conversationHistory: convHistory };
+
       try {
-        const result = await this._agentLoop.run(input, options);
+        const result = await this._agentLoop.run(input, loopOptions);
 
         return {
           response: result.response,

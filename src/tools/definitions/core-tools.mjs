@@ -168,5 +168,17 @@ export const CORE_TOOLS = [
                 required: ["summary"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "reload_routes",
+            description: "Hot-reload workspace dynamic routes without restarting the server. Re-scans routes/, .routes/, and api/ directories, picks up new, modified, or deleted route files, and atomically swaps the route table. Use this after creating, editing, or deleting route files so the changes take effect immediately.",
+            parameters: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        }
     }
 ];

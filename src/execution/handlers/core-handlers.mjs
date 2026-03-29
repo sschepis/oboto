@@ -158,7 +158,9 @@ export class CoreHandlers {
     }
 
     // Execute JavaScript code tool
-    async executeJavaScript(args, dryRun, plannedChanges) {
+    // The optional 4th argument `options.toolExecutor` allows VM sandbox caching
+    // across multiple execute_javascript calls within the same agent turn.
+    async executeJavaScript(args, dryRun, plannedChanges, options = {}) {
         if (dryRun) {
             return dryRunGuard(dryRun, plannedChanges, {
                 type: 'javascript',
@@ -187,35 +189,52 @@ export class CoreHandlers {
         const require = await this.packageManager.setupCommonJSRequire();
         
         consoleStyler.log('working', 'Executing JavaScript code...');
-        
-        // Use vm2 for sandboxed execution
-        const vm = new VM({
-            timeout: 30000, // 30s timeout
-            sandbox: {
-                console: console,
-                require: require,
-                process: {
-                    env: {
-                        NODE_ENV: process.env.NODE_ENV,
-                        HOME: process.env.HOME,
-                        PATH: process.env.PATH,
-                        LANG: process.env.LANG,
+
+        // Use cached VM from ToolExecutor when available (avoids recreating
+        // VM sandbox for every execute_javascript call within a single turn).
+        const { toolExecutor } = options;
+        const turnId = options.turnId || `turn-${Date.now()}`;
+        let vm;
+        if (toolExecutor && typeof toolExecutor.getOrCreateVM === 'function') {
+            vm = toolExecutor.getOrCreateVM(turnId, require);
+        } else {
+            // Wrap require with error handling to surface module-not-found errors
+            const safeRequire = (mod) => {
+                try { return require(mod); }
+                catch (e) {
+                    throw new Error(`Cannot find module '${mod}'. Install it first with npm_packages: ["${mod}"]`);
+                }
+            };
+
+            // Use vm2 for sandboxed execution
+            vm = new VM({
+                timeout: 30000, // 30s timeout
+                sandbox: {
+                    console: console,
+                    require: safeRequire,
+                    process: {
+                        env: {
+                            NODE_ENV: process.env.NODE_ENV,
+                            HOME: process.env.HOME,
+                            PATH: process.env.PATH,
+                            LANG: process.env.LANG,
+                        },
+                        cwd: process.cwd,
+                        platform: process.platform,
+                        arch: process.arch,
                     },
-                    cwd: process.cwd,
-                    platform: process.platform,
-                    arch: process.arch,
-                },
-                Buffer: Buffer,
-                setTimeout: setTimeout,
-                clearTimeout: clearTimeout,
-                setInterval: setInterval,
-                clearInterval: clearInterval,
-                fetch: globalThis.fetch,
-                // Stubs for front-end globals that AI-generated code may reference
-                surfaceApi: {},
-                UI: {},
-            }
-        });
+                    Buffer: Buffer,
+                    setTimeout: setTimeout,
+                    clearTimeout: clearTimeout,
+                    setInterval: setInterval,
+                    clearInterval: clearInterval,
+                    fetch: globalThis.fetch,
+                    // Stubs for front-end globals that AI-generated code may reference
+                    surfaceApi: {},
+                    UI: {},
+                }
+            });
+        }
 
         // Execute the code in the sandbox
         let toolResult;
@@ -230,10 +249,14 @@ export class CoreHandlers {
 
             // vm.run() may throw synchronously or return a rejecting promise.
             // Promise.resolve() normalises both cases so the outer try/catch
-            // handles them uniformly via await.  The await also unwraps any
-            // thenable returned by the async IIFE, so no secondary check is needed.
-            toolResult = await Promise.resolve(vm.run(wrappedCode));
+            // handles them uniformly via await.  The .catch() ensures async
+            // rejections from the IIFE are captured as VmSandboxError instead
+            // of escaping as unhandled rejections.
+            toolResult = await Promise.resolve(vm.run(wrappedCode)).catch(err => {
+                throw new VmSandboxError(`Execution error: ${err.message}`);
+            });
         } catch (err) {
+            if (err instanceof VmSandboxError) throw err;
             throw new VmSandboxError(`Execution error: ${err.message}`);
         }
 

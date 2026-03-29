@@ -7,6 +7,8 @@ class WSService {
   private _pendingMessages: string[] = [];
   /** Maximum number of messages to queue while disconnected. */
   private static MAX_PENDING = 100;
+  /** The currently active conversation ID, used to scope outgoing messages. */
+  private _activeConversation: string = 'chat';
 
   requestCompletion(payload: { filePath: string; language: string; content: string; cursorOffset: number; line: number; column: number }): Promise<string | null> {
     const id = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -101,10 +103,21 @@ class WSService {
         surfaceId: activeSurfaceId || undefined,
         model: model || undefined,
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        conversationId: this._activeConversation,
       }));
     } else {
       console.warn('WS not open');
     }
+  }
+
+  /** Get the currently active conversation ID. */
+  getActiveConversation(): string {
+    return this._activeConversation;
+  }
+
+  /** Set the active conversation ID (called after a successful switch). */
+  setActiveConversation(name: string) {
+    this._activeConversation = name;
   }
 
   interrupt() {
@@ -182,6 +195,30 @@ class WSService {
   saveFile(filePath: string, content: string, encoding?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'save-file', payload: { path: filePath, content, encoding } }));
+    }
+  }
+
+  renameFile(oldPath: string, newPath: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'rename-file', payload: { oldPath, newPath } }));
+    }
+  }
+
+  moveFile(source: string, destination: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'move-file', payload: { source, destination } }));
+    }
+  }
+
+  revealInFinder(filePath: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'reveal-in-finder', payload: filePath }));
+    }
+  }
+
+  openWithDefault(filePath: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'open-with-default', payload: filePath }));
     }
   }
 
@@ -454,7 +491,8 @@ class WSService {
 
   switchConversation(name: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'switch-conversation', payload: { name } }));
+      this._activeConversation = name;
+      this.ws.send(JSON.stringify({ type: 'switch-conversation', payload: { name }, conversationId: name }));
     }
   }
 
@@ -472,6 +510,57 @@ class WSService {
 
   clearConversation(name?: string) {
     this.sendMessage('clear-conversation', { name: name || null });
+  }
+
+  /** Trigger server-side conversation save to disk. Fire-and-forget. */
+  saveConversation() {
+    this.sendMessage('save-conversation');
+  }
+
+  /** Synchronous send for use in beforeunload — bypasses queue check */
+  saveConversationSync() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'save-conversation' }));
+    }
+  }
+
+  // --- Promoted Agent Management methods ---
+
+  /** Promote a conversation to a standalone agent. */
+  promoteConversation(opts: {
+    conversationName: string;
+    agentName?: string;
+    mode?: 'fork' | 'in-place';
+    instruction?: string;
+    persona?: string;
+    toolRestrictions?: { allowList?: string[]; denyList?: string[]; readOnly?: boolean };
+  }) {
+    this.sendMessage('promote-conversation', opts);
+  }
+
+  /** List all promoted agents. */
+  listAgents() {
+    this.sendMessage('list-agents');
+  }
+
+  /** Send a message/instruction to a promoted agent. */
+  sendAgentMessage(agentId: string, message: string) {
+    this.sendMessage('agent-message', { agentId, message });
+  }
+
+  /** Terminate a promoted agent. */
+  terminateAgent(agentId: string) {
+    this.sendMessage('terminate-agent', { agentId });
+  }
+
+  /** Pause a running promoted agent. */
+  pauseAgent(agentId: string) {
+    this.sendMessage('pause-agent', { agentId });
+  }
+
+  /** Resume a paused promoted agent. */
+  resumeAgent(agentId: string) {
+    this.sendMessage('resume-agent', { agentId });
   }
 
   // --- Agentic Provider methods ---

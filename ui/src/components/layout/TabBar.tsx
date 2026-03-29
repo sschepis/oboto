@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle } from 'lucide-react';
+import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle, Play, BookOpen } from 'lucide-react';
 import type { ConversationInfo } from '../../hooks/useChat';
 
 export interface EditorTab {
   id: string;        // 'chat' or file path
   label: string;     // display name
-  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf' | 'plugin';
+  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf' | 'plugin' | 'media' | 'markdown';
   filePath?: string;
   surfaceId?: string;
   isDirty?: boolean;
@@ -464,8 +464,12 @@ const TabBar: React.FC<TabBarProps> = ({
                 <ImageIcon size={12} className={`${iconColor} transition-colors duration-200`} />
               ) : tab.type === 'pdf' ? (
                 <FileText size={12} className={`${isActive ? 'text-red-400' : 'text-zinc-600'} transition-colors duration-200`} />
+              ) : tab.type === 'media' ? (
+                <Play size={12} className={`${isActive ? 'text-violet-400' : 'text-zinc-600'} transition-colors duration-200`} />
               ) : tab.type === 'plugin' ? (
                 <Puzzle size={12} className={`${isActive ? 'text-teal-400' : 'text-zinc-600'} transition-colors duration-200`} />
+              ) : tab.type === 'markdown' ? (
+                <BookOpen size={12} className={`${isActive ? 'text-sky-400' : 'text-zinc-600'} transition-colors duration-200`} />
               ) : (
                 <FileText size={12} className={`${iconColor} transition-colors duration-200`} />
               )}

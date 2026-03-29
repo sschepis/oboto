@@ -2,13 +2,13 @@
 // This module contains all the built-in tool schemas used by the AI
 // REFACTORED: Tool handlers are now distributed in handlers/*.mjs
 // ENHANCED: Output presentation layer (binary guard, overflow, metadata footer)
-// TODO: Cache VM sandbox context across tool calls within a single turn
-// to avoid repeated context creation overhead. VM sandboxing is currently
-// handled in handlers/core-handlers.mjs via vm2.
+// VM sandbox context is cached across tool calls within a single turn
+// via getOrCreateVM(turnId) to avoid repeated context creation overhead.
 
+import { VM } from 'vm2';
 import { consoleStyler } from '../ui/console-styler.mjs';
 import { emitToolStatus } from '../core/status-reporter.mjs';
-import { presentToolOutput } from './output-presenter.mjs';
+import { presentToolOutput, setOverflowWorkspaceRoot } from './output-presenter.mjs';
 import { CommandRouter } from './command-router.mjs';
 import { FileTools } from '../tools/file-tools.mjs';
 import { DesktopAutomationTools } from '../tools/desktop-automation-tools.mjs';
@@ -115,6 +115,8 @@ const PRESENTATION_SKIP_TOOLS = new Set([
     'screen_capture',
     // Plugin tools return structured JSON
     'list_available_plugins',
+    // Route reload returns a short confirmation
+    'reload_routes',
 ]);
 
 const TOOL_TIMEOUTS = {
@@ -161,8 +163,19 @@ export class ToolExecutor {
         this._plannedChanges = [];
         this.recursionLevel = 0;
         
+        // VM sandbox cache — reuse across tool calls within a single turn
+        this._vmCache = null;
+        this._vmCacheTurn = null;
+        // Current turn ID — set externally (e.g. by the agent loop) so that
+        // the VM cache key remains stable across calls within one iteration.
+        this.turnId = null;
+        
         // Initialize tool managers
         const workspaceRoot = workspaceManager?.workspaceRoot || process.cwd();
+        
+        // Configure overflow file storage inside workspace (Issue 1 fix)
+        setOverflowWorkspaceRoot(workspaceRoot);
+        
         this.fileTools = new FileTools(workspaceRoot);
         this.shellTools = new ShellTools(workspaceRoot);
         this.desktopTools = new DesktopAutomationTools();
@@ -309,14 +322,64 @@ export class ToolExecutor {
         return { needed: false };
     }
 
+    /**
+     * Return a cached VM sandbox for the given turn, or create a new one.
+     * This avoids recreating VM instances for every execute_javascript call
+     * within a single agent loop iteration (turn).
+     * @param {string} turnId — unique identifier for the current turn
+     * @param {Function} requireFn — CommonJS require function to inject
+     * @returns {VM} cached or freshly created VM instance
+     */
+    getOrCreateVM(turnId, requireFn) {
+        if (this._vmCache && this._vmCacheTurn === turnId) {
+            return this._vmCache;
+        }
+        // Wrap require with error handling
+        const safeRequire = (mod) => {
+            try { return requireFn(mod); }
+            catch (e) {
+                throw new Error(`Cannot find module '${mod}'. Install it first with npm_packages: ["${mod}"]`);
+            }
+        };
+        this._vmCache = new VM({
+            timeout: 30000,
+            sandbox: {
+                console: console,
+                require: safeRequire,
+                process: {
+                    env: {
+                        NODE_ENV: process.env.NODE_ENV,
+                        HOME: process.env.HOME,
+                        PATH: process.env.PATH,
+                        LANG: process.env.LANG,
+                    },
+                    cwd: process.cwd,
+                    platform: process.platform,
+                    arch: process.arch,
+                },
+                Buffer: Buffer,
+                setTimeout: setTimeout,
+                clearTimeout: clearTimeout,
+                setInterval: setInterval,
+                clearInterval: clearInterval,
+                fetch: globalThis.fetch,
+                surfaceApi: {},
+                UI: {},
+            },
+        });
+        this._vmCacheTurn = turnId;
+        return this._vmCache;
+    }
+
     registerBuiltInTools() {
         // Core Tools
         this.registerTool('execute_npm_function', args => this.coreHandlers.executeNpmFunction(args, this.dryRun, this._plannedChanges));
-        this.registerTool('execute_javascript', args => this.coreHandlers.executeJavaScript(args, this.dryRun, this._plannedChanges));
+        this.registerTool('execute_javascript', args => this.coreHandlers.executeJavaScript(args, this.dryRun, this._plannedChanges, { toolExecutor: this, turnId: this.turnId }));
         this.registerTool('read_conversation_history', args => this.coreHandlers.readConversationHistory(args));
         this.registerTool('promote_memory', args => this.coreHandlers.promoteMemory(args));
         this.registerTool('query_global_memory', args => this.coreHandlers.queryGlobalMemory(args));
         this.registerTool('report_to_parent', args => this.coreHandlers.reportToParent(args));
+        this.registerTool('reload_routes', () => this._reloadRoutes());
 
         // Skill Tools
         this.registerTool('list_skills', this.skillHandlers.listSkills.bind(this.skillHandlers));
@@ -807,7 +870,7 @@ export class ToolExecutor {
             // and metadata footer before returning to the LLM.
             const skipPresentation = PRESENTATION_SKIP_TOOLS.has(functionName);
             if (!skipPresentation && typeof toolResultText === 'string') {
-                toolResultText = presentToolOutput(toolResultText, {
+                toolResultText = await presentToolOutput(toolResultText, {
                     toolName: functionName,
                     durationMs,
                     filePath: args.path || args.file || undefined,
@@ -873,6 +936,26 @@ export class ToolExecutor {
             return "Workspace manager not available";
         }
         return await this.workspaceManager.manageWorkspace(args);
+    }
+
+    // Hot-reload workspace dynamic routes
+    async _reloadRoutes() {
+        const wcs = this.assistant?.workspaceContentServer;
+        if (!wcs) {
+            return '[error] Workspace content server not available. Cannot reload routes.';
+        }
+        try {
+            const result = await wcs.reloadRoutes();
+            if (result.error) {
+                return `[error] ${result.error}`;
+            }
+            const routesList = result.routes.length > 0
+                ? result.routes.map(r => `  • ${r}`).join('\n')
+                : '  (none)';
+            return `✓ Routes hot-reloaded successfully.\n\nMounted ${result.mounted} route(s):\n${routesList}`;
+        } catch (err) {
+            return `[error] Failed to reload routes: ${err.message}`;
+        }
     }
 
     // Recursive Call
