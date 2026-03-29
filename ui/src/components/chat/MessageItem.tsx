@@ -554,7 +554,12 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, actions, userLabel =
 
         {/* Secret vault */}
         {message.type === 'secret-request' && (
-           <SecretVaultBlock secretLabel={message.label || 'Secret'} />
+           <SecretVaultBlock
+             secretLabel={message.label || 'Secret'}
+             requestId={message.secretRequestId}
+             secretName={message.secretName}
+             description={message.secretDescription}
+           />
         )}
 
         {/* Test results */}

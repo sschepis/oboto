@@ -321,6 +321,16 @@ class WSService {
     }
   }
 
+  /** Submit a secret value for a pending request_secret tool call. */
+  submitSecret(requestId: string, name: string, value: string) {
+    this.sendMessage('submit-secret', { requestId, name, value });
+  }
+
+  /** Cancel a pending secret request (user declined). */
+  cancelSecret(requestId: string, name: string) {
+    this.sendMessage('cancel-secret', { requestId, name });
+  }
+
   renameSurface(surfaceId: string, name: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'rename-surface', payload: { surface_id: surfaceId, name } }));

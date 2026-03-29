@@ -250,6 +250,9 @@ export class EventBroadcaster {
         // Tool Confirmation Events
         this._on('tool:confirmation-request', (data) => broadcast('tool-confirmation-request', data));
 
+        // Secret Request Events — forward to UI for secure input
+        this._on('secret:request', (data) => broadcast('secret-input-request', data));
+
         // Agent Loop Events
         this._on('agent-loop:state-changed', (data) => broadcast('agent-loop-state', data));
         this._on('agent-loop:invocation', (data) => broadcast('agent-loop-invocation', data));

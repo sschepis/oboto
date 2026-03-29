@@ -36,6 +36,7 @@ import { AsyncTaskHandlers } from './handlers/async-task-handlers.mjs';
 import { SurfaceHandlers } from './handlers/surface-handlers.mjs';
 import { dryRunGuard } from './dry-run-guard.mjs';
 import { McpHandlers } from './handlers/mcp-handlers.mjs';
+import { SecretHandlers } from './handlers/secret-handlers.mjs';
 import { TOOLS } from '../tools/tool-definitions.mjs';
 import { PluginLoader } from '../plugins/plugin-loader.mjs';
 import { copyPluginToWorkspace } from '../plugins/plugin-fork.mjs';
@@ -111,6 +112,8 @@ const PRESENTATION_SKIP_TOOLS = new Set([
     'report_to_parent',
     // Blocking questions — not regular tool output
     'ask_blocking_question',
+    // Secret requests — blocking, result is a status message
+    'request_secret',
     // Desktop tools return structured data or images
     'screen_capture',
     // Plugin tools return structured JSON
@@ -131,6 +134,7 @@ const TOOL_TIMEOUTS = {
     run_command: 600_000, // 10 minutes — accommodate long-running tasks (e.g. image generation)
     call_ai_assistant: 300_000,
     ask_blocking_question: 24 * 60 * 60 * 1000, // 24 hours — effectively indefinite
+    request_secret: 600_000, // 10 minutes — user must provide the secret
     spawn_background_task: 10_000, // Fast return
     check_task_status: 5_000,
     execute_implementation_plan: 600_000,
@@ -214,6 +218,7 @@ export class ToolExecutor {
         this.surfaceHandlers = new SurfaceHandlers(this.surfaceManager, this.eventBus);
         this.skillHandlers = new SkillHandlers(this.skillsManager, this.aiAssistantClass);
         this.mcpHandlers = this.mcpClientManager ? new McpHandlers(this.mcpClientManager) : null;
+        this.secretHandlers = new SecretHandlers(this.eventBus);
 
         // Initialize tool registry
         this.toolRegistry = new Map();
@@ -439,6 +444,9 @@ export class ToolExecutor {
 
         // Blocking Question Tool (Agent Loop)
         this.registerTool('ask_blocking_question', this.asyncTaskHandlers.askBlockingQuestion.bind(this.asyncTaskHandlers));
+
+        // Secret Request Tool (blocks until user provides secret via UI)
+        this.registerTool('request_secret', this.secretHandlers.requestSecret.bind(this.secretHandlers));
 
         // Unified CLI Tool (with dry-run guard)
         this.registerTool('run', args => {

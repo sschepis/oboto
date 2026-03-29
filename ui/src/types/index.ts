@@ -145,6 +145,9 @@ export interface Message {
 
   // For SecretVaultBlock
   label?: string;
+  secretRequestId?: string;
+  secretName?: string;
+  secretDescription?: string;
 
   // For TestResultsPanel
   testResults?: TestResults;

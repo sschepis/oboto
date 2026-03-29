@@ -599,6 +599,25 @@ export const useChat = () => {
       }),
       // workspace-task-completed and workspace-task-failed are handled via
       // the 'message' event (EventBroadcaster injects system messages)
+
+      // --- Secret request events ---
+      // When the AI calls request_secret, the server broadcasts a
+      // secret-input-request event.  We inject a secret-request message
+      // into the chat so the user can provide the secret inline.
+      wsService.on('secret-input-request', (payload: unknown) => {
+        const p = payload as { requestId: string; name: string; label: string; description?: string };
+        setMessages(prev => [...prev, {
+          id: p.requestId,
+          role: 'ai' as const,
+          type: 'secret-request' as const,
+          label: p.label,
+          secretRequestId: p.requestId,
+          secretName: p.name,
+          secretDescription: p.description || '',
+          content: p.description || `Please provide your ${p.label}`,
+          timestamp: new Date().toLocaleString(),
+        }]);
+      }),
     ];
 
     return () => {
