@@ -1,0 +1,30 @@
+[
+  {
+    "id": "redact-credentials",
+    "name": "Redact credentials from non-restricted agents",
+    "priority": 10,
+    "condition": { "categories": ["credentials"], "sensitivityLevel": "confidential" },
+    "action": { "type": "redact", "params": { "replacement": "[REDACTED:credential]" } }
+  },
+  {
+    "id": "mask-pii",
+    "name": "Mask PII for public-clearance agents",
+    "priority": 20,
+    "condition": { "categories": ["pii"], "sensitivityLevel": "internal" },
+    "action": { "type": "mask", "params": { "replacement": "[PII:***]" } }
+  },
+  {
+    "id": "redact-financial",
+    "name": "Redact financial data from agents without financial clearance",
+    "priority": 15,
+    "condition": { "categories": ["financial"], "sensitivityLevel": "confidential" },
+    "action": { "type": "redact", "params": { "replacement": "[REDACTED:financial]" } }
+  },
+  {
+    "id": "block-restricted",
+    "name": "Block restricted content from non-restricted agents",
+    "priority": 1,
+    "condition": { "sensitivityLevel": "restricted" },
+    "action": { "type": "block" }
+  }
+]

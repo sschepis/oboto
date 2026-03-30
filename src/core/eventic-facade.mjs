@@ -31,6 +31,9 @@ import { SessionController } from './controllers/session-controller.mjs';
 // Conversation-to-agent promotion
 import { ConversationAgentManager } from './agent/conversation-agent-manager.mjs';
 
+// Invisible Support LLM (local inference for auxiliary tasks)
+import { SupportLLM } from './support-llm.mjs';
+
 // Extracted modules
 import {
     updateSystemPrompt as _updateSystemPrompt,
@@ -193,6 +196,20 @@ export class EventicFacade {
             consoleStyler.log('error', `ConversationAgentManager init error: ${err.message}`);
         });
 
+        // ── Support LLM (invisible local inference) ────────────────────────
+        // Instantiate the singleton and start background probe.  The SupportLLM
+        // is available via `this.supportLlm` for any subsystem that needs fast
+        // local classification, tagging, or summarisation.
+        const supportLlmEnabled = config?.ai?.supportLlm?.enabled !== false;
+        if (this.eventBus && supportLlmEnabled) {
+            this.supportLlm = new SupportLLM(this.eventBus);
+            this._supportLlmInitPromise = this.supportLlm.init().catch(err => {
+                consoleStyler.log('warning', `SupportLLM init error: ${err.message}`);
+            });
+        } else {
+            this.supportLlm = null;
+        }
+
         // Track the facade's busy state
         this._isBusy = false;
         
@@ -238,7 +255,8 @@ export class EventicFacade {
             engine: this.engine,
             config,
             userConfig: config?.ai?.agentic || {},
-            facade: this
+            facade: this,
+            supportLlm: this.supportLlm || null,
         };
     }
 
@@ -645,7 +663,7 @@ export class EventicFacade {
         return await _generateCodeCompletion(this, fileContent, cursorOffset, filePath);
     }
 
-    async generateNextSteps(userInput, aiResponse) {
-        return await _generateNextSteps(this, userInput, aiResponse);
+    async generateNextSteps(userInput, aiResponse, options = {}) {
+        return await _generateNextSteps(this, userInput, aiResponse, options);
     }
 }

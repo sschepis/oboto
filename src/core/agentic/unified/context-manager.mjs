@@ -91,17 +91,36 @@ export class ContextManager {
    * Saves 1-3 tool-call round trips by injecting content into the
    * conversation before the first LLM call.
    *
+   * When a `sensitivityTagger` is provided (Phase 2 confidentiality),
+   * pre-routed file content is annotated with sensitivity metadata.
+   *
    * @param {string} input — the user's message
    * @param {Map}    tools — engine tool map (tool name → handler function)
+   * @param {import('../../confidentiality/sensitivity-tagger.mjs').SensitivityTagger} [sensitivityTagger] — optional tagger for classification
    * @returns {Promise<{ fileContext: Array, surfaceContext: string|null }>}
    */
-  async preRoute(input, tools) {
+  async preRoute(input, tools, sensitivityTagger) {
     // ── File pre-routing ─────────────────────────────────────────
     let fileContext = [];
     try {
       fileContext = await preRouteFiles(input, tools);
     } catch (_e) {
       // Non-critical — the agent can still call tools manually
+    }
+
+    // ── Sensitivity classification of pre-routed files (Phase 2) ──
+    if (sensitivityTagger && fileContext && fileContext.length > 0) {
+      for (const file of fileContext) {
+        try {
+          file.sensitivity = sensitivityTagger.classify(
+            file.content || '',
+            'file-content',
+            { path: file.path },
+          );
+        } catch (_e) {
+          // Non-critical — file proceeds without classification
+        }
+      }
     }
 
     // ── Surface pre-routing ──────────────────────────────────────

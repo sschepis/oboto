@@ -772,7 +772,11 @@ export class ToolExecutor {
             // 'server:tool-start/end' emitted by ServerStatusAdapter for facade
             // operations (ai_man_chat, ai_man_execute, etc.).
             if (this.eventBus) {
-                this.eventBus.emitTyped('server:tool-call-start', { toolName: functionName, args });
+                this.eventBus.emitTyped('server:tool-call-start', {
+                    toolCallId: toolCall.id,
+                    toolName: functionName,
+                    args
+                });
             }
 
             // Inject signal into args for tools that support cancellation
@@ -888,7 +892,11 @@ export class ToolExecutor {
             // Emit structured tool-call-end event so the UI can update ToolCall
             // components with the result (browser previews, file contents, etc.)
             if (this.eventBus) {
-                this.eventBus.emitTyped('server:tool-call-end', { toolName: functionName, result: toolResultText });
+                this.eventBus.emitTyped('server:tool-call-end', {
+                    toolCallId: toolCall.id,
+                    toolName: functionName,
+                    result: toolResultText
+                });
             }
 
             return {
@@ -907,7 +915,11 @@ export class ToolExecutor {
 
             // Emit tool-call-end with error so the UI can show the failure
             if (this.eventBus) {
-                this.eventBus.emitTyped('server:tool-call-end', { toolName: functionName, result: errorContent });
+                this.eventBus.emitTyped('server:tool-call-end', {
+                    toolCallId: toolCall.id,
+                    toolName: functionName,
+                    result: errorContent
+                });
             }
             return {
                 role: 'tool',

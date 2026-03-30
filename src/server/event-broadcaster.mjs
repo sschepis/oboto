@@ -310,6 +310,15 @@ export class EventBroadcaster {
             broadcast('webllm:generate', data);
         });
 
+        // Support LLM Bridge — separate namespace for the invisible local LLM
+        // See docs/architecture/invisible-local-llm-integration.md §4.3
+        this._on('webllm:support:probe', (data) => {
+            broadcast('webllm:support:probe', data);
+        });
+        this._on('webllm:support:generate', (data) => {
+            broadcast('webllm:support:generate', data);
+        });
+
         // Agent Loop Blocking Questions
         this._on('agent-loop:question', (data) => {
             broadcast('agent-loop-question', data);

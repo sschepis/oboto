@@ -177,6 +177,14 @@ export class ClientConnectionHandler {
             // If we can't read setup file, assume first run
             safeSend(ws, { type: 'setup-status', payload: { isFirstRun: true } });
         }
+
+        // Trigger Support LLM re-probe when a new browser client connects.
+        // The browser may have WebGPU support, enabling the WebLLMTransport.
+        if (assistant.supportLlm) {
+            assistant.supportLlm.reprobeTransport().catch(() => {
+                // Non-critical — swallow errors silently
+            });
+        }
     }
 
     async handleMessage(ws, message) {

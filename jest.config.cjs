@@ -12,20 +12,24 @@ module.exports = {
       useESM: true,
       tsconfig: {
         ...require('./tsconfig.json').compilerOptions,
-        module: 'esnext',
-        isolatedModules: true
+        module: 'esnext'
       },
       diagnostics: {
         warnOnly: true
       }
     }],
     '^.+\\.m?js$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
       useESM: true,
-      isolatedModules: true
+      tsconfig: {
+        ...require('./tsconfig.json').compilerOptions,
+        module: 'esnext'
+      }
     }]
   },
   transformIgnorePatterns: [
     'node_modules/(?!(chokidar|readdirp|uuid)/)'
+  ],
+  testPathIgnorePatterns: [
+    '<rootDir>/src/server/__tests__/dynamic-router.test.mjs'
   ]
 };

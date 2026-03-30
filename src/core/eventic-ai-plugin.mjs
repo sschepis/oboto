@@ -49,16 +49,56 @@ export class EventicAIProvider {
 
     /**
      * Main interface for asking the AI a question.
+     *
+     * **Return type varies by options:**
+     * - Default: returns a `string` with the model's text response.
+     * - `format: 'json'`: returns a parsed JSON object (or `{ error, raw }` on parse failure).
+     * - When tool calls are present: returns `{ content, toolCalls, rawMessage, usage }`.
+     * - `includeMetadata: true`: returns `{ content: string, rawMessage: object, usage: object|null, finishReason: string|null }`
+     *   instead of a plain string.  **Callers that depend on a string return value must
+     *   not set this flag**, or must handle the object shape.
+     *
      * @param {string} prompt - The user prompt
-     * @param {Object} options - Options for the request (format, system, schema, tools)
-     * @returns {Promise<any>} The AI response (string or JSON object)
+     * @param {Object} options - Options for the request
+     * @param {'text'|'json'} [options.format='text'] - Response format
+     * @param {string|null} [options.system=null] - System prompt override
+     * @param {Object|null} [options.schema=null] - JSON schema for structured output
+     * @param {Array|null} [options.tools=null] - Tool definitions for function calling
+     * @param {boolean} [options.includeMetadata=false] - When `true`, wraps the
+     *   response in an object containing `content`, `rawMessage`, `usage`, and
+     *   `finishReason` instead of returning a plain string.  This changes the
+     *   return type and may break callers expecting a string.
+     * @param {boolean} [options.recordHistory=true] - Whether to append to conversation history
+     * @param {boolean} [options.noStitch=false] - Disable multi-message stitching for truncated responses
+     * @param {string} [options.model] - Per-request model override
+     * @param {number} [options.temperature=0.7] - Sampling temperature
+     * @param {number} [options.max_tokens] - Max tokens override
+     * @param {AbortSignal} [options.signal] - Abort signal for cancellation
+     * @param {Function} [options.onToken] - Streaming token callback
+     * @param {Function} [options.onChunk] - Streaming chunk callback
+     * @param {Array} [options.conversationHistory] - Per-call history override
+     * @returns {Promise<string | Object>} The AI response — a plain string by default,
+     *   or an object when `includeMetadata`, `format: 'json'`, or tool calls are involved.
      */
     async ask(prompt, options = {}) {
         const { format = 'text', system = null, schema = null, tools = null } = options;
         
         const messages = [];
-        
-        const activeSystemPrompt = system || this.systemPrompt;
+
+        const history = options.conversationHistory || this.conversationHistory;
+        let activeSystemPrompt = system || this.systemPrompt;
+        let historyOffset = 0;
+
+        // Avoid sending the primary system prompt twice. Conversation history
+        // snapshots frequently persist the leading system message, while ask()
+        // also injects the active system prompt separately.
+        if (Array.isArray(history) && history.length > 0 && history[0]?.role === 'system') {
+            if (!activeSystemPrompt && typeof history[0].content === 'string') {
+                activeSystemPrompt = history[0].content;
+            }
+            historyOffset = 1;
+        }
+
         if (activeSystemPrompt) {
             messages.push({ role: 'system', content: activeSystemPrompt });
         }
@@ -68,9 +108,8 @@ export class EventicAIProvider {
         // that must not be contaminated by the main conversation context.
         // Per-call history (from ConversationContext) is preferred over the
         // singleton this.conversationHistory for conversation isolation.
-        const history = options.conversationHistory || this.conversationHistory;
         if (options.recordHistory !== false) {
-            messages.push(...history);
+            messages.push(...history.slice(historyOffset));
         }
         
         let fullPrompt = prompt;
@@ -284,6 +323,14 @@ export class EventicAIProvider {
             // Emit usage data so metrics tracking works without breaking the return type
             if (usage && this.engine) {
                 this.engine.dispatch('AI_USAGE_METRICS', usage);
+            }
+            if (options.includeMetadata) {
+                return {
+                    content,
+                    rawMessage: message,
+                    usage,
+                    finishReason,
+                };
             }
             return content;
         } catch (error) {

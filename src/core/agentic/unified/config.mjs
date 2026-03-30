@@ -173,6 +173,58 @@ export const UNIFIED_CONFIG = {
      */
     maxCostPerTurn: 0.50,
   },
+
+  // ── Confidentiality ─────────────────────────────────────────────────
+  confidentiality: {
+    /** Master toggle — when false, all content passes through unfiltered. */
+    enabled: false,
+
+    /** Default clearance for agents created without an explicit profile. */
+    defaultClearance: 'restricted',
+
+    /** Path to workspace-level policies file (relative to workingDir). */
+    policiesFile: 'confidentiality-policies.json',
+
+    /** SensitivityTagger settings. */
+    tagger: {
+      /** Enable rule-based classification. */
+      ruleBasedEnabled: true,
+      /** Enable LLM-assisted classification (Phase 3+). */
+      llmAssistedEnabled: false,
+      /** Custom regex patterns: { categoryName: [regexString, ...] } */
+      customPatterns: {},
+    },
+
+    /** View compilation settings. */
+    viewCompilation: {
+      /** Whether to compile views on history entries. */
+      compileHistory: true,
+      /** Whether to compile views on pre-routed file content. */
+      compilePreRouted: true,
+      /** Whether to compile views on system prompt sections. */
+      compileSystemPrompt: true,
+    },
+
+    /** Lineage tracking settings. */
+    lineage: {
+      /** Whether to track artifact lineage. */
+      enabled: true,
+      /** Max lineage records to keep in memory per workspace. */
+      maxRecords: 10000,
+      /** Whether to persist lineage to disk. */
+      persist: true,
+    },
+
+    /** Routing settings. */
+    routing: {
+      /** Whether automatic task decomposition is enabled. */
+      autoDecompose: false,
+      /** Whether to auto-create agents when no eligible agent exists. */
+      autoCreateAgents: true,
+      /** Max agents that can be auto-created per routing operation. */
+      maxAutoCreatedAgents: 3,
+    },
+  },
 };
 
 // ════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,60 @@ import { ResoLangService } from './resolang-service.mjs';
 import { ConsciousnessProcessor } from './consciousness-processor.mjs';
 import { PluginManager } from '../plugins/plugin-manager.mjs';
 
+function normalizeSuggestionLabel(label) {
+    return label.trim().replace(/[\n\r\t]/g, ' ').replace(/\s{2,}/g, ' ').substring(0, 80);
+}
+
+function pushSuggestion(target, seen, id, label, icon) {
+    const normalized = normalizeSuggestionLabel(label);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key) || target.length >= 4) return;
+    seen.add(key);
+    target.push({ id, label: normalized, icon });
+}
+
+function buildHeuristicNextSteps(userInput, aiResponse) {
+    const input = (userInput || '').trim();
+    const response = (aiResponse || '').trim();
+    if (!input || !response) return [];
+
+    const combined = `${input}\n${response}`.toLowerCase();
+    if (/^(hi|hello|hey|thanks|thank you|ok|okay)[!. ]*$/i.test(input)) {
+        return [];
+    }
+
+    const steps = [];
+    const seen = new Set();
+    const hasFilePath = /(?:^|\s)(?:[a-zA-Z0-9_.-]+\/)+[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]{1,6}(?:\s|$|[,;:?!])/i.test(`${input} ${response}`);
+
+    if (/\b(test|jest|failing|failed|error|bug|regression|stack trace|exception)\b/i.test(combined)) {
+        pushSuggestion(steps, seen, 'run-tests', 'Run the tests', 'flask-conical');
+        pushSuggestion(steps, seen, 'fix-failure', 'Fix the failing issue', 'zap');
+        pushSuggestion(steps, seen, 'inspect-related-files', 'Inspect the related files', 'folder');
+    }
+
+    if (/\b(created|updated|changed|modified|edited|implemented|wrote|patched|refactored)\b/i.test(response)) {
+        pushSuggestion(steps, seen, 'show-diff', 'Show me the diff', 'git-branch');
+        pushSuggestion(steps, seen, 'add-tests', 'Add tests for this', 'flask-conical');
+    }
+
+    if (/\b(implement|build|create|feature|add)\b/i.test(input)) {
+        pushSuggestion(steps, seen, 'continue-implementation', 'Continue the implementation', 'code');
+    }
+
+    if (/\b(refactor|cleanup|clean up|optimi[sz]e|performance)\b/i.test(combined)) {
+        pushSuggestion(steps, seen, 'review-optimizations', 'Review optimization opportunities', 'zap');
+    }
+
+    if (hasFilePath) {
+        pushSuggestion(steps, seen, 'open-file', 'Open the relevant file', 'folder');
+        pushSuggestion(steps, seen, 'explain-file', 'Explain that file', 'book-open');
+    }
+
+    return steps;
+}
+
 /**
  * Save the active conversation to disk.
  * @param {import('./eventic-facade.mjs').EventicFacade} facade
@@ -232,18 +286,76 @@ export async function changeWorkingDirectory(facade, newDir) {
 }
 
 /**
+ * Generate context-aware next-step suggestions using the SupportLLM.
+ * Falls back to buildHeuristicNextSteps() if the SupportLLM is unavailable
+ * or returns null.
+ *
+ * @param {string} userInput
+ * @param {string} aiResponse
+ * @param {import('./support-llm.mjs').SupportLLM|null} supportLlm
+ * @returns {Promise<Array>}
+ */
+async function buildSmartNextSteps(userInput, aiResponse, supportLlm) {
+    if (!supportLlm?.isAvailable()) {
+        return buildHeuristicNextSteps(userInput, aiResponse);
+    }
+
+    try {
+        const result = await supportLlm.generateNextSteps(userInput, aiResponse);
+
+        if (!result || !Array.isArray(result) || result.length === 0) {
+            return buildHeuristicNextSteps(userInput, aiResponse);
+        }
+
+        const validIcons = new Set(['download', 'flask-conical', 'git-branch', 'folder', 'book-open', 'zap', 'code', 'arrow-right']);
+        return result
+            .filter(s => s && typeof s.label === 'string' && s.label.trim())
+            .slice(0, 4)
+            .map((s, i) => ({
+                id: s.id || `smart-step-${i}`,
+                label: normalizeSuggestionLabel(s.label),
+                icon: validIcons.has(s.icon) ? s.icon : 'zap',
+            }));
+    } catch {
+        // SupportLLM failed — fall back to regex heuristics
+        return buildHeuristicNextSteps(userInput, aiResponse);
+    }
+}
+
+/**
  * Use the LLM to generate context-specific follow-up action suggestions.
+ *
+ * Priority order:
+ *   1. SupportLLM (fast, local, no cost) — tried automatically when available
+ *   2. Cloud LLM (only when forceLlm=true) — full cloud call
+ *   3. Regex heuristics — always-available fallback
+ *
  * @param {import('./eventic-facade.mjs').EventicFacade} facade
  * @param {string} userInput
  * @param {string} aiResponse
  * @returns {Promise<Array>}
  */
-export async function generateNextSteps(facade, userInput, aiResponse) {
-    let steps = [];
+export async function generateNextSteps(facade, userInput, aiResponse, options = {}) {
+    const { forceLlm = false } = options;
 
-    // If we have conversation context, use the LLM to generate
-    // context-specific follow-up suggestions.
-    if (userInput && aiResponse) {
+    // ── Try SupportLLM first (fast, local, zero cost) ────────────────
+    // This runs automatically even without forceLlm, since the local LLM
+    // is free and fast. If it returns good results, we skip the cloud call.
+    if (userInput && aiResponse && facade.supportLlm?.isAvailable()) {
+        const smartSteps = await buildSmartNextSteps(userInput, aiResponse, facade.supportLlm);
+        if (smartSteps.length > 0) {
+            if (facade.eventBus) {
+                facade.eventBus.emit('server:next-steps', smartSteps);
+            }
+            return smartSteps;
+        }
+    }
+
+    // ── Fall back to regex heuristics ────────────────────────────────
+    let steps = buildHeuristicNextSteps(userInput, aiResponse);
+
+    // ── Cloud LLM path (only when explicitly requested) ──────────────
+    if (forceLlm && userInput && aiResponse) {
         try {
             const truncatedResponse = aiResponse.length > 800
                 ? aiResponse.substring(0, 800) + '\u2026'
@@ -316,7 +428,7 @@ Rules:
                         .map((s, i) => ({
                             id: s.id || `step-${i}`,
                             // Sanitise: collapse whitespace, strip control chars, cap length
-                            label: s.label.trim().replace(/[\n\r\t]/g, ' ').replace(/\s{2,}/g, ' ').substring(0, 80),
+                            label: normalizeSuggestionLabel(s.label),
                             icon: validIcons.has(s.icon) ? s.icon : 'zap'
                         }));
                 }

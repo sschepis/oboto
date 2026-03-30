@@ -43,6 +43,7 @@ import { useTour } from './hooks/useTour';
 import { useHelpTracking } from './hooks/useHelpTracking';
 import { usePersona } from './hooks/usePersona';
 import { surfaceApi } from './components/features/surface/surfaceApi';
+import { supportLlmService } from './services/supportLlmService';
 
 import { useTabManager } from './hooks/useTabManager';
 import { useWorkspaceState } from './hooks/useWorkspaceState';
@@ -108,6 +109,13 @@ function App() {
 
   // New Refactored Hooks
   const ui = useUIState();
+
+  // Initialise the invisible Support LLM service (WebGPU-based local inference).
+  // This runs once on mount and silently bootstraps if hardware supports it.
+  useEffect(() => {
+    supportLlmService.init();
+    return () => supportLlmService.destroy();
+  }, []);
 
   // Sync workspace content server port and sandbox mode into surfaceApi
   useEffect(() => {

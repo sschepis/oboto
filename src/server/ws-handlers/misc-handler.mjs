@@ -125,7 +125,7 @@ async function handleRefreshNextSteps(_data, ctx) {
         }
 
         // Generate fresh next-steps using the last exchange
-        await assistant.generateNextSteps(lastUserInput, lastAiResponse);
+        await assistant.generateNextSteps(lastUserInput, lastAiResponse, { forceLlm: true });
     } catch (err) {
         consoleStyler.log('error', `Failed to refresh next steps: ${err.message}`);
         wsSendError(ws, `Failed to refresh next steps: ${err.message}`);

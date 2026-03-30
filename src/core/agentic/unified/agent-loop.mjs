@@ -419,7 +419,9 @@ export class AgentLoop {
     }
 
     // Inject pre-routed file context into conversation history
-    if (compiledFileContext && compiledFileContext.length > 0 && this._ai?.conversationHistory) {
+    // Use the resolved `history` (per-conversation or singleton) so context
+    // is visible in the same array that ask() reads from.
+    if (compiledFileContext && compiledFileContext.length > 0 && history) {
       const fileBlock = compiledFileContext
         .map((r) => {
           if (r.content) return `[FILE CONTENT: ${r.path}]\n\`\`\`\n${r.content}\n\`\`\``;
@@ -430,7 +432,7 @@ export class AgentLoop {
         .join('\n\n');
 
       if (fileBlock) {
-        this._ai.conversationHistory.push({
+        history.push({
           role: 'system',
           content: `The following files were automatically retrieved based on the user's request.\n\n${fileBlock}`,
           _transient: true,
@@ -440,8 +442,8 @@ export class AgentLoop {
     }
 
     // Inject surface context
-    if (surfaceContext && this._ai?.conversationHistory) {
-      this._ai.conversationHistory.push({
+    if (surfaceContext && history) {
+      history.push({
         role: 'system',
         content: surfaceContext,
         _transient: true,
@@ -612,7 +614,7 @@ export class AgentLoop {
           result: results[idx]?.content || '',
         }));
         const doomResult = this._safety.checkDoom(
-          this._ai?.conversationHistory || [],
+          history,
           doomInputs,
           iteration,
           maxIterations,
@@ -627,10 +629,15 @@ export class AgentLoop {
         // ── Push tool results into conversation history ─────────────
         // Same pattern as eventic-agent-loop-plugin.mjs:
         // The AI provider's ask() automatically pushes the assistant
-        // message (with tool_calls) and we push tool results here.
-        if (this._ai?.conversationHistory) {
+        // message (with tool_calls) into `history` and we push tool
+        // results into the same array so tool_use/tool_result pairs
+        // stay together.  Previously pushed to the singleton
+        // this._ai.conversationHistory which diverged from `history`
+        // when per-conversation history was active, causing orphaned
+        // tool_use blocks and Anthropic API 400 errors.
+        if (history) {
           for (const result of results) {
-            this._ai.conversationHistory.push(result);
+            history.push(result);
           }
         }
 
@@ -728,13 +735,15 @@ export class AgentLoop {
 
           // Remove poisoned assistant + user messages from history
           // (same pattern as eventic-agent-loop-plugin.mjs lines 410-421)
-          if (this._ai?.conversationHistory) {
-            const hist = this._ai.conversationHistory;
-            if (hist.length > 0 && hist[hist.length - 1].role === 'assistant') {
-              hist.pop();
+          // Pop from the resolved `history` (not the singleton) so
+          // the poisoned messages are removed from the array that
+          // ask() will read on the next iteration.
+          if (history && history.length > 0) {
+            if (history[history.length - 1].role === 'assistant') {
+              history.pop();
             }
-            if (hist.length > 0 && hist[hist.length - 1].role === 'user') {
-              hist.pop();
+            if (history.length > 0 && history[history.length - 1].role === 'user') {
+              history.pop();
             }
           }
 
@@ -944,20 +953,37 @@ export class AgentLoop {
     } finally {
       // ── Always purge transient messages ─────────────────────────
       // Transient system messages (pre-routed files, surface context) are
-      // injected into conversationHistory during PHASE 7.  They must be
-      // cleaned up even if the turn throws to prevent stale context from
-      // leaking into subsequent turns.
+      // injected into `history` during PHASE 7.  They must be cleaned up
+      // even if the turn throws to prevent stale context leaking into
+      // subsequent turns.
+      //
+      // Purge from the resolved `history` array (which is what ask()
+      // reads).  Also purge from the singleton as a safety net in case
+      // legacy code still injects there.
+      if (history && history.length > 0) {
+        // In-place filter — `history` is a const binding so we can't reassign
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i]._transient) history.splice(i, 1);
+        }
+      }
       if (this._ai) {
         purgeTransientMessages({ ai: this._ai });
-        // ── Patch orphaned tool_calls ──────────────────────────────
-        // When the turn is interrupted mid-tool-execution (user cancel),
-        // the assistant message with tool_calls is already in history
-        // (pushed by ask()) but the tool results were never added.
-        // Inject synthetic error results so subsequent API calls don't
-        // fail with "tool_use ids found without tool_result blocks".
-        if (this._ai.conversationHistory) {
-          patchOrphanedToolCalls(this._ai.conversationHistory);
-        }
+      }
+
+      // ── Patch orphaned tool_calls ──────────────────────────────
+      // When the turn is interrupted mid-tool-execution (user cancel),
+      // the assistant message with tool_calls is already in history
+      // (pushed by ask()) but the tool results were never added.
+      // Inject synthetic error results so subsequent API calls don't
+      // fail with "tool_use ids found without tool_result blocks".
+      //
+      // Patch both the resolved `history` and the singleton to cover
+      // all code paths.
+      if (history && history.length > 0) {
+        patchOrphanedToolCalls(history);
+      }
+      if (this._ai?.conversationHistory && this._ai.conversationHistory !== history) {
+        patchOrphanedToolCalls(this._ai.conversationHistory);
       }
     }
   }

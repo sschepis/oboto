@@ -10,6 +10,7 @@
  * @module src/core/agentic/unified/unified-provider
  */
 
+import path from 'path';
 import { AgenticProvider } from '../base-provider.mjs';
 import { resolveUnifiedConfig } from './config.mjs';
 import { StreamController } from './stream-controller.mjs';
@@ -21,6 +22,7 @@ import { MemorySystem } from './memory-system.mjs';
 import { LearningEngine } from './learning-engine.mjs';
 import { AgentLoop } from './agent-loop.mjs';
 import { SurfacePipeline } from '../../../surfaces/surface-pipeline.mjs';
+import { SensitivityTagger, PolicyEngine, ViewCompiler, createAgentProfile } from '../../confidentiality/index.mjs';
 
 // ════════════════════════════════════════════════════════════════════════
 // UnifiedProvider Class
@@ -77,6 +79,16 @@ export class UnifiedProvider extends AgenticProvider {
     this._agentLoop = null;
     /** @private @type {SurfacePipeline|null} */
     this._surfacePipeline = null;
+
+    // ── Confidentiality subsystem (Phase 2) ──────────────────────
+    /** @private @type {SensitivityTagger|null} */
+    this._sensitivityTagger = null;
+    /** @private @type {PolicyEngine|null} */
+    this._policyEngine = null;
+    /** @private @type {ViewCompiler|null} */
+    this._viewCompiler = null;
+    /** @private @type {import('../../confidentiality/models.mjs').AgentProfile|null} */
+    this._agentProfile = null;
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -168,6 +180,10 @@ export class UnifiedProvider extends AgenticProvider {
 
     // ── 8. Create AgentLoop ────────────────────────────────────────
     // Same as above — the per-turn StreamController is set before run().
+    // The SupportLLM (if available from deps or facade) is passed through
+    // for pre-flight lint checks and other local inference tasks.
+    const supportLlm = deps.supportLlm || deps.facade?.supportLlm || null;
+
     this._agentLoop = new AgentLoop({
       config: this._config,
       streamController: null,
@@ -178,7 +194,53 @@ export class UnifiedProvider extends AgenticProvider {
       memorySystem: this._memorySystem,
       learningEngine: this._learningEngine,
       aiProvider: deps.aiProvider,
+      supportLlm,
     });
+
+    // ── 9. Create Confidentiality subsystems (Phase 2) ──────────────
+    const confCfg = this._config.confidentiality || {};
+    if (confCfg.enabled) {
+      try {
+        this._sensitivityTagger = new SensitivityTagger({
+          customPatterns: confCfg.tagger?.customPatterns,
+          supportLlm,
+        });
+
+        this._policyEngine = new PolicyEngine();
+        const policiesFile = confCfg.policiesFile || 'confidentiality-policies.json';
+        const workingDir = deps.workingDir || process.cwd();
+        await this._policyEngine.loadPolicies(
+          path.join(workingDir, policiesFile),
+        );
+
+        this._viewCompiler = new ViewCompiler(this._policyEngine, this._sensitivityTagger);
+
+        // Resolve the AgentProfile: prefer deps.agentProfile (from
+        // ConversationAgent), falling back to a default full-access profile
+        this._agentProfile = deps.agentProfile
+          ? createAgentProfile(deps.agentProfile)
+          : createAgentProfile({
+              clearanceLevel: confCfg.defaultClearance || 'restricted',
+            });
+
+        // Wire into AgentLoop
+        this._agentLoop.setConfidentialityContext({
+          viewCompiler: this._viewCompiler,
+          agentProfile: this._agentProfile,
+          sensitivityTagger: this._sensitivityTagger,
+        });
+
+        // Wire into SafetyLayer for confidentiality gate
+        if (this._safetyLayer) {
+          this._safetyLayer.setPolicyEngine(this._policyEngine);
+        }
+      } catch (err) {
+        // Non-fatal — confidentiality is opt-in; log and continue
+        console.warn('[UnifiedProvider] Confidentiality subsystem init failed:', err.message);
+        this._viewCompiler = null;
+        this._agentProfile = null;
+      }
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -259,6 +321,11 @@ export class UnifiedProvider extends AgenticProvider {
         enabled: true,
         stats: this._surfacePipeline.getStats?.() || {},
       } : { enabled: false },
+      confidentiality: {
+        enabled: !!(this._viewCompiler && this._agentProfile),
+        agentProfile: this._agentProfile || null,
+        policyCount: this._policyEngine?.getPolicies().length || 0,
+      },
     };
   }
 
@@ -298,6 +365,12 @@ export class UnifiedProvider extends AgenticProvider {
    */
   async dispose() {
     // Reverse order of creation
+    // Confidentiality subsystem (Phase 2)
+    this._viewCompiler = null;
+    this._policyEngine = null;
+    this._sensitivityTagger = null;
+    this._agentProfile = null;
+
     this._agentLoop = null;
     this._toolBridge = null;
     this._contextManager = null;

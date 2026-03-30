@@ -65,6 +65,9 @@ screenshots/
 # Runtime-generated data
 facts.json
 
+# User-specific confidentiality policies (copy from .example.json)
+confidentiality-policies.json
+
 # Electron build staging
 .backend-modules/
 .backend-staging/

@@ -101,6 +101,8 @@ const PLANNING_HINT = '\n\n[PLANNING HINT]: This is a complex multi-step request
  * @param {Array}   [options.history]         — conversation history messages
  * @param {boolean} [options.isSurfaceUpdate] — whether the input targets a surface
  * @param {Array<string>} [options.toolNames] — available tool names for listing
+ * @param {import('../../confidentiality/view-compiler.mjs').ViewCompiler} [options.viewCompiler] — ViewCompiler instance for confidentiality filtering
+ * @param {import('../../confidentiality/models.mjs').AgentProfile} [options.agentProfile] — AgentProfile for the calling agent
  * @returns {string} — assembled system prompt
  */
 export function buildSystemPrompt(options = {}) {
@@ -116,6 +118,8 @@ export function buildSystemPrompt(options = {}) {
     isSurfaceUpdate = false,
     toolNames,
     history,
+    viewCompiler,
+    agentProfile,
   } = options;
 
   const sections = [];
@@ -196,6 +200,27 @@ export function buildSystemPrompt(options = {}) {
     if (historyBlock) {
       sections.push(historyBlock);
     }
+  }
+
+  // ── View compilation (Phase 2: Confidentiality) ─────────────────
+  // When a viewCompiler and agentProfile are provided, each section
+  // is compiled through the confidentiality pipeline. This redacts,
+  // masks, or blocks sensitive content before the LLM sees it.
+  if (viewCompiler && agentProfile) {
+    const compiledSections = sections.map((section, idx) => {
+      // Skip tool usage instructions and planning hints — these are
+      // static system content, not user data, so they're never sensitive.
+      if (section === TOOL_USAGE_INSTRUCTIONS || section === SURFACE_UPDATE_INSTRUCTIONS) {
+        return section;
+      }
+      const result = viewCompiler.compileString(
+        section,
+        'system-prompt',
+        agentProfile,
+      );
+      return result.content;
+    });
+    return compiledSections.join('\n\n');
   }
 
   return sections.join('\n\n');

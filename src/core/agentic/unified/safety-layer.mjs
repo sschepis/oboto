@@ -58,6 +58,50 @@ export class SafetyLayer {
     this._doomPatterns = this._buildDoomPatterns(config);
   }
 
+  /**
+   * Set the PolicyEngine for confidentiality checks (Phase 2).
+   * @param {import('../../confidentiality/policy-engine.mjs').PolicyEngine|null} policyEngine
+   */
+  setPolicyEngine(policyEngine) {
+    this._policyEngine = policyEngine || null;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // Confidentiality Check (Phase 2)
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Check whether a set of artifacts pass confidentiality checks
+   * for a given agent profile.
+   *
+   * Returns violations for any artifact whose policy evaluation
+   * results in a 'block' action.
+   *
+   * @param {import('../../confidentiality/models.mjs').SourceArtifact[]} artifacts
+   * @param {import('../../confidentiality/models.mjs').AgentProfile} agentProfile
+   * @returns {{ safe: boolean, violations: Array<Object> }}
+   */
+  checkConfidentiality(artifacts, agentProfile) {
+    if (!this._policyEngine || !artifacts || !agentProfile) {
+      return { safe: true, violations: [] };
+    }
+
+    const violations = [];
+    for (const artifact of artifacts) {
+      const result = this._policyEngine.evaluate(artifact, agentProfile);
+      if (result.type === 'block') {
+        violations.push({
+          name: 'ConfidentialityViolation',
+          description: `Agent lacks clearance for ${artifact.sensitivity?.level || 'unknown'} content`,
+          response: 'block',
+          artifact: artifact.id,
+        });
+      }
+    }
+
+    return { safe: violations.length === 0, violations };
+  }
+
   // ════════════════════════════════════════════════════════════════════
   // Cognitive Safety
   // ════════════════════════════════════════════════════════════════════

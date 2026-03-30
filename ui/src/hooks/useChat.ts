@@ -444,7 +444,7 @@ export const useChat = () => {
       // Distinct from high-level 'tool-start'/'tool-end' emitted by ServerStatusAdapter
       // for facade operations (ai_man_chat, ai_man_execute, etc.)
       wsService.on('tool-call-start', (payload: unknown) => {
-         const p = payload as { toolName: string; args: unknown };
+         const p = payload as { toolCallId?: string; toolName: string; args: unknown };
          setIsWorking(true);
          setMessages(prev => {
              // Check if there's already a pending or streaming AI message to add to.
@@ -461,6 +461,7 @@ export const useChat = () => {
                  : 0;
 
              const newToolCall = {
+                 toolCallId: p.toolCallId,
                  toolName: p.toolName,
                  args: p.args,
                  result: undefined,
@@ -496,7 +497,7 @@ export const useChat = () => {
       }),
       
       wsService.on('tool-call-end', (payload: unknown) => {
-         const p = payload as { toolName: string; result: unknown };
+         const p = payload as { toolCallId?: string; toolName: string; result: unknown };
          setMessages(prev => {
              // Find the pending or streaming AI message containing this tool call
              const targetIdx = prev.findIndex(m =>
@@ -506,7 +507,10 @@ export const useChat = () => {
                  const targetMsg = prev[targetIdx];
                  if (targetMsg.toolCalls) {
                      const toolIdx = targetMsg.toolCalls.findIndex(
-                         tc => tc.toolName === p.toolName && tc.status === 'running'
+                         tc => (
+                           (p.toolCallId && tc.toolCallId === p.toolCallId)
+                           || (!p.toolCallId && tc.toolName === p.toolName && tc.status === 'running')
+                         )
                      );
                      if (toolIdx !== -1) {
                          const updatedToolCalls = [...targetMsg.toolCalls];

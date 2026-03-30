@@ -165,6 +165,7 @@ export interface Message {
 
   // For grouped tool calls attached to a text message
   toolCalls?: Array<{
+      toolCallId?: string;
       toolName: string;
       args: unknown;
       result?: unknown;

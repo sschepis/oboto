@@ -281,7 +281,7 @@ async function handleChat(data, ctx) {
         // Fire-and-forget: generate context-aware next-step suggestions
         // using the conversation exchange. Not awaited so it doesn't block
         // the status transition to 'idle'.
-        assistant.generateNextSteps(userInput, responseText).catch(() => {});
+        assistant.generateNextSteps(userInput, responseText, { forceLlm: false }).catch(() => {});
     } catch (err) {
         // Clear any pending batch timer on error
         if (batchTimer) clearTimeout(batchTimer);

@@ -53,6 +53,7 @@ import { handlers as cloudHandlers } from './ws-handlers/cloud-handler.mjs';
 import { handlers as pluginHandlers } from './ws-handlers/plugin-handler.mjs';
 import { handlers as personaHandlers } from './ws-handlers/persona-handler.mjs';
 import { handlers as agentHandlers } from './ws-handlers/agent-handler.mjs';
+import { handlers as supportLlmHandlers } from './ws-handlers/support-llm-handler.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +80,7 @@ function buildDispatcher() {
     dispatcher.registerAll(pluginHandlers);
     dispatcher.registerAll(personaHandlers);
     dispatcher.registerAll(agentHandlers);
+    dispatcher.registerAll(supportLlmHandlers);
     return dispatcher;
 }
 

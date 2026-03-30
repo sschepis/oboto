@@ -24,7 +24,20 @@ import {
     presentToolOutput,
     formatBytes,
     cleanupOverflowFiles,
+    setOverflowWorkspaceRoot,
 } from '../output-presenter.mjs';
+
+const TEST_WORKSPACE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-man-output-presenter-'));
+const OVERFLOW_DIR = path.join(TEST_WORKSPACE_ROOT, '.ai-man', 'overflow');
+
+beforeAll(() => {
+    setOverflowWorkspaceRoot(TEST_WORKSPACE_ROOT);
+});
+
+afterAll(() => {
+    setOverflowWorkspaceRoot(process.cwd());
+    fs.rmSync(TEST_WORKSPACE_ROOT, { recursive: true, force: true });
+});
 
 // ─── Mechanism A: Binary Guard ──────────────────────────────────────────
 
@@ -165,24 +178,24 @@ describe('formatBinaryError()', () => {
 // ─── Mechanism B: Overflow Mode ─────────────────────────────────────────
 
 describe('handleOverflow()', () => {
-    test('returns original output when under limits', () => {
+    test('returns original output when under limits', async () => {
         const output = 'line1\nline2\nline3';
-        const result = handleOverflow(output);
+        const result = await handleOverflow(output);
         expect(result.truncated).toBe(false);
         expect(result.output).toBe(output);
         expect(result.overflowPath).toBeNull();
     });
 
-    test('handles null/empty/non-string input', () => {
-        expect(handleOverflow(null)).toEqual({ truncated: false, output: '', overflowPath: null });
-        expect(handleOverflow('')).toEqual({ truncated: false, output: '', overflowPath: null });
-        expect(handleOverflow(undefined)).toEqual({ truncated: false, output: '', overflowPath: null });
+    test('handles null/empty/non-string input', async () => {
+        expect(await handleOverflow(null)).toEqual({ truncated: false, output: '', overflowPath: null });
+        expect(await handleOverflow('')).toEqual({ truncated: false, output: '', overflowPath: null });
+        expect(await handleOverflow(undefined)).toEqual({ truncated: false, output: '', overflowPath: null });
     });
 
-    test('truncates output exceeding MAX_LINES (200)', () => {
+    test('truncates output exceeding MAX_LINES (200)', async () => {
         const lines = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`);
         const output = lines.join('\n');
-        const result = handleOverflow(output);
+        const result = await handleOverflow(output);
 
         expect(result.truncated).toBe(true);
         expect(result.overflowPath).toBeTruthy();
@@ -204,12 +217,12 @@ describe('handleOverflow()', () => {
         }
     });
 
-    test('truncates output exceeding MAX_BYTES (50KB)', () => {
+    test('truncates output exceeding MAX_BYTES (50KB)', async () => {
         // Create output under 200 lines but over 50KB
         const bigLine = 'x'.repeat(1024); // 1KB per line
         const lines = Array.from({ length: 60 }, () => bigLine);
         const output = lines.join('\n'); // ~60KB, 60 lines
-        const result = handleOverflow(output);
+        const result = await handleOverflow(output);
 
         expect(result.truncated).toBe(true);
         expect(result.overflowPath).toBeTruthy();
@@ -220,10 +233,10 @@ describe('handleOverflow()', () => {
         }
     });
 
-    test('saves full output to overflow file', () => {
+    test('saves full output to overflow file', async () => {
         const lines = Array.from({ length: 250 }, (_, i) => `data-${i}`);
         const output = lines.join('\n');
-        const result = handleOverflow(output);
+        const result = await handleOverflow(output);
 
         expect(result.overflowPath).toBeTruthy();
         expect(fs.existsSync(result.overflowPath)).toBe(true);
@@ -332,22 +345,22 @@ describe('attachStderr()', () => {
 // ─── Full Pipeline: presentToolOutput ───────────────────────────────────
 
 describe('presentToolOutput()', () => {
-    test('passes through with skipPresentation=true', () => {
+    test('passes through with skipPresentation=true', async () => {
         const raw = '{"structured": "json"}';
-        const result = presentToolOutput(raw, { skipPresentation: true });
+        const result = await presentToolOutput(raw, { skipPresentation: true });
         expect(result).toBe(raw);
     });
 
-    test('appends metadata footer to normal output', () => {
-        const result = presentToolOutput('hello world', {
+    test('appends metadata footer to normal output', async () => {
+        const result = await presentToolOutput('hello world', {
             toolName: 'read_file',
             durationMs: 25,
         });
         expect(result).toBe('hello world\n[ok | 25ms]');
     });
 
-    test('appends exit code footer for shell tools', () => {
-        const result = presentToolOutput('file list', {
+    test('appends exit code footer for shell tools', async () => {
+        const result = await presentToolOutput('file list', {
             toolName: 'run_command',
             durationMs: 100,
             exitCode: 0,
@@ -355,9 +368,9 @@ describe('presentToolOutput()', () => {
         expect(result).toBe('file list\n[exit:0 | 100ms]');
     });
 
-    test('rejects binary output with navigational error', () => {
+    test('rejects binary output with navigational error', async () => {
         const binary = '\x89PNG\r\n\x1a\n' + '\0'.repeat(200);
-        const result = presentToolOutput(binary, {
+        const result = await presentToolOutput(binary, {
             toolName: 'read_file',
             durationMs: 15,
             filePath: 'image.png',
@@ -367,8 +380,8 @@ describe('presentToolOutput()', () => {
         expect(result).toContain('[exit:1 | 15ms]');
     });
 
-    test('attaches stderr before overflow processing', () => {
-        const result = presentToolOutput('partial output', {
+    test('attaches stderr before overflow processing', async () => {
+        const result = await presentToolOutput('partial output', {
             toolName: 'run_command',
             durationMs: 500,
             exitCode: 1,
@@ -378,10 +391,10 @@ describe('presentToolOutput()', () => {
         expect(result).toContain('[exit:1 | 500ms]');
     });
 
-    test('truncates large output and adds overflow hints', () => {
+    test('truncates large output and adds overflow hints', async () => {
         const lines = Array.from({ length: 300 }, (_, i) => `log line ${i}`);
         const output = lines.join('\n');
-        const result = presentToolOutput(output, {
+        const result = await presentToolOutput(output, {
             toolName: 'run_command',
             durationMs: 2000,
             exitCode: 0,
@@ -399,35 +412,35 @@ describe('presentToolOutput()', () => {
         }
     });
 
-    test('handles null/empty raw output', () => {
-        const result = presentToolOutput(null, {
+    test('handles null/empty raw output', async () => {
+        const result = await presentToolOutput(null, {
             toolName: 'test',
             durationMs: 5,
         });
         expect(result).toBe('\n[ok | 5ms]');
     });
 
-    test('handles empty string output', () => {
-        const result = presentToolOutput('', {
+    test('handles empty string output', async () => {
+        const result = await presentToolOutput('', {
             toolName: 'test',
             durationMs: 5,
         });
         expect(result).toBe('\n[ok | 5ms]');
     });
 
-    test('binary guard assigns exitCode=1 when no exitCode provided', () => {
+    test('binary guard assigns exitCode=1 when no exitCode provided', async () => {
         const binary = '\x89PNG\r\n\x1a\n' + '\0'.repeat(100);
-        const result = presentToolOutput(binary, {
+        const result = await presentToolOutput(binary, {
             toolName: 'cat',
             durationMs: 10,
         });
         expect(result).toContain('[exit:1 | 10ms]');
     });
 
-    test('full pipeline: stderr + overflow + footer all work together', () => {
+    test('full pipeline: stderr + overflow + footer all work together', async () => {
         const lines = Array.from({ length: 250 }, (_, i) => `data ${i}`);
         const output = lines.join('\n');
-        const result = presentToolOutput(output, {
+        const result = await presentToolOutput(output, {
             toolName: 'run_command',
             durationMs: 3500,
             exitCode: 1,
@@ -472,8 +485,6 @@ describe('formatBytes()', () => {
 });
 
 describe('cleanupOverflowFiles()', () => {
-    const OVERFLOW_DIR = path.join(os.tmpdir(), 'ai-man-overflow');
-
     test('does not throw when overflow directory does not exist', () => {
         // Temporarily rename if exists
         const backupDir = OVERFLOW_DIR + '-test-backup';

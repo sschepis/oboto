@@ -19,6 +19,7 @@ import type { AgenticProviderInfo } from '../../hooks/useChat';
 import CloudSyncIndicator from '../features/CloudSyncIndicator';
 import CloudPresenceBar from '../features/CloudPresenceBar';
 import PersonaSelector from '../features/PersonaSelector';
+import SupportLlmStatus from './SupportLlmStatus';
 
 interface StatusBarProps {
   isConnected: boolean;
@@ -268,6 +269,9 @@ const StatusBar: React.FC<StatusBarProps> = ({
         {/* Cloud presence + sync indicator */}
         <CloudPresenceBar />
         <CloudSyncIndicator />
+
+        {/* Local AI (Support LLM) status */}
+        <SupportLlmStatus />
 
         {/* Agentic provider switcher */}
         {allowAgentProviderSelection && onSwitchAgenticProvider && agenticProviders.length > 0 && (

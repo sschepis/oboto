@@ -173,6 +173,31 @@ export class ToolExecutorBridge {
     return tools;
   }
 
+  /**
+   * Return a map of raw tool handlers keyed by tool name.
+   * Used by pre-routing logic that needs direct tool invocation before the
+   * main agent loop has asked the model to plan a tool call.
+   *
+   * @returns {Map<string, Function>}
+   */
+  getToolMap() {
+    if (this._engine?.tools instanceof Map) {
+      return this._engine.tools;
+    }
+
+    const toolMap = new Map();
+    for (const def of this.getAvailableTools()) {
+      const fn = def.function || def;
+      const name = fn?.name;
+      if (!name || toolMap.has(name)) continue;
+      const handler = this._toolExecutor?.getToolFunction?.(name);
+      if (handler) {
+        toolMap.set(name, handler);
+      }
+    }
+    return toolMap;
+  }
+
   // ════════════════════════════════════════════════════════════════════
   // lmscript Format Conversion
   // ════════════════════════════════════════════════════════════════════

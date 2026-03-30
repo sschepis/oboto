@@ -115,6 +115,10 @@ export class ConversationAgentManager {
    * @param {string} [opts.persona] — persona/system prompt overlay
    * @param {Object} [opts.toolRestrictions] — tool access restrictions
    * @param {Object} [opts.memorySystem] — shared MemorySystem for memory bridge
+   * @param {string} [opts.clearanceLevel] — max sensitivity level ('public'|'internal'|'confidential'|'restricted')
+   * @param {string[]} [opts.allowedCategories] — categories the agent is cleared for
+   * @param {string[]} [opts.deniedCategories] — explicit deny-list (takes precedence)
+   * @param {string} [opts.trustDomain] — namespace for inter-agent trust ('workspace'|'external'|'sandbox')
    * @returns {Promise<{ agentId: string, agentName: string, status: string, parentConversation: string }>}
    */
   async createAgent({
@@ -126,6 +130,10 @@ export class ConversationAgentManager {
     persona,
     toolRestrictions,
     memorySystem,
+    clearanceLevel,
+    allowedCategories,
+    deniedCategories,
+    trustDomain,
   }) {
     // Enforce concurrency limit
     const activeCount = [...this._agents.values()].filter(
@@ -167,11 +175,17 @@ export class ConversationAgentManager {
       localInvoluntary
     );
 
-    // Build agent config
+    // Build agent config (including confidentiality profile)
     const agentConfig = {
       persona: persona || null,
       toolRestrictions: toolRestrictions || null,
       mode,
+      profile: {
+        clearanceLevel: clearanceLevel || 'restricted',
+        allowedCategories: allowedCategories || ['*'],
+        deniedCategories: deniedCategories || [],
+        trustDomain: trustDomain || 'workspace',
+      },
     };
 
     // Create the agent

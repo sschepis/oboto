@@ -14,6 +14,7 @@
 
 import { MemoryBridge } from './memory-bridge.mjs';
 import { AssociativeStringStore } from './memory.mjs';
+import { createAgentProfile } from '../confidentiality/models.mjs';
 
 /**
  * Promoted conversation agent.
@@ -51,6 +52,14 @@ export class ConversationAgent {
 
     /** @type {Object} */
     this.agentConfig = agentConfig;
+
+    /**
+     * Confidentiality profile for this agent.
+     * Defaults to full access (clearanceLevel: 'restricted', allowedCategories: ['*'])
+     * for backward compatibility with agents created before the confidentiality system.
+     * @type {import('../confidentiality/models.mjs').AgentProfile}
+     */
+    this.agentProfile = createAgentProfile(agentConfig?.profile);
 
     /** @type {Object} Shared dependencies */
     this._deps = deps;
@@ -98,6 +107,7 @@ export class ConversationAgent {
     const agentDeps = {
       ...this._deps,
       historyManager: this.conversationContext.historyManager,
+      agentProfile: this.agentProfile,  // Confidentiality profile for view compilation
       // Agent events are namespaced via the agent ID
     };
 
@@ -213,6 +223,8 @@ export class ConversationAgent {
       persona: this.agentConfig?.persona || null,
       visibility: this.visibility,
       memoryDiagnostics: this.memoryBridge?.getDiagnostics() ?? null,
+      clearanceLevel: this.agentProfile?.clearanceLevel || 'restricted',
+      trustDomain: this.agentProfile?.trustDomain || 'workspace',
     };
   }
 
@@ -255,12 +267,18 @@ export class ConversationAgent {
    * @returns {Object}
    */
   serialize() {
+    // Ensure the agentConfig includes the profile for persistence
+    const config = { ...this.agentConfig };
+    if (this.agentProfile) {
+      config.profile = { ...this.agentProfile };
+    }
+
     return {
       id: this.id,
       name: this.name,
       status: this.status === 'running' ? 'idle' : this.status, // Running agents restart as idle
       parentConversation: this.parentConversation,
-      agentConfig: this.agentConfig,
+      agentConfig: config,
       visibility: this.visibility,
       createdAt: this.createdAt,
       lastActivity: this.lastActivity,
