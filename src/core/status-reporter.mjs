@@ -107,9 +107,8 @@ export function emitStatus(message) {
 
 /**
  * Emit a high-visibility commentary message that narrates what the agent
- * is doing.  Broadcasts both as a status update (ephemeral ThinkingIndicator)
- * AND as an 'agentic' log entry (persistent in the message stream) so the
- * user always sees a clear verbal callout of each processing phase.
+ * is doing.  Logged as an 'agentic' entry (persistent in the message stream)
+ * so the user always sees a clear verbal callout of each processing phase.
  *
  * Use this instead of emitStatus() when the message should survive being
  * overwritten by the next status update — e.g. tool round summaries,
@@ -118,7 +117,6 @@ export function emitStatus(message) {
  * @param {string} text — The narrative commentary
  */
 export function emitCommentary(text) {
-    emitStatus(text);
     consoleStyler.log('agentic', text);
 }
 
@@ -228,12 +226,16 @@ export function buildToolRoundNarrative(tools) {
         const name = tool.name || 'unknown';
         const content = typeof tool.content === 'string' ? tool.content.trim() : '';
         const result = tool.result;
-        const isError = /^error:/i.test(content)
+        const isError = /^error:|^\[error\]/i.test(content)
             || result?.success === false
             || result?.error;
 
         if (isError) {
-            parts.push(`${_humanize(name)} encountered an error`);
+            const errorDetail = content || result?.error || '';
+            const truncated = errorDetail.length > 200 ? errorDetail.substring(0, 200) + '…' : errorDetail;
+            parts.push(truncated
+                ? `${_humanize(name)} encountered an error: ${truncated}`
+                : `${_humanize(name)} encountered an error`);
         } else if (name === 'read_file' || name === 'read_many_files') {
             parts.push('read file data');
         } else if (name === 'write_file' || name === 'write_to_file' || name === 'write_many_files') {

@@ -227,11 +227,11 @@ export function createFileCommands(fileTools) {
 
         grep: {
             help: 'Filter lines matching a pattern. Works on file or piped input.',
-            usage: 'grep <pattern> [file] [-i] [-v] [-c]',
+            usage: 'grep <pattern> [file] [-i] [-v] [-c] [-n]',
             async execute(args, stdin) {
                 if (args.length === 0) {
                     return {
-                        output: 'grep: usage: grep <pattern> [file] [-i] [-v] [-c]\n  Filter lines matching a pattern.\n  -i  Case-insensitive\n  -v  Invert match (show non-matching lines)\n  -c  Count matches only\n  Works on piped input or reads from file.',
+                        output: 'grep: usage: grep <pattern> [file] [-i] [-v] [-c] [-n]\n  Filter lines matching a pattern.\n  -i  Case-insensitive\n  -v  Invert match (show non-matching lines)\n  -c  Count matches only\n  -n  Show line numbers\n  Works on piped input or reads from file.',
                         exitCode: 1,
                     };
                 }
@@ -240,6 +240,7 @@ export function createFileCommands(fileTools) {
                     ignoreCase: args.includes('-i'),
                     invert: args.includes('-v'),
                     count: args.includes('-c'),
+                    lineNumbers: args.includes('-n'),
                 };
                 const positionalArgs = args.filter(a => !a.startsWith('-'));
                 const pattern = positionalArgs[0];
@@ -266,20 +267,24 @@ export function createFileCommands(fileTools) {
                 try {
                     const regex = new RegExp(pattern, flags.ignoreCase ? 'i' : '');
                     const lines = text.split('\n');
-                    const matched = lines.filter(line => {
+                    const results = [];
+                    lines.forEach((line, index) => {
                         const matches = regex.test(line);
-                        return flags.invert ? !matches : matches;
+                        const include = flags.invert ? !matches : matches;
+                        if (include) {
+                            results.push(flags.lineNumbers ? `${index + 1}:${line}` : line);
+                        }
                     });
 
                     if (flags.count) {
-                        return { output: String(matched.length), exitCode: matched.length > 0 ? 0 : 1 };
+                        return { output: String(results.length), exitCode: results.length > 0 ? 0 : 1 };
                     }
 
-                    if (matched.length === 0) {
+                    if (results.length === 0) {
                         return { output: '', exitCode: 1 }; // grep returns 1 when no match
                     }
 
-                    return { output: matched.join('\n'), exitCode: 0 };
+                    return { output: results.join('\n'), exitCode: 0 };
                 } catch (e) {
                     return {
                         output: `[error] grep: invalid pattern "${pattern}": ${e.message}`,

@@ -6,6 +6,19 @@
  */
 
 /**
+ * Escape special replacement patterns in a string passed to String.replace().
+ * Without this, characters like $ are interpreted as special patterns:
+ *   $& → matched substring, $` → portion before match,
+ *   $' → portion after match, $1…$9 → capture groups.
+ * Escaping each $ as $$ neutralises these patterns.
+ * @param {string} str - The replacement string to escape
+ * @returns {string} Escaped replacement string safe for String.replace()
+ */
+function escapeReplacement(str) {
+    return str.replace(/\$/g, '$$$$');
+}
+
+/**
  * Apply a search/replace patch to content
  * @param {string} content - Original file content
  * @param {Object} edit - Edit object with searchBlock and replaceBlock
@@ -53,7 +66,9 @@ function applyPatch(content, edit) {
     }
     
     // Apply the replacement
-    const result = normalizedContent.replace(normalizedSearch, normalizedReplace);
+    // escapeReplacement() prevents $ in the replacement from being interpreted
+    // as special patterns ($&, $`, $', $1…$9) by String.replace()
+    const result = normalizedContent.replace(normalizedSearch, escapeReplacement(normalizedReplace));
     
     return result;
 }

@@ -62,6 +62,10 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
   const mountedRef = useRef(false);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectWsRef = useRef<() => void>(() => {});
+  /** True when the close was triggered by user action or component unmount (not an unexpected disconnect) */
+  const intentionalCloseRef = useRef(false);
+  /** Tracks current visibility so the onclose handler can check it */
+  const isVisibleRef = useRef(isVisible);
 
   const fit = useCallback(() => {
     if (fitAddonRef.current && xtermRef.current) {
@@ -87,6 +91,7 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
   const connectWs = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState <= 1) return; // already open/connecting
 
+    intentionalCloseRef.current = false;
     const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
 
@@ -126,12 +131,14 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
 
     ws.onclose = () => {
       setIsConnected(false);
-      // Auto-reconnect after 2s if still mounted
-      if (mountedRef.current) {
+      // Only auto-reconnect on unexpected disconnects while terminal is still visible
+      if (mountedRef.current && !intentionalCloseRef.current && isVisibleRef.current) {
         reconnectTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) connectWsRef.current();
+          if (mountedRef.current && isVisibleRef.current) connectWsRef.current();
         }, 2000);
       }
+      // Reset the flag after handling
+      intentionalCloseRef.current = false;
     };
 
     ws.onerror = () => {
@@ -188,6 +195,7 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
 
     return () => {
       mountedRef.current = false;
+      intentionalCloseRef.current = true;
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       wsRef.current?.close();
       term.dispose();
@@ -196,7 +204,12 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
     };
   }, []);
 
-  // Mount xterm into the DOM container when visible
+  // Keep isVisibleRef in sync for use in onclose handler
+  useEffect(() => {
+    isVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  // Mount xterm into the DOM container when visible; close WS when hidden
   useEffect(() => {
     if (isVisible && terminalRef.current && xtermRef.current) {
       const container = terminalRef.current;
@@ -213,6 +226,17 @@ export function useGuakeTerminal({ isVisible }: UseGuakeTerminalOptions): UseGua
       });
       // Connect WebSocket if not already
       connectWs();
+    } else if (!isVisible) {
+      // Terminal hidden — intentionally close the WebSocket to avoid dangling PTY sessions
+      if (wsRef.current && wsRef.current.readyState <= 1) {
+        intentionalCloseRef.current = true;
+        wsRef.current.close();
+      }
+      // Cancel any pending reconnect
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     }
   }, [isVisible, fit, connectWs]);
 

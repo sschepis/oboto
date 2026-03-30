@@ -56,7 +56,7 @@ function setupTerminalWebSocket(terminalWss, assistant) {
 
         // Try node-pty first
         if (pty) {
-            consoleStyler.log('system', `Terminal PTY session started (shell: ${defaultShell}, cwd: ${cwd})`);
+            consoleStyler.log('debug', `Terminal PTY session started (shell: ${defaultShell}, cwd: ${cwd})`);
             
             let ptyProcess;
             try {

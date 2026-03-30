@@ -148,7 +148,7 @@ export class ShellTools {
             }
 
             // Overflow mode — truncate large output with exploration hints
-            const overflow = handleOverflow(output);
+            const overflow = await handleOverflow(output);
             output = overflow.output;
 
             // Attach stderr if present (warnings on success, errors on failure)
