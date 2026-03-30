@@ -50,8 +50,10 @@ import { useUIState } from './hooks/useUIState';
 import { useMessageActions } from './hooks/useMessageActions';
 import { useSendHandler } from './hooks/useSendHandler';
 import { usePlugins } from './hooks/usePlugins';
+import { useAgents } from './hooks/useAgents';
 import PluginWelcomePage from './components/features/PluginWelcomePage';
 import PluginHost from './components/features/PluginHost';
+import AgentDashboard from './components/features/AgentDashboard';
 import { globalActions, inlineCommands } from './constants/commands';
 
 function App() {
@@ -95,6 +97,9 @@ function App() {
     personas, activePersonaId,
     switchPersona, createPersona,
   } = usePersona();
+
+  // Agent Hook — conversation agents
+  const agentState = useAgents();
 
   // Help System Hooks
   const help = useHelp();
@@ -493,6 +498,10 @@ function App() {
           onEnablePlugin={enablePlugin}
           onDisablePlugin={disablePlugin}
           onPluginClick={tabManager.handlePluginClick}
+          agents={agentState.agents}
+          agentsLoading={agentState.loading}
+          onAgentClick={tabManager.handleAgentClick}
+          onRefreshAgents={agentState.refreshAgents}
         />}
 
         {/* Resizer Handle (hidden when sidebar is hidden) */}
@@ -661,6 +670,27 @@ function App() {
               );
             })}
 
+            {/* Agent Dashboard tabs */}
+            {tabManager.tabs.filter(t => t.type === 'agent').map(tab => (
+              <div
+                key={tab.id}
+                className={`flex-1 flex flex-col w-full min-w-0 min-h-0 ${tabManager.activeTabId === tab.id ? '' : 'hidden'}`}
+              >
+                <AgentDashboard
+                  agentId={tab.agentId!}
+                  agent={agentState.agents.find(a => a.id === tab.agentId) || null}
+                  history={agentState.agentHistories[tab.agentId!] || []}
+                  onSendMessage={agentState.sendMessage}
+                  onPause={agentState.pauseAgent}
+                  onResume={agentState.resumeAgent}
+                  onTerminate={agentState.terminateAgent}
+                  onClearHistory={agentState.clearAgentHistory}
+                  onPromoteToGlobal={agentState.promoteToGlobal}
+                  onGetHistory={agentState.getAgentHistory}
+                />
+              </div>
+            ))}
+
               {ui.showInputArea && <InputArea
                 isAgentWorking={isWorking}
                 onSend={handleSend}
@@ -675,6 +705,8 @@ function App() {
                 activityLog={activityLog}
                 queueCount={queueCount}
                 disabled={!hasEnabledProvider}
+                agents={agentState.agents}
+                onSendAgentMessage={agentState.sendMessage}
               />}
             </div>
 

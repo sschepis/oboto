@@ -3,13 +3,15 @@ import SurfaceContextMenu, { type SurfaceContextMenuState } from '../features/Su
 import PluginHost from '../features/PluginHost';
 import SkillsSidebarPanel from '../features/SkillsSidebarPanel';
 import PluginsSidebarPanel from '../features/PluginsSidebarPanel';
+import AgentsSidebarPanel from '../features/AgentsSidebarPanel';
 import SidebarToolbar, { type SidebarPanelDescriptor } from './SidebarToolbar';
 import type { FileNode } from '../../hooks/useChat';
 import type { SurfaceMeta } from '../../hooks/useSurface';
 import type { PluginSidebarSection, PluginInfo } from '../../hooks/usePlugins';
 import type { SkillInfo } from '../../hooks/useSkills';
+import type { AgentInfo } from '../../hooks/useAgents';
 import type { ProjectStatusData } from '../features/ProjectStatus';
-import { Activity, ChevronRight, FolderTree, GripVertical, LayoutDashboard, Pin, Puzzle, Sparkles } from 'lucide-react';
+import { Activity, Bot, ChevronRight, FolderTree, GripVertical, LayoutDashboard, Pin, Puzzle, Sparkles } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import ProjectStatus from '../features/ProjectStatus';
 
@@ -34,6 +36,11 @@ interface SidebarProps {
   onEnablePlugin?: (name: string) => void;
   onDisablePlugin?: (name: string) => void;
   onPluginClick?: (name: string) => void;
+  // Agents panel data
+  agents?: AgentInfo[];
+  agentsLoading?: boolean;
+  onAgentClick?: (agentId: string, agentName?: string) => void;
+  onRefreshAgents?: () => void;
 }
 
 const COLLAPSE_KEY = 'ai-man:sidebar-collapse-state';
@@ -41,9 +48,9 @@ const PANEL_ORDER_KEY = 'ai-man:sidebar-panel-order';
 const PANEL_VISIBILITY_KEY = 'ai-man:sidebar-panel-visibility';
 const PANEL_EXPLICITLY_TOGGLED_KEY = 'ai-man:sidebar-explicitly-toggled';
 
-type BuiltinPanelId = 'projectStatus' | 'surfaces' | 'files' | 'skills' | 'plugins';
+type BuiltinPanelId = 'projectStatus' | 'surfaces' | 'files' | 'skills' | 'plugins' | 'agents';
 type PanelId = string; // Supports both builtin IDs and plugin panel IDs
-const DEFAULT_BUILTIN_PANELS: BuiltinPanelId[] = ['projectStatus', 'surfaces', 'files', 'skills', 'plugins'];
+const DEFAULT_BUILTIN_PANELS: BuiltinPanelId[] = ['projectStatus', 'agents', 'surfaces', 'files', 'skills', 'plugins'];
 
 interface CollapseState {
   [key: string]: boolean;
@@ -136,6 +143,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   onEnablePlugin,
   onDisablePlugin,
   onPluginClick,
+  agents = [],
+  agentsLoading = false,
+  onAgentClick,
+  onRefreshAgents,
 }) => {
   const [showAllSurfaces, setShowAllSurfaces] = useState(true);
   const [contextMenu, setContextMenu] = useState<SurfaceContextMenuState | null>(null);
@@ -239,6 +250,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'projectStatus', label: 'Project Status', icon: <Activity size={11} />, source: 'builtin' },
       { id: 'surfaces', label: 'Surfaces', icon: <LayoutDashboard size={11} />, source: 'builtin' },
       { id: 'files', label: 'Explorer', icon: <FolderTree size={11} />, source: 'builtin' },
+      { id: 'agents', label: 'Agents', icon: <Bot size={11} />, source: 'builtin' },
       { id: 'skills', label: 'Skills', icon: <Sparkles size={11} />, source: 'builtin' },
       { id: 'plugins', label: 'Plug-ins', icon: <Puzzle size={11} />, source: 'builtin' },
     ];
@@ -646,6 +658,42 @@ const Sidebar: React.FC<SidebarProps> = ({
                   onEnable={onEnablePlugin || (() => {})}
                   onDisable={onDisablePlugin || (() => {})}
                   onPluginClick={onPluginClick}
+                />
+              </div>
+            </CollapsibleContent>
+          </div>
+        );
+
+      case 'agents':
+        return (
+          <div key={panelId} className={`flex flex-col ${!isLast ? 'border-b border-zinc-800/30' : 'flex-1 min-h-0'}`}>
+            <SectionHeader
+              icon={<Bot size={13} className="text-cyan-400" />}
+              label="Agents"
+              isCollapsed={!!collapseState.agents}
+              onClick={() => toggleSection('agents')}
+              badge={
+                agents.length > 0 ? (
+                  <span className="text-[9px] font-mono text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded-md">
+                    {agents.filter(a => a.status !== 'terminated').length}
+                  </span>
+                ) : undefined
+              }
+              isDragging={draggedPanel === panelId}
+              isDragOver={dragOverPanel === panelId}
+              onDragStart={handleDragStart(panelId)}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver(panelId)}
+              onDragLeave={handleDragLeave(panelId)}
+              onDrop={handleDrop(panelId)}
+            />
+            <CollapsibleContent isOpen={!collapseState.agents}>
+              <div className="px-4 pb-4">
+                <AgentsSidebarPanel
+                  agents={agents}
+                  loading={agentsLoading}
+                  onAgentClick={onAgentClick || (() => {})}
+                  onRefresh={onRefreshAgents || (() => {})}
                 />
               </div>
             </CollapsibleContent>

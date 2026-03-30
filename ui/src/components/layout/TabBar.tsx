@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle, Play, BookOpen } from 'lucide-react';
+import { X, MessageSquare, FileText, Eye, LayoutDashboard, Plus, MessageSquarePlus, FilePlus2, PanelTop, Pencil, Trash2, Eraser, Image as ImageIcon, Puzzle, Play, BookOpen, Bot } from 'lucide-react';
 import type { ConversationInfo } from '../../hooks/useChat';
 
 export interface EditorTab {
   id: string;        // 'chat' or file path
   label: string;     // display name
-  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf' | 'plugin' | 'media' | 'markdown';
+  type: 'chat' | 'file' | 'html-preview' | 'surface' | 'image' | 'pdf' | 'plugin' | 'media' | 'markdown' | 'agent';
   filePath?: string;
   surfaceId?: string;
   isDirty?: boolean;
   conversationName?: string; // conversation name for chat tabs
   pluginName?: string; // plugin name for plugin tabs
   pluginComponent?: string; // component file for plugin tabs
+  agentId?: string; // agent ID for agent tabs
   /** Parameters passed when this surface was opened via surfaceApi.openSurface() */
   activationParams?: Record<string, unknown>;
 }
@@ -470,6 +471,8 @@ const TabBar: React.FC<TabBarProps> = ({
                 <Puzzle size={12} className={`${isActive ? 'text-teal-400' : 'text-zinc-600'} transition-colors duration-200`} />
               ) : tab.type === 'markdown' ? (
                 <BookOpen size={12} className={`${isActive ? 'text-sky-400' : 'text-zinc-600'} transition-colors duration-200`} />
+              ) : tab.type === 'agent' ? (
+                <Bot size={12} className={`${isActive ? 'text-cyan-400' : 'text-zinc-600'} transition-colors duration-200`} />
               ) : (
                 <FileText size={12} className={`${iconColor} transition-colors duration-200`} />
               )}

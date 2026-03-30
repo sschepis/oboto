@@ -231,3 +231,22 @@ export interface ConfirmationRequest {
     message: string;
     pathPrefix?: string;
 }
+
+/** Agent visibility scope */
+export type AgentVisibility = 'workspace' | 'global';
+
+/** Agent lifecycle status */
+export type AgentStatus = 'created' | 'running' | 'paused' | 'idle' | 'terminated';
+
+/** Promoted conversation agent — canonical UI type */
+export interface Agent {
+    id: string;
+    name: string;
+    status: AgentStatus;
+    parentConversation: string;
+    messageCount: number;
+    createdAt: string;
+    lastActivity: string | null;
+    persona?: string;
+    visibility: AgentVisibility;
+}

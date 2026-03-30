@@ -28,8 +28,9 @@ export class ConversationAgent {
    * @param {string} opts.parentConversation — name of the originating conversation
    * @param {Object} [opts.agentConfig] — persona, system prompt overlay, tool restrictions
    * @param {Object} [opts.deps] — shared dependencies (aiProvider, toolExecutor, eventBus, etc.)
+   * @param {'workspace'|'global'} [opts.visibility='workspace'] — visibility scope
    */
-  constructor({ id, name, conversationContext, memoryBridge, parentConversation, agentConfig = {}, deps = {} }) {
+  constructor({ id, name, conversationContext, memoryBridge, parentConversation, agentConfig = {}, deps = {}, visibility = 'workspace' }) {
     /** @type {string} */
     this.id = id;
 
@@ -62,6 +63,9 @@ export class ConversationAgent {
 
     /** @type {Array<Function>} Report callbacks */
     this._reportCallbacks = [];
+
+    /** @type {'workspace'|'global'} Visibility scope */
+    this.visibility = visibility;
 
     /** @type {string} ISO timestamp of creation */
     this.createdAt = new Date().toISOString();
@@ -206,6 +210,8 @@ export class ConversationAgent {
       messageCount: this.messageCount,
       createdAt: this.createdAt,
       lastActivity: this.lastActivity,
+      persona: this.agentConfig?.persona || null,
+      visibility: this.visibility,
       memoryDiagnostics: this.memoryBridge?.getDiagnostics() ?? null,
     };
   }
@@ -217,6 +223,17 @@ export class ConversationAgent {
    */
   getHistory() {
     return this.conversationContext.historyManager.getHistory();
+  }
+
+  /**
+   * Clear the agent's conversation history (historyManager + aiProviderHistory).
+   * Preserves agent identity, memory bridge, experiences, and config.
+   */
+  clearHistory() {
+    if (this.conversationContext.historyManager) {
+      this.conversationContext.historyManager.clear();
+    }
+    this.conversationContext.aiProviderHistory = [];
   }
 
   /**
@@ -244,6 +261,7 @@ export class ConversationAgent {
       status: this.status === 'running' ? 'idle' : this.status, // Running agents restart as idle
       parentConversation: this.parentConversation,
       agentConfig: this.agentConfig,
+      visibility: this.visibility,
       createdAt: this.createdAt,
       lastActivity: this.lastActivity,
       messageCount: this.messageCount,

@@ -78,6 +78,35 @@ async function handleChat(data, ctx) {
         return;
     }
     
+    // ── @mention routing: forward to mentioned agents ──
+    const mentionedAgents = (typeof data.payload === 'object' && Array.isArray(data.payload?.mentionedAgents))
+        ? data.payload.mentionedAgents
+        : [];
+    if (mentionedAgents.length > 0 && assistant?.sendAgentMessage) {
+        for (const agentId of mentionedAgents) {
+            try {
+                // Fire and forget — the agent-report event will deliver the response
+                assistant.sendAgentMessage(agentId, userInput).then(response => {
+                    if (ws.readyState === 1) {
+                        wsSend(ws, 'agent-report', {
+                            agentId,
+                            report: response,
+                            timestamp: new Date().toISOString(),
+                        });
+                    }
+                }).catch(err => {
+                    if (ws.readyState === 1) {
+                        wsSend(ws, 'error', { message: `Agent ${agentId} failed: ${err.message}` });
+                    }
+                });
+                consoleStyler.log('system', `📬 Forwarded message to mentioned agent "${agentId}"`);
+            } catch (err) {
+                consoleStyler.log('error', `Failed to forward to agent "${agentId}": ${err.message}`);
+            }
+        }
+        // Don't return — let the main chat still process normally
+    }
+
     // ── Chime-in: If the target conversation is busy, queue the message ──
     const isBusy = convCtx ? convCtx.isBusy : (activeRef.controller && assistant.isBusy());
     if (isBusy) {

@@ -3,9 +3,11 @@ import { Send, Paperclip, Image as ImageIcon, X, FileText, Zap, Activity, Trash2
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import VoiceWaveform from '../features/VoiceWaveform';
 import AgentActivityPanel from './AgentActivityPanel';
+import MentionPopup from './MentionPopup';
 import { wsService } from '../../services/wsService';
 import type { Command } from '../../types';
 import type { ActivityLogEntry } from '../../hooks/useChat';
+import type { AgentInfo } from '../../hooks/useAgents';
 
 interface Attachment {
   id: string;
@@ -36,6 +38,10 @@ interface InputAreaProps {
   queueCount?: number;
   /** When true, the entire input area is disabled (e.g. no AI providers enabled) */
   disabled?: boolean;
+  /** Available agents for @mention */
+  agents?: AgentInfo[];
+  /** Callback when sending a message targeted at a specific agent */
+  onSendAgentMessage?: (agentId: string, message: string) => void;
 }
 
 const getIcon = (iconName: string | React.ReactNode) => {
@@ -97,6 +103,8 @@ const InputArea: React.FC<InputAreaProps> = ({
   activityLog,
   queueCount,
   disabled = false,
+  agents = [],
+  onSendAgentMessage,
 }) => {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -106,6 +114,12 @@ const InputArea: React.FC<InputAreaProps> = ({
   const [selectedInlineIndex, setSelectedInlineIndex] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
+
+  // @mention state
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [mentionStartPos, setMentionStartPos] = useState(-1);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
@@ -277,7 +291,53 @@ const InputArea: React.FC<InputAreaProps> = ({
     } else {
       setShowInlineMenu(false);
     }
+
+    // @mention detection
+    const cursorPos = e.target.selectionStart ?? val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    // Match @ preceded by start-of-string or whitespace
+    const mentionMatch = textBeforeCursor.match(/(?:^|\s)@(\w*)$/);
+    if (mentionMatch && agents.length > 0) {
+      setShowMentionPopup(true);
+      setMentionFilter(mentionMatch[1]);
+      setSelectedMentionIndex(0);
+      // Track the position where @ starts (including any preceding space)
+      const atIndex = textBeforeCursor.lastIndexOf('@');
+      setMentionStartPos(atIndex);
+    } else {
+      setShowMentionPopup(false);
+      setMentionFilter('');
+      setMentionStartPos(-1);
+    }
   };
+
+  // Handle selecting a mentioned agent from the popup
+  const handleMentionSelect = useCallback((agent: AgentInfo) => {
+    if (mentionStartPos < 0) return;
+    // Replace @partial with @agentName in the input
+    const before = input.slice(0, mentionStartPos);
+    // Find end of the current @partial token
+    const afterAt = input.slice(mentionStartPos);
+    const tokenEnd = afterAt.match(/^@\w*/);
+    const endPos = mentionStartPos + (tokenEnd ? tokenEnd[0].length : 1);
+    const after = input.slice(endPos);
+    const agentTag = `@${agent.name.replace(/\s+/g, '-')}`;
+    setInput(before + agentTag + ' ' + after.trimStart());
+    setShowMentionPopup(false);
+    setMentionFilter('');
+    setMentionStartPos(-1);
+    // Focus back on input
+    inputRef?.current?.focus();
+  }, [input, mentionStartPos, inputRef]);
+
+  // Get filtered agents for the mention popup (reused to resolve mentions on send)
+  const filteredMentionAgents = useMemo(() => {
+    return agents.filter(a => {
+      if (a.status === 'terminated') return false;
+      if (!mentionFilter) return true;
+      return a.name.toLowerCase().includes(mentionFilter.toLowerCase());
+    });
+  }, [agents, mentionFilter]);
 
   const handleSendAction = (text?: string) => {
     const textToSend = text || input;
@@ -295,9 +355,36 @@ const InputArea: React.FC<InputAreaProps> = ({
       finalText = finalText.trim() ? `${finalText.trim()} ${attachInfo}` : attachInfo;
     }
 
-    onSend(finalText, uploadedAttachments.length > 0 ? uploadedAttachments : undefined);
+    // Detect @mentions and route to agents if applicable
+    const mentionPattern = /(?:^|\s)@([\w-]+)/g;
+    let match: RegExpExecArray | null;
+    const mentionedAgentIds: string[] = [];
+    while ((match = mentionPattern.exec(finalText)) !== null) {
+      const mentionName = match[1].toLowerCase();
+      const matchedAgent = agents.find(a =>
+        a.name.replace(/\s+/g, '-').toLowerCase() === mentionName &&
+        a.status !== 'terminated'
+      );
+      if (matchedAgent && !mentionedAgentIds.includes(matchedAgent.id)) {
+        mentionedAgentIds.push(matchedAgent.id);
+      }
+    }
+
+    // If exactly one agent is mentioned and we have a direct send handler, route to agent
+    if (mentionedAgentIds.length === 1 && onSendAgentMessage) {
+      // Strip the @mention from the message text for cleaner delivery
+      const agentMsg = finalText.replace(/(?:^|\s)@[\w-]+\s*/g, ' ').trim();
+      onSendAgentMessage(mentionedAgentIds[0], agentMsg || finalText);
+    } else {
+      // Send normally (with mentionedAgents metadata for backend routing)
+      onSend(finalText, uploadedAttachments.length > 0 ? uploadedAttachments : undefined);
+    }
+
     setInput('');
     setShowInlineMenu(false);
+    setShowMentionPopup(false);
+    setMentionFilter('');
+    setMentionStartPos(-1);
     // Clean up previews
     attachments.forEach(a => {
       if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -306,6 +393,26 @@ const InputArea: React.FC<InputAreaProps> = ({
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    // @mention popup takes priority
+    if (showMentionPopup && filteredMentionAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev + 1) % filteredMentionAgents.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => (prev - 1 + filteredMentionAgents.length) % filteredMentionAgents.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleMentionSelect(filteredMentionAgents[selectedMentionIndex]);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionPopup(false);
+        setMentionFilter('');
+        setMentionStartPos(-1);
+      }
+      return;
+    }
+
     if (showInlineMenu) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -464,6 +571,19 @@ const InputArea: React.FC<InputAreaProps> = ({
                 </div>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* @mention popup */}
+        {showMentionPopup && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 mx-3 z-[55]">
+            <MentionPopup
+              agents={agents}
+              filter={mentionFilter}
+              selectedIndex={selectedMentionIndex}
+              onSelect={handleMentionSelect}
+              visible={showMentionPopup}
+            />
           </div>
         )}
 

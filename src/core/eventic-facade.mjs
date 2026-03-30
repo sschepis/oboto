@@ -471,6 +471,37 @@ export class EventicFacade {
         return this.conversationAgentManager.getAgentStatus(agentId);
     }
 
+    /**
+     * Get a promoted agent's conversation history.
+     * @param {string} agentId
+     * @returns {Array<Object>}
+     */
+    getAgentHistory(agentId) {
+        return this.conversationAgentManager.getAgentHistory(agentId);
+    }
+
+    /**
+     * Clear a promoted agent's conversation history.
+     * @param {string} agentId
+     * @returns {{ agentId: string, success: boolean }}
+     */
+    clearAgentHistory(agentId) {
+        return this.conversationAgentManager.clearAgentHistory(agentId);
+    }
+
+    /**
+     * Promote a workspace agent to global visibility.
+     * @param {string} agentId
+     * @returns {Promise<{ agentId: string, visibility: string }>}
+     */
+    async promoteAgentToGlobal(agentId) {
+        if (this._agentManagerInitPromise) {
+            await this._agentManagerInitPromise;
+            this._agentManagerInitPromise = null;
+        }
+        return await this.conversationAgentManager.promoteToGlobal(agentId);
+    }
+
     // ─── State & accessors ───────────────────────────────────────────────
 
     /**

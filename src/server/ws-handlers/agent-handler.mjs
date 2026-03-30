@@ -199,6 +199,80 @@ async function handleResumeAgent(data, ctx) {
     }
 }
 
+/**
+ * Handle: get-agent-history
+ * Returns the full conversation history for a promoted agent.
+ */
+async function handleGetAgentHistory(data, ctx) {
+    const { ws, assistant } = ctx;
+    try {
+        const { agentId } = data.payload || {};
+
+        if (!agentId) {
+            wsSendError(ws, 'Missing required field: agentId');
+            return;
+        }
+
+        const history = assistant.getAgentHistory(agentId);
+        wsSend(ws, 'agent-history', { agentId, history });
+    } catch (err) {
+        consoleStyler.log('error', `Failed to get agent history: ${err.message}`);
+        wsSendError(ws, `Failed to get agent history: ${err.message}`);
+    }
+}
+
+/**
+ * Handle: clear-agent-history
+ * Clears the conversation history for a promoted agent.
+ */
+async function handleClearAgentHistory(data, ctx) {
+    const { ws, assistant, broadcast } = ctx;
+    try {
+        const { agentId } = data.payload || {};
+
+        if (!agentId) {
+            wsSendError(ws, 'Missing required field: agentId');
+            return;
+        }
+
+        const result = assistant.clearAgentHistory(agentId);
+        wsSend(ws, 'agent-history-cleared', result);
+
+        consoleStyler.log('system', `🧹 Cleared history for agent "${agentId}"`);
+    } catch (err) {
+        consoleStyler.log('error', `Failed to clear agent history: ${err.message}`);
+        wsSendError(ws, `Failed to clear agent history: ${err.message}`);
+    }
+}
+
+/**
+ * Handle: promote-agent-global
+ * Promotes a workspace agent to global visibility.
+ */
+async function handlePromoteAgentGlobal(data, ctx) {
+    const { ws, assistant, broadcast } = ctx;
+    try {
+        const { agentId } = data.payload || {};
+
+        if (!agentId) {
+            wsSendError(ws, 'Missing required field: agentId');
+            return;
+        }
+
+        const result = await assistant.promoteAgentToGlobal(agentId);
+        wsSend(ws, 'agent-promoted-global', result);
+
+        // Broadcast updated agent list
+        const agents = assistant.listPromotedAgents();
+        broadcast('agent-list', agents);
+
+        consoleStyler.log('system', `🌐 Promoted agent "${agentId}" to global visibility`);
+    } catch (err) {
+        consoleStyler.log('error', `Failed to promote agent to global: ${err.message}`);
+        wsSendError(ws, `Failed to promote agent to global: ${err.message}`);
+    }
+}
+
 export const handlers = {
     'promote-conversation': handlePromoteConversation,
     'list-agents': handleListAgents,
@@ -206,4 +280,7 @@ export const handlers = {
     'terminate-agent': handleTerminateAgent,
     'pause-agent': handlePauseAgent,
     'resume-agent': handleResumeAgent,
+    'get-agent-history': handleGetAgentHistory,
+    'clear-agent-history': handleClearAgentHistory,
+    'promote-agent-global': handlePromoteAgentGlobal,
 };

@@ -272,6 +272,25 @@ export function useTabManager(
     wsService.pinSurface(id);
   }, []);
 
+  // Open an agent dashboard tab
+  const handleAgentClick = useCallback((agentId: string, agentName?: string) => {
+    const tabId = `agent:${agentId}`;
+    const existingTab = tabs.find(t => t.id === tabId);
+
+    if (existingTab) {
+      setActiveTabId(tabId);
+    } else {
+      const displayName = agentName || agentId;
+      setTabs(prev => [...prev, {
+        id: tabId,
+        label: `🤖 ${displayName}`,
+        type: 'agent' as const,
+        agentId,
+      }]);
+      setActiveTabId(tabId);
+    }
+  }, [tabs]);
+
   // Open a plugin welcome page tab
   const handlePluginClick = useCallback((pluginName: string) => {
     const tabId = `plugin:${pluginName}`;
@@ -306,6 +325,7 @@ export function useTabManager(
     handleNewChat,
     handleNewFile,
     handleNewSurface,
+    handleAgentClick,
     handlePluginClick,
     handlePinSurface,
     CHAT_TAB // Export for workspace state restoration usage

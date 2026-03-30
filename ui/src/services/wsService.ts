@@ -573,6 +573,21 @@ class WSService {
     this.sendMessage('resume-agent', { agentId });
   }
 
+  /** Get conversation history for a promoted agent. */
+  getAgentHistory(agentId: string) {
+    this.sendMessage('get-agent-history', { agentId });
+  }
+
+  /** Clear conversation history for a promoted agent. */
+  clearAgentHistory(agentId: string) {
+    this.sendMessage('clear-agent-history', { agentId });
+  }
+
+  /** Promote a workspace agent to global visibility. */
+  promoteAgentToGlobal(agentId: string) {
+    this.sendMessage('promote-agent-global', { agentId });
+  }
+
   // --- Agentic Provider methods ---
 
   getAgenticProviders() {

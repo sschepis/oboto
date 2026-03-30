@@ -10,11 +10,13 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { ConversationAgent } from './conversation-agent.mjs';
 import { MemoryBridge } from './memory-bridge.mjs';
 import { AssociativeStringStore } from './memory.mjs';
 
 const AGENTS_DIR = '.agents';
+const GLOBAL_AGENTS_DIR = path.join(os.homedir(), '.ai-man', 'agents');
 const MAX_CONCURRENT_AGENTS = 10;
 
 export class ConversationAgentManager {
@@ -35,6 +37,12 @@ export class ConversationAgentManager {
 
     /** @type {string} */
     this._agentsDir = path.join(workingDir, AGENTS_DIR);
+
+    /** @type {string} */
+    this._globalAgentsDir = GLOBAL_AGENTS_DIR;
+
+    /** @type {boolean} Whether the global agents directory is accessible */
+    this._globalDirAvailable = false;
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -49,6 +57,20 @@ export class ConversationAgentManager {
    */
   async initialize() {
     await fs.promises.mkdir(this._agentsDir, { recursive: true });
+
+    // Attempt to create and validate the global agents directory
+    try {
+      await fs.promises.mkdir(this._globalAgentsDir, { recursive: true });
+      // Verify write access by touching a temp file
+      const testFile = path.join(this._globalAgentsDir, '.access-test');
+      await fs.promises.writeFile(testFile, '', 'utf8');
+      await fs.promises.unlink(testFile);
+      this._globalDirAvailable = true;
+    } catch (err) {
+      console.warn(`[ConversationAgentManager] Global agents directory not accessible (${this._globalAgentsDir}): ${err.message}. Falling back to workspace-only mode.`);
+      this._globalDirAvailable = false;
+    }
+
     await this._restorePersistedAgents();
   }
 
@@ -238,9 +260,86 @@ export class ConversationAgentManager {
         messageCount: agent.messageCount,
         createdAt: agent.createdAt,
         lastActivity: agent.lastActivity,
+        persona: agent.agentConfig?.persona || null,
+        visibility: agent.visibility || 'workspace',
       });
     }
     return result;
+  }
+
+  /**
+   * Get an agent's conversation history.
+   *
+   * @param {string} agentId
+   * @returns {Array<Object>}
+   */
+  getAgentHistory(agentId) {
+    const agent = this._agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent "${agentId}" not found.`);
+    }
+    return agent.getHistory();
+  }
+
+  /**
+   * Clear an agent's conversation history.
+   *
+   * @param {string} agentId
+   * @returns {{ agentId: string, success: boolean }}
+   */
+  clearAgentHistory(agentId) {
+    const agent = this._agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent "${agentId}" not found.`);
+    }
+    agent.clearHistory();
+    this._saveAgent(agentId).catch(() => {}); // Best-effort persist
+    return { agentId, success: true };
+  }
+
+  /**
+   * Promote a workspace agent to global visibility.
+   * Copies the agent JSON to the global directory, updates visibility,
+   * and removes the workspace copy.
+   *
+   * @param {string} agentId
+   * @returns {Promise<{ agentId: string, visibility: string }>}
+   */
+  async promoteToGlobal(agentId) {
+    const agent = this._agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent "${agentId}" not found.`);
+    }
+    if (agent.visibility === 'global') {
+      return { agentId, visibility: 'global' };
+    }
+    if (!this._globalDirAvailable) {
+      throw new Error('Global agents directory is not accessible. Cannot promote agent.');
+    }
+
+    // Update in-memory visibility
+    agent.visibility = 'global';
+
+    // Save to global directory
+    try {
+      const data = agent.serialize();
+      const globalFilePath = path.join(this._globalAgentsDir, `${agentId}.json`);
+      await fs.promises.writeFile(globalFilePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+      // Revert visibility on failure
+      agent.visibility = 'workspace';
+      throw new Error(`Failed to save agent to global directory: ${err.message}`);
+    }
+
+    // Remove from workspace directory (best-effort)
+    try {
+      const workspaceFilePath = path.join(this._agentsDir, `${agentId}.json`);
+      await fs.promises.unlink(workspaceFilePath);
+    } catch {
+      // File may not exist — that's fine
+    }
+
+    return { agentId, visibility: 'global' };
   }
 
   /**
@@ -338,8 +437,12 @@ export class ConversationAgentManager {
     if (!agent) return;
 
     try {
-      await fs.promises.mkdir(this._agentsDir, { recursive: true });
-      const filePath = path.join(this._agentsDir, `${agentId}.json`);
+      // Save to the appropriate directory based on visibility
+      const targetDir = agent.visibility === 'global' && this._globalDirAvailable
+        ? this._globalAgentsDir
+        : this._agentsDir;
+      await fs.promises.mkdir(targetDir, { recursive: true });
+      const filePath = path.join(targetDir, `${agentId}.json`);
       const data = agent.serialize();
       await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
     } catch (err) {
@@ -366,6 +469,7 @@ export class ConversationAgentManager {
    * @private
    */
   async _restorePersistedAgents() {
+    // Restore from workspace directory
     try {
       const files = await fs.promises.readdir(this._agentsDir);
       for (const file of files) {
@@ -379,6 +483,9 @@ export class ConversationAgentManager {
           // Skip terminated agents
           if (data.status === 'terminated') continue;
 
+          // Ensure workspace visibility for agents in the workspace dir
+          data.visibility = data.visibility || 'workspace';
+
           // Reconstruct the agent from persisted data
           await this._restoreAgent(data);
         } catch (err) {
@@ -387,6 +494,37 @@ export class ConversationAgentManager {
       }
     } catch {
       // Directory might not exist — that's fine
+    }
+
+    // Restore from global directory
+    if (this._globalDirAvailable) {
+      try {
+        const globalFiles = await fs.promises.readdir(this._globalAgentsDir);
+        for (const file of globalFiles) {
+          if (!file.endsWith('.json')) continue;
+
+          try {
+            const filePath = path.join(this._globalAgentsDir, file);
+            const raw = await fs.promises.readFile(filePath, 'utf8');
+            const data = JSON.parse(raw);
+
+            // Skip terminated agents
+            if (data.status === 'terminated') continue;
+
+            // Skip if already restored from workspace (workspace takes precedence for same ID)
+            if (this._agents.has(data.id)) continue;
+
+            // Mark as global
+            data.visibility = 'global';
+
+            await this._restoreAgent(data);
+          } catch (err) {
+            console.warn(`[ConversationAgentManager] Failed to restore global agent from "${file}":`, err.message);
+          }
+        }
+      } catch {
+        // Global directory read failed — non-critical
+      }
     }
   }
 
@@ -426,6 +564,7 @@ export class ConversationAgentManager {
       parentConversation: data.parentConversation,
       agentConfig: data.agentConfig || {},
       deps: this._deps,
+      visibility: data.visibility || 'workspace',
     });
 
     // Restore metadata
