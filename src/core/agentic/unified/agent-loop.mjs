@@ -31,6 +31,7 @@ import {
 } from '../../agent-loop-helpers.mjs';
 import { isCancellationError } from '../../ai-provider.mjs';
 import { getModelInfo } from '../../model-registry.mjs';
+import { createSourceArtifact } from '../../confidentiality/models.mjs';
 
 // ════════════════════════════════════════════════════════════════════════
 // AgentLoop Class
@@ -63,6 +64,7 @@ export class AgentLoop {
    * @param {import('./memory-system.mjs').MemorySystem} deps.memorySystem
    * @param {import('./learning-engine.mjs').LearningEngine} deps.learningEngine
    * @param {Object}  deps.aiProvider       — EventicAIProvider instance
+   * @param {import('../../support-llm.mjs').SupportLLM} [deps.supportLlm] — invisible local LLM
    */
   constructor({
     config,
@@ -74,6 +76,7 @@ export class AgentLoop {
     memorySystem,
     learningEngine,
     aiProvider,
+    supportLlm,
   }) {
     /** @private */ this._config = config;
     /** @private */ this._stream = streamController;
@@ -84,6 +87,7 @@ export class AgentLoop {
     /** @private */ this._memory = memorySystem;
     /** @private */ this._learning = learningEngine;
     /** @private */ this._ai = aiProvider;
+    /** @private */ this._supportLlm = supportLlm || null;
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -96,6 +100,34 @@ export class AgentLoop {
    */
   setStreamController(stream) {
     this._stream = stream;
+  }
+
+  /**
+   * Set the full confidentiality context in one call.
+   *
+   * Consolidates view compilation, clearance checks, sensitivity tagging,
+   * lineage tracking, and local LLM pre-flight into a single setter so
+   * callers don't need to coordinate multiple individual calls.
+   *
+   * When the lineage tracker is set, the agent loop records lineage at
+   * three points:
+   *   A. Input recording   — user input as 'original'
+   *   B. Tool result recording — each tool result as 'tool-result'
+   *   C. LLM output recording — final response as 'llm-derived'
+   *
+   * @param {Object} ctx
+   * @param {import('../../confidentiality/view-compiler.mjs').ViewCompiler|null} [ctx.viewCompiler]
+   * @param {import('../../confidentiality/models.mjs').AgentProfile|null} [ctx.agentProfile]
+   * @param {import('../../confidentiality/sensitivity-tagger.mjs').SensitivityTagger|null} [ctx.sensitivityTagger]
+   * @param {import('../../confidentiality/lineage-tracker.mjs').LineageTracker|null} [ctx.lineageTracker]
+   * @param {import('../../support-llm.mjs').SupportLLM|null} [ctx.supportLlm]
+   */
+  setConfidentialityContext({ viewCompiler, agentProfile, sensitivityTagger, lineageTracker, supportLlm } = {}) {
+    this._viewCompiler = viewCompiler || null;
+    this._agentProfile = agentProfile || null;
+    this._sensitivityTagger = sensitivityTagger || null;
+    this._lineageTracker = lineageTracker || null;
+    this._supportLlm = supportLlm || null;
   }
 
   /**
@@ -148,6 +180,16 @@ export class AgentLoop {
     const toolsUsedNames = [];
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
+    const accumulateUsage = (usage) => {
+      if (!usage) return;
+      totalPromptTokens += usage.prompt_tokens || usage.promptTokens || 0;
+      totalCompletionTokens += usage.completion_tokens || usage.completionTokens || 0;
+      const total = usage.total_tokens || usage.totalTokens
+        || (usage.prompt_tokens || usage.promptTokens || 0) + (usage.completion_tokens || usage.completionTokens || 0);
+      if (total > 0) {
+        this._stream?.addTokens(total);
+      }
+    };
 
     // ── Surface pipeline escalation tracking ────────────────────────
     const MAX_SURFACE_RETRIES = 3;
@@ -162,6 +204,31 @@ export class AgentLoop {
     // ════════════════════════════════════════════════════════════════
 
     this._stream.phaseStart('request', `Processing: ${summarizeInput(input)}`);
+
+    // ── Lineage Hook A: Record input artifact ─────────────────────
+    // Wrap the user input as a SourceArtifact and record its lineage
+    // as derivationType: 'original'.  The inputArtifactId is threaded
+    // through the turn so tool results and LLM output can reference it.
+    let _inputArtifactId = null;
+    /** @type {string[]} Accumulates artifact IDs fed into the prompt for lineage tracking */
+    const _promptArtifactIds = [];
+    if (this._lineageTracker && this._sensitivityTagger) {
+      try {
+        const inputSensitivity = this._sensitivityTagger.classify(input, 'user-input');
+        const inputArtifact = createSourceArtifact({
+          content: input,
+          type: 'user-input',
+          sensitivity: inputSensitivity,
+          lineage: { derivationType: 'original', parentIds: [] },
+        });
+        this._lineageTracker.record(inputArtifact);
+        _inputArtifactId = inputArtifact.id;
+        _promptArtifactIds.push(inputArtifact.id);
+      } catch (err) {
+        // Non-critical — proceed without lineage recording
+        this._stream?.commentary('⚠️', 'Lineage recording skipped: ' + err.message);
+      }
+    }
 
     // ════════════════════════════════════════════════════════════════
     // PHASE 2: INTENT CLASSIFICATION
@@ -235,12 +302,15 @@ export class AgentLoop {
         }
 
         const preCheckResponse = await this._ai.ask(precheckInput, {
+          system: 'Determine whether the request can be answered directly without tools. Preserve persona only if the user input explicitly depends on it.',
           recordHistory: false,
+          includeMetadata: true,
           model,
           stream: streamEnabled,
           onChunk,
         });
         llmCallCount++;
+        accumulateUsage(preCheckResponse?.usage);
 
         const responseText = (
           typeof preCheckResponse === 'string'
@@ -263,13 +333,14 @@ export class AgentLoop {
               duration: Date.now() - startTime,
               iterations: 0,
               precheckUsed: true,
+              tokenUsage: this._buildTurnTokenUsage(totalPromptTokens, totalCompletionTokens, model),
             });
 
             return {
               response: responseText,
               toolResults: [],
               diagnostics: { precheck: true, intent },
-              tokenUsage: null,
+              tokenUsage: this._buildTurnTokenUsage(totalPromptTokens, totalCompletionTokens, model),
             };
           }
           this._stream.commentary('🔄', "Direct answer didn't meet quality bar — entering agent loop.");
@@ -282,6 +353,27 @@ export class AgentLoop {
         }
         // Precheck failed — fall through to full loop
         this._stream.commentary('⚠️', `Precheck skipped: ${err.message}`);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // PHASE 6.5: VIEW COMPILATION (Confidentiality)
+    // ════════════════════════════════════════════════════════════════
+    // When the confidentiality subsystem is active, compile history
+    // entries through the ViewCompiler before they're used in context
+    // building. This ensures the LLM never sees content above the
+    // agent's clearance level.
+
+    let compiledHistory = history;
+    if (this._viewCompiler && this._agentProfile) {
+      try {
+        compiledHistory = this._viewCompiler.compileHistory(
+          history,
+          this._agentProfile,
+        );
+      } catch (err) {
+        // Non-critical — fall through with uncompiled history
+        this._stream?.commentary('⚠️', `View compilation skipped: ${err.message}`);
       }
     }
 
@@ -304,16 +396,31 @@ export class AgentLoop {
     // purged — even if the turn throws before reaching the normal cleanup path.
     try {
 
-    // Pre-route files & surfaces
-    const engineTools = this._ai?.tools || null;
+    // Pre-route files & surfaces (pass sensitivityTagger for Phase 2 annotation)
+    const engineTools = this._toolBridge.getToolMap();
     const { fileContext, surfaceContext } = await this._contextManager.preRoute(
       input,
       engineTools,
+      this._sensitivityTagger || undefined,
     );
 
+    // ── Compile pre-routed file content through ViewCompiler ───────
+    let compiledFileContext = fileContext;
+    if (fileContext && fileContext.length > 0 && this._viewCompiler && this._agentProfile) {
+      try {
+        compiledFileContext = this._viewCompiler.compileFileResults(
+          fileContext,
+          this._agentProfile,
+        );
+      } catch (err) {
+        // Non-critical — fall through with uncompiled files
+        this._stream?.commentary('⚠️', `File view compilation skipped: ${err.message}`);
+      }
+    }
+
     // Inject pre-routed file context into conversation history
-    if (fileContext && fileContext.length > 0 && this._ai?.conversationHistory) {
-      const fileBlock = fileContext
+    if (compiledFileContext && compiledFileContext.length > 0 && this._ai?.conversationHistory) {
+      const fileBlock = compiledFileContext
         .map((r) => {
           if (r.content) return `[FILE CONTENT: ${r.path}]\n\`\`\`\n${r.content}\n\`\`\``;
           if (r.error) return `[FILE ERROR: ${r.path}]: ${r.error}`;
@@ -362,12 +469,12 @@ export class AgentLoop {
       systemPrompt: this._ai?.systemPrompt,
       cognitiveContext,
       selectedTraits,
-      preRouted: fileContext,
       violations: safetyResult.violations,
       taskContext: this._toolBridge.taskContext,
       isSurfaceUpdate: intent.isSurfaceUpdate,
       toolNames,
-      history,
+      viewCompiler: this._viewCompiler || undefined,
+      agentProfile: this._agentProfile || undefined,
     });
 
     // ════════════════════════════════════════════════════════════════
@@ -434,24 +541,18 @@ export class AgentLoop {
         this._stream.setActivity('Sending request to AI model', 'llm-call');
         const llmStart = Date.now();
         response = await this._ai.ask(currentPrompt, {
+          system: systemPrompt,
           tools,
           signal,
           stream: streamEnabled,
           onChunk,
           model,
+          includeMetadata: true,
+          conversationHistory: history,
         });
         timing.llmCallMs += Date.now() - llmStart;
         llmCallCount++;
-
-        // Extract usage from the response and update turn metrics
-        const usage = response?.usage || null;
-        if (usage) {
-          const promptTok = usage.prompt_tokens || 0;
-          const completionTok = usage.completion_tokens || 0;
-          totalPromptTokens += promptTok;
-          totalCompletionTokens += completionTok;
-          this._stream?.addTokens(promptTok + completionTok);
-        }
+        accumulateUsage(response?.usage);
       } catch (err) {
         if (isCancellationError(err) || this._isAborted(signal)) {
           return this._cancelledResult();
@@ -533,6 +634,34 @@ export class AgentLoop {
           }
         }
 
+        // ── Lineage Hook B: Record tool-result artifacts ────────────
+        // Each tool result is wrapped as a SourceArtifact with
+        // derivationType: 'tool-result' and parent = input artifact.
+        if (this._lineageTracker && this._sensitivityTagger) {
+          try {
+            for (const result of results) {
+              const content = result?.content || '';
+              const toolSensitivity = this._sensitivityTagger.classify(content, 'tool-result');
+              const toolArtifact = createSourceArtifact({
+                content,
+                type: 'tool-result',
+                turnId: `turn-${iteration}`,
+                sensitivity: toolSensitivity,
+                lineage: {
+                  derivationType: 'tool-result',
+                  parentIds: _inputArtifactId ? [_inputArtifactId] : [],
+                  turnId: `turn-${iteration}`,
+                },
+              });
+              this._lineageTracker.record(toolArtifact);
+              _promptArtifactIds.push(toolArtifact.id);
+            }
+          } catch (err) {
+            // Non-critical — proceed without lineage recording
+            this._stream?.commentary('⚠️', 'Lineage recording skipped: ' + err.message);
+          }
+        }
+
         // ── Evaluate tool results for guidance ─────────────────────
         const toolResultNames = results.map((r) => r.name);
         const guidance = this._toolBridge.evaluateToolResults(
@@ -587,7 +716,7 @@ export class AgentLoop {
       }
 
       // ── Branch: text response ────────────────────────────────────
-      const content = typeof response === 'string' ? response : response?.content;
+      let content = typeof response === 'string' ? response : response?.content;
       if (content) {
         // ── Incomplete response detection ──────────────────────────
         if (isIncompleteResponse(content) && incompleteRetryCount < 3) {
@@ -632,6 +761,15 @@ export class AgentLoop {
 
           currentPrompt = `[GUIDANCE]: [QUALITY CHECK FAILED]: ${retryGuidance}\nPlease try again with the above guidance.\n\n${input}`;
           continue;
+        }
+
+        // ── Pre-flight lint via SupportLLM ──────────────────────────
+        // If the SupportLLM is available, run a fast local lint check
+        // on any code blocks in the response. If fixable errors are
+        // found, silently replace the code with the fixed version.
+        // This is invisible to the user — they just receive cleaner output.
+        if (this._supportLlm?.isAvailable()) {
+          content = await this._preflightLint(content);
         }
 
         // ── Accept the response ────────────────────────────────────
@@ -680,6 +818,30 @@ export class AgentLoop {
       );
     }
 
+    // ── Lineage Hook C: Record LLM output artifact ──────────────────
+    // The LLM response is wrapped as a SourceArtifact with
+    // derivationType: 'llm-derived' and parents = all artifacts that
+    // were in the compiled prompt view (input + tool results).
+    // The inherited sensitivity is the ceiling of all parents.
+    if (this._lineageTracker && this._sensitivityTagger && finalResponse) {
+      try {
+        const outputSensitivity = this._sensitivityTagger.classify(finalResponse, 'agent-output');
+        const outputArtifact = createSourceArtifact({
+          content: finalResponse,
+          type: 'agent-output',
+          sensitivity: outputSensitivity,
+          lineage: {
+            derivationType: 'llm-derived',
+            parentIds: [..._promptArtifactIds],
+          },
+        });
+        this._lineageTracker.record(outputArtifact);
+      } catch (err) {
+        // Non-critical — proceed without lineage recording
+        this._stream?.commentary('⚠️', 'Lineage recording skipped: ' + err.message);
+      }
+    }
+
     // ════════════════════════════════════════════════════════════════
     // PHASE 10: REMEMBER
     // ════════════════════════════════════════════════════════════════
@@ -715,14 +877,12 @@ export class AgentLoop {
         (totalCompletionTokens / 1_000_000) * outputRate;
     }
 
-    const turnTokenUsage = (totalPromptTokens > 0 || totalCompletionTokens > 0)
-      ? {
-          promptTokens: totalPromptTokens,
-          completionTokens: totalCompletionTokens,
-          totalTokens: totalPromptTokens + totalCompletionTokens,
-          totalCost: turnCost,
-        }
-      : null;
+    const turnTokenUsage = this._buildTurnTokenUsage(
+      totalPromptTokens,
+      totalCompletionTokens,
+      model,
+      turnCost,
+    );
 
     this._learning.recordTurnOutcome({
       input,
@@ -877,6 +1037,39 @@ export class AgentLoop {
   }
 
   /**
+   * Build normalized per-turn token/cost usage.
+   *
+   * @private
+   * @param {number} promptTokens
+   * @param {number} completionTokens
+   * @param {string} [model]
+   * @param {number|null} [precomputedCost]
+   * @returns {{ promptTokens: number, completionTokens: number, totalTokens: number, totalCost: number } | null}
+   */
+  _buildTurnTokenUsage(promptTokens, completionTokens, model, precomputedCost = null) {
+    if (!(promptTokens > 0 || completionTokens > 0)) {
+      return null;
+    }
+
+    let totalCost = precomputedCost;
+    if (totalCost == null) {
+      const modelInfo = model ? getModelInfo(model) : null;
+      const inputRate = modelInfo?.inputCostPerMillion ?? 3.0;
+      const outputRate = modelInfo?.outputCostPerMillion ?? 15.0;
+      totalCost =
+        (promptTokens / 1_000_000) * inputRate +
+        (completionTokens / 1_000_000) * outputRate;
+    }
+
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      totalCost,
+    };
+  }
+
+  /**
    * Build a user-facing escalation message when the surface pipeline
    * has failed too many consecutive times.
    *
@@ -919,5 +1112,95 @@ export class AgentLoop {
     parts.push('4. Simplify the component (remove complex features and add them incrementally)');
 
     return parts.join('\n');
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // SupportLLM Integration — Pre-Flight Lint
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Extract fenced code blocks from a markdown response.
+   *
+   * @private
+   * @param {string} text — the full response text
+   * @returns {Array<{ lang: string, code: string, start: number, end: number }>}
+   */
+  _extractCodeBlocks(text) {
+    const blocks = [];
+    const regex = /```(\w+)?\n([\s\S]*?)```/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      blocks.push({
+        lang: match[1] || 'unknown',
+        code: match[2],
+        start: match.index,
+        end: match.index + match[0].length,
+        fullMatch: match[0],
+      });
+    }
+    return blocks;
+  }
+
+  /**
+   * Run pre-flight lint checks on code blocks in the AI response.
+   *
+   * For each fenced code block, the SupportLLM performs a fast local
+   * syntax/lint check. If errors are found and the model can fix them,
+   * the fixed code silently replaces the original — the user receives
+   * cleaner output without ever seeing the intermediate error.
+   *
+   * If the SupportLLM is unavailable, returns null, or times out,
+   * the original content is returned unmodified.
+   *
+   * @private
+   * @param {string} content — the AI response text (may contain code blocks)
+   * @returns {Promise<string>} — content with lint-fixed code blocks (or original)
+   */
+  async _preflightLint(content) {
+    if (!this._supportLlm?.isAvailable()) return content;
+
+    const blocks = this._extractCodeBlocks(content);
+    if (blocks.length === 0) return content;
+
+    // Only lint blocks that are substantial enough to benefit from a check
+    const lintableBlocks = blocks.filter(
+      (b) => b.code.trim().length > 50 && b.lang !== 'unknown',
+    );
+    if (lintableBlocks.length === 0) return content;
+
+    let result = content;
+    let offset = 0; // Track position shifts from replacements
+
+    for (const block of lintableBlocks) {
+      try {
+        const lintResult = await this._supportLlm.lint(block.code, block.lang);
+
+        if (!lintResult || lintResult.valid !== false || !lintResult.fixed) {
+          continue; // No errors or no fix available — keep original
+        }
+
+        // Replace the code block with the fixed version
+        const fixedBlock = `\`\`\`${block.lang}\n${lintResult.fixed}\`\`\``;
+        const adjustedStart = block.start + offset;
+        const adjustedEnd = block.end + offset;
+
+        result =
+          result.substring(0, adjustedStart) +
+          fixedBlock +
+          result.substring(adjustedEnd);
+
+        // Update offset for subsequent replacements
+        offset += fixedBlock.length - block.fullMatch.length;
+
+        this._stream?.commentary(
+          '🔧',
+          `Pre-flight lint: auto-fixed ${lintResult.errors?.length || 0} issue(s) in ${block.lang} code block`,
+        );
+      } catch {
+        // Lint failed for this block — keep original, continue with next
+      }
+    }
+
+    return result;
   }
 }
