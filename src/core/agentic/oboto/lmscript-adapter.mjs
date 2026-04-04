@@ -31,6 +31,7 @@ export function createRemoteProvider(modelName) {
                 model: params.model || modelName,
                 messages: params.messages,
                 temperature: params.temperature ?? 0.7,
+                max_tokens: params.max_tokens || 4096,
             };
 
             if (params.tools?.length) {
@@ -42,15 +43,22 @@ export function createRemoteProvider(modelName) {
                 requestBody.response_format = params.response_format;
             }
 
-            if (params.max_tokens) {
-                requestBody.max_tokens = params.max_tokens;
+            try {
+                const response = await callProvider(requestBody);
+                const normalized = normalizeResponse(response, params.model || modelName);
+
+                // Diagnostic: warn if response is completely empty
+                const msg = normalized.choices?.[0]?.message;
+                if (!msg?.content && !msg?.tool_calls?.length) {
+                    console.warn('[ObotoAdapter] LLM returned empty response (no content, no tool_calls)',
+                        { model: requestBody.model, messageCount: requestBody.messages?.length });
+                }
+
+                return normalized;
+            } catch (err) {
+                console.error('[ObotoAdapter] callProvider error:', err.message || err);
+                throw err;
             }
-
-            const response = await callProvider(requestBody);
-
-            // callProvider returns OpenAI-compatible format already,
-            // but normalize to ensure all fields exist
-            return normalizeResponse(response, params.model || modelName);
         },
 
         async *stream(params) {
