@@ -3,9 +3,9 @@
  * orchestration core.
  *
  * Bridges ai-man's deps (aiProvider, toolExecutor, historyManager) into
- * oboto-agent's interface (lmscript LLMProvider, swiss-army-tool Router,
+ * oboto-agent's interface (llm-wrapper BaseProvider, swiss-army-tool Router,
  * as-agent Session) and maps oboto-agent events to StreamController
- * for real-time UI updates.
+ * for real-time UI updates matching the unified/as-agent provider flow.
  *
  * @module src/core/agentic/oboto/oboto-provider
  */
@@ -46,7 +46,7 @@ export class ObotoProvider extends AgenticProvider {
         this._router = omni.router;
         this._omniRoot = omni.root;
 
-        // Create lmscript-compatible LLM providers
+        // Create llm-wrapper-compatible LLM providers
         const pair = createLLMProviderPair(deps);
         this._localProvider = pair.localProvider;
         this._remoteProvider = pair.remoteProvider;
@@ -71,7 +71,6 @@ export class ObotoProvider extends AgenticProvider {
     }
 
     async _execute(input, options) {
-        // 1. Create per-turn StreamController
         const stream = new StreamController({
             onToken: options.onToken,
             onChunk: options.onChunk,
@@ -79,21 +78,25 @@ export class ObotoProvider extends AgenticProvider {
         });
 
         try {
+            // ── Phase: Request ──
             stream.phaseStart('request', `Processing: ${input.substring(0, 80)}…`);
 
-            // 2. Convert ai-man history → as-agent Session
+            // Convert ai-man history → as-agent Session
             const history = options.conversationHistory
                 || this._deps.historyManager?.getHistory()
                 || [];
             const session = this._convertHistory(history);
 
-            // 3. Determine model
             const modelName = options.model || this._remoteModelName;
-
-            // 4. Build system prompt
             const systemPrompt = this._buildSystemPrompt();
 
-            // 5. Create per-turn ObotoAgent
+            // ── Phase: Planning ──
+            stream.phaseStart('planning', 'Building context and preparing tools…');
+
+            // Determine if we should stream tokens
+            const isStreaming = !!(options.onToken || options.onChunk);
+
+            // Create per-turn ObotoAgent with streaming callback
             const agent = new ObotoAgent({
                 localModel: this._localProvider,
                 remoteModel: this._remoteProvider,
@@ -104,27 +107,30 @@ export class ObotoProvider extends AgenticProvider {
                 maxIterations: options.maxIterations || config?.ai?.agentic?.maxIterations || 25,
                 maxContextTokens: config?.ai?.agentic?.maxContextTokens || 8192,
                 systemPrompt,
+                // Wire real-time token streaming
+                onToken: isStreaming ? (token) => stream.token(token) : undefined,
             });
 
-            // 6. Wire oboto-agent events → StreamController
-            const isStreaming = !!(options.onToken || options.onChunk);
+            // Wire oboto-agent events → StreamController
             this._wireEvents(agent, stream, isStreaming);
 
-            // 7. Wire abort signal → interrupt
+            // Wire abort signal → interrupt
             if (options.signal) {
                 options.signal.addEventListener('abort', () => {
                     agent.interrupt();
                 }, { once: true });
             }
 
-            // 8. Execute
+            // ── Phase: Thinking ──
+            stream.phaseStart('thinking', 'Sending request to AI model…');
+
+            // Execute
             await agent.submitInput(input);
 
-            // 9. Extract response from session
+            // Extract response
             const agentSession = agent.getSession();
             const response = this._extractLastResponse(agentSession);
 
-            // 10. Cleanup
             agent.removeAllListeners();
 
             return {
@@ -154,25 +160,45 @@ export class ObotoProvider extends AgenticProvider {
         });
 
         agent.on('agent_thought', (e) => {
-            const { text, model, escalating } = e.payload;
+            const { text, model, escalating, iteration } = e.payload;
             if (escalating) {
                 stream.phaseStart('thinking', text);
-            } else {
-                stream.commentary('🧠', text);
-            }
-            if (isStreaming && text) {
-                stream.token(text);
+            } else if (text) {
+                // Non-streaming: emit text as commentary
+                // Streaming: tokens already emitted via onToken, just show status
+                if (!isStreaming) {
+                    stream.commentary('🤖', text.substring(0, 200));
+                } else {
+                    // Brief status showing iteration progress
+                    if (iteration) {
+                        stream.status(`AI thinking — iteration ${iteration}…`);
+                    }
+                }
             }
         });
 
         agent.on('tool_execution_start', (e) => {
             const { command, kwargs } = e.payload;
+            stream.phaseStart('tools', `Running tool: ${command}`);
             stream.toolStart(command, kwargs, 0, 1);
         });
 
         agent.on('tool_execution_complete', (e) => {
-            const { command, error } = e.payload;
-            stream.toolComplete(command, !error);
+            const { command, result, error } = e.payload;
+            const success = !error && result !== '[duplicate call blocked]';
+            stream.toolComplete(command, success);
+            if (!success && result === '[duplicate call blocked]') {
+                stream.commentary('⚠️', `Duplicate call to "${command}" blocked`);
+            }
+        });
+
+        agent.on('tool_round_complete', (e) => {
+            const { iteration, tools, totalToolCalls } = e.payload;
+            const summary = tools.map(t =>
+                `${t.success ? '✓' : '✗'} ${t.command}`
+            ).join(', ');
+            stream.commentary('🔧', `Round ${iteration}: ${summary} (${totalToolCalls} total calls)`);
+            stream.phaseStart('thinking', 'AI analyzing results…');
         });
 
         agent.on('error', (e) => {
@@ -182,13 +208,14 @@ export class ObotoProvider extends AgenticProvider {
         agent.on('interruption', () => {
             stream.phaseStart('cancel', 'Interrupted by user');
         });
+
+        agent.on('turn_complete', () => {
+            stream.phaseStart('complete', 'Response ready');
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
 
-    /**
-     * Convert ai-man's OpenAI-style history to an as-agent Session.
-     */
     _convertHistory(history) {
         if (!history || history.length === 0) {
             return createEmptySession();
@@ -197,15 +224,12 @@ export class ObotoProvider extends AgenticProvider {
         const messages = history
             .filter(msg => msg && msg.role)
             .map(msg => {
-                // ai-man uses OpenAI format: {role, content, tool_calls?, tool_call_id?}
-                // fromChat expects lmscript format: {role, content: string | ContentBlock[]}
                 let content = msg.content;
                 if (content == null) content = '';
                 if (typeof content !== 'string' && !Array.isArray(content)) {
                     content = String(content);
                 }
 
-                // Tool messages: wrap content as text
                 if (msg.role === 'tool') {
                     return fromChat({
                         role: 'user',
@@ -213,7 +237,6 @@ export class ObotoProvider extends AgenticProvider {
                     });
                 }
 
-                // Assistant messages with tool_calls: include the call info
                 if (msg.role === 'assistant' && msg.tool_calls?.length > 0) {
                     const callText = msg.tool_calls
                         .map(tc => `[Tool call: ${tc.function?.name}(${tc.function?.arguments?.substring(0, 200) || ''})]`)
@@ -234,13 +257,9 @@ export class ObotoProvider extends AgenticProvider {
         return { version: 1, messages };
     }
 
-    /**
-     * Extract the last assistant response from an as-agent Session.
-     */
     _extractLastResponse(session) {
         if (!session?.messages?.length) return '';
 
-        // Walk backwards to find last assistant message
         for (let i = session.messages.length - 1; i >= 0; i--) {
             const msg = session.messages[i];
             // MessageRole.Assistant = 2
@@ -254,9 +273,6 @@ export class ObotoProvider extends AgenticProvider {
         return '';
     }
 
-    /**
-     * Build the system prompt from ai-man config.
-     */
     _buildSystemPrompt() {
         const persona = this._deps.facade?.engine?.context?.persona;
         if (persona?.systemPrompt) return persona.systemPrompt;
